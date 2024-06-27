@@ -1,0 +1,143 @@
+{% extends "wagtailadmin/generic/base.html" %}
+{% load i18n wagtailadmin_tags static %}
+
+
+{% block extra_css %}
+    {{ block.super }}
+    <style>
+
+        .csv-columns-table thead th {
+            font-weight: bold;
+        }
+
+        .csv-columns-table .required-column {
+            font-weight: bold;
+        }
+    </style>
+{% endblock %}
+
+{% block main_content %}
+    <div style="margin:40px 0">
+        <div style="margin: 20px 0">
+            <form method="POST" id="stations-form"
+                  enctype="multipart/form-data">
+                {% if form.non_field_errors %}
+                    <div class="non-field_errors" style="margin-bottom: 20px">
+                        {% include "wagtailadmin/shared/non_field_errors.html" with form=form %}
+                    </div>
+                {% endif %}
+                <ul class="fields">
+                    {% csrf_token %}
+                    {% for field in form %}
+                        {% if field.is_hidden %}
+                            {{ field }}
+                        {% else %}
+                            {% include "wagtailadmin/shared/field.html" %}
+                        {% endif %}
+                    {% endfor %}
+                    <li>
+                        <button class="button bicolor button--icon" type="submit">
+                            <span class="icon-wrapper">
+                                <svg class="icon icon-download icon" aria-hidden="true">
+                                    <use href="#icon-download"></use>
+                                </svg>
+                            </span>
+                            {% translate "Download Template" %}
+                        </button>
+                    </li>
+                </ul>
+            </form>
+        </div>
+
+        <div style="margin-top: 40px">
+            <h2>
+                {% translate "Stations CSV Columns" %}
+            </h2>
+            <div class="help-block help-info" style="margin-bottom: 20px">
+                <svg class="icon icon-help icon" aria-hidden="true">
+                    <use href="#icon-help"></use>
+                </svg>
+                <p>
+                    To facilitate and make the use of this tool easier a standardised CSV format has been developed,
+                    targeted at data from AWS stations and in support of the GBON reporting requirements. The table
+                    describes the columns as they should be included in the CSV file.
+                </p>
+            </div>
+            <table class="csv-columns-table listing">
+                <thead>
+                <tr>
+                    <th>
+                        {% translate "Column" %}
+                    </th>
+                    <th>
+                        {% translate "Required" %}
+                    </th>
+                    <th>
+                        {% translate "Data Type" %}
+                    </th>
+                    <th>
+                        {% translate "Description" %}
+                    </th>
+                    <th>
+                        {% translate "Choices" %}
+                    </th>
+                </tr>
+                </thead>
+                <tbody>
+                {% for field, val in station_attributes.items %}
+                    <tr>
+                        <td>
+                            {{ field }}
+                        </td>
+                        <td>
+                            {% if val.required %}
+                                <span class="required-column">
+                                    {% translate "Yes" %}
+                                </span>
+                            {% else %}
+                            {% endif %}
+                        </td>
+                        <td>
+                            {{ val.data_type }}
+                        </td>
+                        <td>
+                            <span>
+                                {{ val.description }}
+                            </span>
+
+                            {% if val.reference_url %}
+                                <span style="margin-left: 4px">
+                                    <a href="{{ val.reference_url }}" target="_blank" rel="noreferrer noopenner">
+                                        {{ val.reference_url }}
+                                    </a>
+                                </span>
+                            {% endif %}
+                        </td>
+                        {% if val.choices %}
+                            <td>
+                                <ul>
+                                    {% for choice in val.choices %}
+                                        <li>
+                                            <span>
+                                                <b>
+                                                    {{ choice.0 }} -
+                                                </b>
+                                            </span>
+                                            <span>
+                                                {{ choice.1 }}
+                                            </span>
+                                        </li>
+                                    {% endfor %}
+                                </ul>
+                            </td>
+                        {% endif %}
+                    </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+{% endblock %}
+
+
+

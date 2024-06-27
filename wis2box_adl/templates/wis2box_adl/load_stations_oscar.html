@@ -1,0 +1,122 @@
+{% extends "wagtailadmin/generic/base.html" %}
+
+{% load i18n wagtailadmin_tags static %}
+
+{% block main_content %}
+
+    <div style="margin-top: 40px">
+        {% if country_set == False %}
+            <div class="help-block help-info">
+                <svg class="icon icon-help icon" aria-hidden="true">
+                    <use href="#icon-help"></use>
+                </svg>
+                {% translate "Country not set. Please set the country and try again" %}
+            </div>
+            <div style="margin-top: 20px">
+                <a href="{{ settings_url }}" class="button bicolor button--icon">
+                    <span class="icon-wrapper">
+                        <svg class="icon icon-cog icon" aria-hidden="true">
+                            <use href="#icon-cog"></use>
+                        </svg>
+                    </span>
+                    {% translate "Set Country" %}</a>
+            </div>
+        {% else %}
+            <div>
+                <h2>
+                    <a href="https://oscar.wmo.int/surface/" target="_blank" rel="noreferrer noopener">
+                        {% translate "WMO OSCAR Surface Stations for" %}
+                        {{ country.name }}
+                    </a>
+                </h2>
+                <table class="listing">
+                    <thead>
+                    <tr>
+                        <th>
+                            {% translate "WIGOS ID" %}
+                        </th>
+                        <th></th>
+                        <th>
+                            {% translate "Name" %}
+                        </th>
+                        <th>
+                            {% translate "Added to Database" %}
+                        </th>
+                        <th>
+                            {% translate "Assgined Network" %}
+                        </th>
+                    </tr>
+                    </thead>
+                    <tbody>
+                    {% for station in oscar_stations %}
+                        <tr>
+                            <td>
+                                {{ station.wigos_id }}
+                            </td>
+                            <td>
+                                <a href="https://oscar.wmo.int/surface/#/search/station/stationReportDetails/{{ station.wigos_id }}"
+                                   target="_blank" rel="noreferrer noopener"
+                                   class="button button--icon button-small button-secondary">
+                                    <span class="icon-wrapper">
+                                        <svg class="icon icon-link-external" aria-hidden="true">
+                                            <use href="#icon-link-external"></use>
+                                        </svg>
+                                    </span>
+                                    OSCAR
+                                </a>
+                            </td>
+                            <td>
+                                {{ station.name }}
+                            </td>
+                            <td>
+                                {% if station.added_to_db %}
+                                    <a href="{{ station.edit_url }}"
+                                       class="button button-small button--icon bicolor button-secondary"
+                                       style="text-decoration: underline"
+                                    >
+                                        <span class="icon-wrapper">
+                                            <svg class="icon icon-check icon" aria-hidden="true">
+                                                <use href="#icon-check"></use>
+                                            </svg>
+                                        </span>
+                                        {% translate "Added" %}
+                                    </a>
+                                {% else %}
+                                    <a href="{{ station.import_url }}" class="button button-small button--icon">
+                                        <span class="icon-wrapper">
+                                            <svg class="icon icon-plus icon" aria-hidden="true">
+                                                <use href="#icon-plus"></use>
+                                            </svg>
+                                        </span>
+                                        {% translate "Load Station" %}
+                                    </a>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if station.added_to_db %}
+                                    {{ station.db_station.network.name }}
+                                {% else %}
+                                    -
+                                {% endif %}
+                            </td>
+                        </tr>
+                    {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        {% endif %}
+    </div>
+
+{% endblock %}
+
+{% block extra_css %}
+    {{ block.super }}
+    <style>
+
+    </style>
+{% endblock %}
+
+
+{% block extra_js %}
+
+{% endblock %}

@@ -1,0 +1,4 @@
+include README.md
+recursive-include wis2_adl *.py
+recursive-include wis2_adl *.html
+recursive-include wis2_adl/templates *

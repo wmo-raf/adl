@@ -1,0 +1,242 @@
+{% extends "wagtailadmin/generic/base.html" %}
+
+{% load i18n wagtailadmin_tags static %}
+
+{% block main_content %}
+    <div style="margin:40px 0;">
+
+        <div class="help-block help-info" style="margin-bottom: 20px">
+            <svg class="icon icon-info-circle icon" aria-hidden="true">
+                <use href="#icon-info-circle"></use>
+            </svg>
+            <p>
+                <a href="{{ stations_csv_template_url }}">
+                    {% translate "Download CSV Template" %}
+                </a>
+            </p>
+        </div>
+
+        <form method="POST" id="stations-form"
+              enctype="multipart/form-data">
+            {% if form.non_field_errors %}
+                <div class="non-field_errors" style="margin-bottom: 20px">
+                    {% include "wagtailadmin/shared/non_field_errors.html" with form=form %}
+                </div>
+            {% endif %}
+            <ul class="fields">
+                {% csrf_token %}
+                {% for field in form %}
+                    {% if field.is_hidden %}
+                        {{ field }}
+                    {% else %}
+                        {% include "wagtailadmin/shared/field.html" %}
+                    {% endif %}
+                {% endfor %}
+                <li>
+                    <button id="upload-btn" type="submit" class="button" disabled> {% trans 'Upload' %}</button>
+                </li>
+            </ul>
+        </form>
+
+        <div id="data-preview" style="display: none">
+            <h2>
+                {% translate "Data Preview" %}
+            </h2>
+
+            <div id="import-warnings">
+                <div class="help-block help-warning">
+                    <svg class="icon icon-warning icon" aria-hidden="true">
+                        <use href="#icon-warning"></use>
+                    </svg>
+                    <div>
+                        {% translate "The following columns were not found in the uploaded file. Starred columns are required" %}
+                    </div>
+                    <ul>
+                    </ul>
+                </div>
+
+            </div>
+            <div id="table-container"></div>
+        </div>
+    </div>
+{% endblock %}
+
+{% block extra_css %}
+    {{ block.super }}
+    {{ media.css }}
+    <link rel="stylesheet" type="text/css" href="{% static 'wis2box_adl/css/handsontable.full.min.css' %}">
+    <style>
+        #import-warnings ul li.required {
+            font-weight: bold;
+        }
+
+        #import-warnings ul li.required:after {
+            content: " *";
+            color: red;
+        }
+    </style>
+{% endblock %}
+
+
+{% block extra_js %}
+    <script src="{% static 'wis2box_adl/js/handsontable.full.min.js' %}"></script>
+    <script src="{% static 'wis2box_adl/js/data-utils.js' %}"></script>
+    <script src="{% static 'wis2box_adl/js/helpers.js' %}"></script>
+
+    <script>
+        const stationFields = {{station_fields_json|safe}};
+
+        function HotLoader(options) {
+            const {
+                tableContainerId,
+                fileInputId,
+                dataInputId,
+                previewElId,
+                submitButton,
+                warningsElId
+            } = options;
+
+
+            const tableContainer = document.getElementById(tableContainerId);
+            this.fileInput = document.getElementById(fileInputId);
+            this.dataInput = document.getElementById(dataInputId);
+            this.previewEl = document.getElementById(previewElId);
+            this.warningsEl = $("#" + warningsElId);
+
+            this.stationFields = stationFields;
+
+            this.submitBtn = submitButton;
+
+            this.colHeaders = stationFields.map(field => field.name);
+
+            this.hot = new Handsontable(tableContainer, {
+                autoWrapRow: true,
+                autoWrapCol: true,
+                rowHeaders: true,
+                colHeaders: this.colHeaders,
+                columns: [
+                    ...this.stationFields.map((field) => ({
+                        type: field.type,
+                        ...(field.type === "text" && field.required ? {
+                            validator: nonEmptyValidator
+                        } : {
+                            allowEmpty: !field.required
+                        }),
+                        allowInvalid: false,
+                    })),
+                ],
+                contextMenu: true,
+                licenseKey: 'non-commercial-and-evaluation',
+                height: 500,
+                startRows: 2,
+                afterRemoveRow: (index, amount) => {
+                    this.hot.validateCells(this.onValidate.bind(this));
+                },
+                afterChange: (changes, source) => {
+                    this.onChange();
+                }
+            });
+
+            this.fileInput.addEventListener('change', this.onFileChange.bind(this));
+        }
+
+        HotLoader.prototype.onFileChange = function (e) {
+            const file = e.target.files[0];
+            const reader = new FileReader();
+            reader.readAsText(file);
+
+            const that = this;
+
+            reader.onload = function (event) {
+                DataUtils.parseCSV(event.target.result).then(parsedData => {
+                    const dataRows = parsedData.rows
+                    const columnHeaders = parsedData.fields.map(field => field.name);
+
+                    that.previewEl.style.display = 'block'
+
+
+                    const missingColumns = [];
+                    that.colHeaders.forEach((header, index) => {
+                        const colIndex = columnHeaders.indexOf(header);
+                        if (colIndex === -1) {
+                            dataRows.replace_data(index, [])
+                            const field = that.stationFields.find(field => field.name === header);
+                            if (field) {
+                                missingColumns.push(field);
+                            }
+                        }
+                    })
+
+
+                    that.hot.updateData(dataRows);
+
+
+                    if (missingColumns.length > 0) {
+                        that.warningsEl.show();
+                        that.warningsEl.find('ul').html(
+                            missingColumns.map(field =>
+                                `<li class="${field.required ? "required" : ""}" >
+                                        ${field.name}
+                                </li>`
+                            ).join(''));
+                    } else {
+                        that.warningsEl.hide();
+                    }
+                });
+            };
+        };
+
+
+        HotLoader.prototype.onChange = function () {
+            if (!this.hot) {
+                return
+            }
+
+            this.hot.validateCells(this.onValidate.bind(this));
+        }
+
+        HotLoader.prototype.onValidate = function (isValid) {
+            if (!isValid) {
+                this.submitBtn.disabled = true;
+                return
+            }
+
+
+            const colHeader = this.hot.getColHeader();
+            const data = this.hot.getData();
+
+            const tableData = {
+                fields: colHeader,
+                rows: data
+            }
+
+            if (data && data.length === 0) {
+                this.submitBtn.disabled = true;
+                return
+            }
+
+            this.dataInput.value = JSON.stringify(tableData)
+            this.submitBtn.disabled = false;
+        }
+
+        $(document).ready(function () {
+            const submitBtnSelector = "#stations-form button[type='submit']";
+            const submitBtn = document.querySelector(submitBtnSelector);
+            // disable submit button by default
+            submitBtn.disabled = true;
+
+            const tableLoader = new HotLoader({
+                tableContainerId: 'table-container',
+                fileInputId: 'id_file',
+                dataInputId: 'id_data',
+                previewElId: 'data-preview',
+                warningsElId: 'import-warnings',
+                stationFields: stationFields,
+                submitButton: submitBtn
+            });
+        });
+
+
+    </script>
+
+{% endblock %}

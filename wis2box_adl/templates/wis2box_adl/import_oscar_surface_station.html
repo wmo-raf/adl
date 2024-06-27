@@ -1,0 +1,110 @@
+{% extends "wagtailadmin/generic/base.html" %}
+
+{% load i18n wagtailadmin_tags static %}
+
+{% block main_content %}
+
+    <div style="margin-top: 40px">
+
+        {% if oscar_error %}
+            <div class="help-block help-warning">
+
+                <svg class="icon icon-warning icon" aria-hidden="true">
+                    <use href="#icon-warning"></use>
+                </svg>
+                <span>{{ oscar_error }}</span>
+            </div>
+
+        {% else %}
+            <div class="data" style="margin-top: 40px">
+                <h2>
+                    {% translate "Station Data to import" %}
+                </h2>
+                <table class="listing">
+                    <thead>
+                    <tr>
+                        <th>
+                            {% translate "WIGOS ID" %}
+                        </th>
+                        <th>
+                            {% translate "Name" %}
+                        </th>
+                        <th>
+                            {% translate "Longitude" %}
+                        </th>
+                        <th>
+                            {% translate "Latitude" %}
+                        </th>
+                        <th>
+                            {% translate "Elevation" %}
+                        </th>
+                    </tr>
+                    </thead>
+
+                    <tbody>
+                    <tr>
+                        <td>
+                            {{ station.wigos_id }}
+                        </td>
+                        <td>
+                            {{ station.name }}
+                        </td>
+                        <td>
+                            {{ station.longitude }}
+                        </td>
+                        <td>
+                            {{ station.latitude }}
+                        </td>
+                        <td>
+                            {% if station.elevation %}
+                                {{ station.elevation }}
+                            {% else %}
+                                -
+                            {% endif %}
+                        </td>
+                    </tr>
+                    </tbody>
+
+                </table>
+            </div>
+
+            <form method="POST" id="stations-form"
+                  enctype="multipart/form-data">
+                {% if form.non_field_errors %}
+                    <div class="non-field_errors" style="margin-bottom: 20px">
+                        {% include "wagtailadmin/shared/non_field_errors.html" with form=form %}
+                    </div>
+                {% endif %}
+                <ul class="fields">
+                    {% csrf_token %}
+                    {% for field in form %}
+                        {% if field.is_hidden %}
+                            {{ field }}
+                        {% else %}
+                            {% include "wagtailadmin/shared/field.html" %}
+                        {% endif %}
+                    {% endfor %}
+                    <li>
+                        <button id="upload-btn" type="submit" class="button">
+                            {% trans 'Import' %}
+                        </button>
+                    </li>
+                </ul>
+            </form>
+
+        {% endif %}
+    </div>
+
+{% endblock %}
+
+{% block extra_css %}
+    {{ block.super }}
+    <style>
+
+    </style>
+{% endblock %}
+
+
+{% block extra_js %}
+
+{% endblock %}
