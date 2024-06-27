@@ -17,7 +17,7 @@ from .views import (
 
 
 @hooks.register('register_admin_urls')
-def urlconf_forecastmanager():
+def urlconf_wis2box_adl():
     return [
         path('wis2box-adl/load-stations-csv/', load_stations_csv, name='load_stations_csv'),
         path('wis2box-adl/stations-template/', download_stations_csv_template, name='download_stations_csv_template'),
