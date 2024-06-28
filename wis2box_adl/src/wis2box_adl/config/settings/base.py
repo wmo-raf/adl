@@ -28,9 +28,11 @@ env = environ.Env(
     DEBUG=(bool, False),
 )
 
-if os.path.exists(os.path.join(BASE_DIR, '.env')):
+dev_env_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(BASE_DIR))), ".env")
+
+if os.path.isfile(dev_env_path):
     # reading .env file
-    environ.Env.read_env(os.path.join(BASE_DIR, '.env'))
+    environ.Env.read_env(dev_env_path)
 
 # Application definition
 INSTALLED_APPS = [
@@ -88,7 +90,7 @@ MIDDLEWARE = [
     "wagtail.contrib.redirects.middleware.RedirectMiddleware",
 ]
 
-ROOT_URLCONF = "wis2box_adl.urls"
+ROOT_URLCONF = "config.urls"
 
 TEMPLATES = [
     {
@@ -108,7 +110,7 @@ TEMPLATES = [
     },
 ]
 
-WSGI_APPLICATION = "wis2box_adl.wsgi.application"
+WSGI_APPLICATION = "config.wsgi.application"
 
 # Database
 # https://docs.djangoproject.com/en/5.0/ref/settings/#databases
@@ -184,7 +186,7 @@ STORAGES = {
 
 # Wagtail settings
 
-WAGTAIL_SITE_NAME = "wis2box_adl"
+WAGTAIL_SITE_NAME = "WIS2Box ADL"
 
 # Search
 # https://docs.wagtail.org/en/stable/topics/search/backends.html
