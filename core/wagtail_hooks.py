@@ -15,6 +15,8 @@ from .views import (
     import_oscar_station
 )
 
+wis2box_adl_register_menu_items_hook_name = "register_wis2box_adl_menu_items"
+
 
 @hooks.register('register_admin_urls')
 def urlconf_wis2box_adl():
@@ -79,6 +81,11 @@ class WIS2BoxAdlViewSetGroup(SnippetViewSetGroup):
             menu_items.append(gm_settings_menu)
         except Exception:
             pass
+
+        for fn in hooks.get_hooks(wis2box_adl_register_menu_items_hook_name):
+            hook_menu_items = fn()
+            if isinstance(hook_menu_items, list):
+                menu_items.extend(hook_menu_items)
 
         return menu_items
 

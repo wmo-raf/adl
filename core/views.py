@@ -9,14 +9,14 @@ from django.urls import reverse_lazy, reverse
 from django.utils.translation import gettext as _
 from wagtail.admin import messages
 
-from wis2box_adl.forms import StationLoaderForm, StationsCSVTemplateDownloadForm, OSCARStationImportForm
+from .forms import StationLoaderForm, StationsCSVTemplateDownloadForm, OSCARStationImportForm
 from .constants import STATION_ATTRIBUTES
 from .models import Station, AdlSettings
 from .utils import get_stations_for_country, get_wigos_id_parts
 
 
 def load_stations_csv(request):
-    from wis2box_adl.wagtail_hooks import StationViewSet
+    from .wagtail_hooks import StationViewSet
     stations_url = StationViewSet().menu_url
 
     template_name = "wis2box_adl/load_stations_csv.html"
@@ -62,7 +62,7 @@ def load_stations_csv(request):
             context.update({"form": form})
             return render(request, template_name, context)
     else:
-        from wis2box_adl.wagtail_hooks import StationViewSet
+        from .wagtail_hooks import StationViewSet
         stations_url = StationViewSet().menu_url
 
         breadcrumbs_items = [
@@ -122,7 +122,7 @@ def download_stations_csv_template(request):
         else:
             context.update({"form": form})
     else:
-        from wis2box_adl.wagtail_hooks import StationViewSet
+        from .wagtail_hooks import StationViewSet
         station_attributes = STATION_ATTRIBUTES
         stations_url = StationViewSet().menu_url
 
@@ -147,7 +147,7 @@ def load_stations_oscar(request):
     template_name = "wis2box_adl/load_stations_oscar.html"
     context = {}
 
-    from wis2box_adl.wagtail_hooks import StationViewSet
+    from .wagtail_hooks import StationViewSet
     stations_url = StationViewSet().menu_url
     station_edit_url_name = StationViewSet().get_url_name("edit")
 
@@ -210,7 +210,7 @@ def load_stations_oscar(request):
 
 
 def import_oscar_station(request, wigos_id):
-    from wis2box_adl.wagtail_hooks import StationViewSet
+    from .wagtail_hooks import StationViewSet
     stations_url = StationViewSet().menu_url
 
     breadcrumbs_items = [
@@ -271,7 +271,6 @@ def import_oscar_station(request, wigos_id):
             context.update({"form": form})
             return render(request, template_name=template_name, context=context)
     else:
-
         iso = country.alpha3
 
         oscar_stations = cache.get(f"{iso}_oscar_stations_dict")
@@ -288,7 +287,7 @@ def import_oscar_station(request, wigos_id):
             })
             return render(request, template_name=template_name, context=context)
 
-        form = OSCARStationImportForm(initial={"oscar_data": json.dumps(station)})
+        form = OSCARStationImportForm(initial={"oscar_data": json.dumps(station), "station_id": wigos_id})
         context.update({
             "form": form,
             "station": station

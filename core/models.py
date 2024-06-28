@@ -110,7 +110,7 @@ class Station(models.Model):
                                                                   "the number of minutes since a significant change "
                                                                   "occuring in the preceeding 10 minutes."))
     basic_info_panels = [
-        FieldPanel("id"),
+        FieldPanel("station_id"),
         FieldPanel("name"),
         FieldPanel("network"),
         FieldPanel("station_type"),

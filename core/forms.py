@@ -2,8 +2,8 @@ from django import forms
 from django.contrib.gis.geos import Point
 from django.utils.translation import gettext_lazy as _
 
-from wis2box_adl.models import Network
-from wis2box_adl.utils import is_valid_wigos_id, get_wigos_id_parts
+from .models import Network
+from .utils import is_valid_wigos_id, get_wigos_id_parts
 
 
 class StationLoaderForm(forms.Form):
@@ -79,6 +79,7 @@ class OSCARStationImportForm(forms.Form):
         (2, _("Hybrid: both automatic and manned")),
     )
 
+    station_id = forms.CharField(label=_("Station ID"), required=True)
     network = forms.ModelChoiceField(queryset=Network.objects.all(), label=_("Assign Network"), required=True)
     station_type = forms.ChoiceField(choices=STATION_TYPE_CHOICES, label=_("Assign Station Type"), required=True,
                                      initial=0)
