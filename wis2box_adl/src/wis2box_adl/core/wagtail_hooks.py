@@ -33,6 +33,7 @@ class NetworkViewSet(SnippetViewSet):
 
 
 class StationIndexView(IndexView):
+    list_display = ["name", "network", "station_id", "wigos_id"]
     list_filter = ["network", ]
 
     @cached_property

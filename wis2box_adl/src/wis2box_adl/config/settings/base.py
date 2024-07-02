@@ -16,6 +16,7 @@ from pathlib import Path
 
 import dj_database_url
 import environ
+import importlib
 
 PROJECT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 BASE_DIR = os.path.dirname(PROJECT_DIR)
@@ -230,3 +231,31 @@ LOGGING = {
         },
     },
 }
+
+
+# Allows accessing and setting values on a dictionary like an object. Using this
+# we can pass plugin authors and other functions a `settings` object which can modify
+# the settings like they expect (settings.SETTING = 'test') etc.
+
+
+class AttrDict(dict):
+    def __getattr__(self, item):
+        return super().__getitem__(item)
+
+    def __setattr__(self, item, value):
+        globals()[item] = value
+
+    def __setitem__(self, key, value):
+        globals()[key] = value
+
+
+for plugin in [*WIS2BOX_ADL_PLUGIN_NAMES]:
+    try:
+        mod = importlib.import_module(plugin + ".config.settings.settings")
+        # The plugin should have a setup function which accepts a 'settings' object.
+        # This settings object is an AttrDict shadowing our local variables so the
+        # plugin can access the Django settings and modify them prior to startup.
+        result = mod.setup(AttrDict(vars()))
+    except ImportError as e:
+        print("Could not import %s", plugin)
+        print(e)

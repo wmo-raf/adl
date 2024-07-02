@@ -9,6 +9,7 @@ from wagtail.contrib.settings.models import BaseSiteSetting
 from wagtail.contrib.settings.registry import register_setting
 
 from .utils import get_data_parameters_as_choices
+from .widgets import PluginSelectWidget
 
 
 class Network(models.Model):
@@ -19,14 +20,14 @@ class Network(models.Model):
     name = models.CharField(max_length=255, verbose_name=_("Name"), help_text=_("Name of the network"))
     type = models.CharField(max_length=255, choices=WEATHER_STATION_TYPES, verbose_name=_("Weather Stations Type"),
                             help_text=_("Weather station type"))
-    plugin = models.CharField(max_length=255, blank=True, null=True, choices=[], verbose_name=_("Plugin"),
+    plugin = models.CharField(max_length=255, blank=True, null=True, unique=True, verbose_name=_("Plugin"),
                               help_text=_("Plugin to use for this network"))
     created_at = models.DateTimeField(auto_now_add=True)
 
     panels = [
         FieldPanel('name'),
         FieldPanel('type'),
-        FieldPanel('plugin'),
+        FieldPanel('plugin', widget=PluginSelectWidget),
     ]
 
     class Meta:
