@@ -4,9 +4,11 @@ from django_countries.fields import CountryField
 from django_countries.widgets import CountrySelectWidget
 from modelcluster.models import ClusterableModel
 from timescale.db.models.models import TimescaleModel
+from timezone_field import TimeZoneField
 from wagtail.admin.panels import FieldPanel, TabbedInterface, ObjectList
 from wagtail.contrib.settings.models import BaseSiteSetting
 from wagtail.contrib.settings.registry import register_setting
+from wagtail.snippets.models import register_snippet
 
 from .utils import get_data_parameters_as_choices
 from .widgets import PluginSelectWidget
@@ -110,6 +112,10 @@ class Station(models.Model):
                                                                   "have been averaged. 10 minutes in normal cases or "
                                                                   "the number of minutes since a significant change "
                                                                   "occuring in the preceeding 10 minutes."))
+
+    timezone = TimeZoneField(default='UTC', verbose_name=_("Station Timezone"),
+                             help_text=_("Timezone used by the station for recording observations"))
+
     basic_info_panels = [
         FieldPanel("station_id"),
         FieldPanel("name"),
@@ -136,6 +142,7 @@ class Station(models.Model):
         FieldPanel("method_of_ground_state_measurement"),
         FieldPanel("method_of_snow_depth_measurement"),
         FieldPanel("time_period_of_wind"),
+        FieldPanel("timezone"),
     ]
 
     edit_handler = TabbedInterface([
@@ -158,6 +165,27 @@ class Station(models.Model):
     def wigos_id(self):
         return f"{self.wsi_series}-{self.wsi_issuer}-{self.wsi_issue_number}-{self.wsi_local}"
 
+    @property
+    def wis2box_csv_metadata(self):
+        return {
+            "wsi_series": self.wsi_series,
+            "wsi_issuer": self.wsi_issuer,
+            "wsi_issue_number": self.wsi_issue_number,
+            "wsi_local": self.wsi_local,
+            "wmo_block_number": self.wmo_block_number,
+            "wmo_station_number": self.wmo_station_number,
+            "station_type": self.station_type,
+            "latitude": self.location.y,
+            "longitude": self.location.x,
+            "station_height_above_msl": self.station_height_above_msl,
+            "barometer_height_above_msl": self.barometer_height_above_msl,
+            "anemometer_height": self.anemometer_height,
+            "rain_sensor_height": self.rain_sensor_height,
+            "method_of_ground_state_measurement": self.method_of_ground_state_measurement,
+            "method_of_snow_depth_measurement": self.method_of_snow_depth_measurement,
+            "time_period_of_wind": self.time_period_of_wind,
+        }
+
 
 class DataParameter(models.Model):
     name = models.CharField(max_length=255, verbose_name=_("Name"), help_text=_("Name of the variable"))
@@ -170,10 +198,21 @@ class DataParameter(models.Model):
         return self.name
 
 
+@register_snippet
 class DataIngestionRecord(TimescaleModel):
+    # time field is inherited from TimescaleModel. We use it to store the observation time of the data
     created_at = models.DateTimeField(auto_now_add=True)
+    modified_at = models.DateTimeField(auto_now=True)
     station = models.ForeignKey(Station, on_delete=models.CASCADE, verbose_name=_("Station"))
     file = models.FileField(upload_to='data_ingestion_events/', verbose_name=_("File"))
+    uploaded_to_wis2box = models.BooleanField(default=False, verbose_name=_("Uploaded to WIS2BOX"))
+
+    class Meta:
+        verbose_name = _("Data Ingestion Record")
+        verbose_name_plural = _("Data Ingestion Records")
+        constraints = [
+            models.UniqueConstraint(fields=['time', 'station'], name='unique_station_ingestion_record')
+        ]
 
 
 @register_setting
