@@ -1,5 +1,6 @@
 import logging
 import re
+from datetime import timezone
 
 from django.contrib.gis.geos import Polygon, Point
 from pyoscar import OSCARClient
@@ -119,3 +120,10 @@ def get_stations_for_country(country, as_dict=False):
         stations = {station["wigos_id"]: station for station in stations}
 
     return stations
+
+
+def get_station_directory_path(ingestion_record, filename):
+    wigos_id = ingestion_record.station.wigos_id
+    time = ingestion_record.time.replace(tzinfo=timezone.utc).strftime("%Y/%m/%d")
+
+    return f"station_data/{wigos_id}/{time}/{filename}"

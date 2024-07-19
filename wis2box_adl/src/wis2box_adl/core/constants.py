@@ -31,7 +31,7 @@ DATA_PARAMETERS_DICT = {
         "data_type": "float",
         "decimal_places": 2,
     },
-    "dew_point_temperature": {
+    "dewpoint_temperature": {
         "name": "Dew Point Temperature",
         "unit": "Kelvin",
         "description": _("Instantaneous dew point temperature to 2 decimal places"),
@@ -315,7 +315,7 @@ WIS2BOX_CSV_HEADER = [
     "geopotential_height",
     "thermometer_height",
     "air_temperature",
-    "dew_point_temperature",
+    "dewpoint_temperature",
     "relative_humidity",
     "method_of_ground_state_measurement",
     "ground_state",

@@ -18,6 +18,8 @@ import dj_database_url
 import environ
 import importlib
 
+from django.core.exceptions import ImproperlyConfigured
+
 PROJECT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 BASE_DIR = os.path.dirname(PROJECT_DIR)
 
@@ -57,6 +59,7 @@ INSTALLED_APPS = [
     "wagtail",
     "modelcluster",
     "taggit",
+    "django_cleanup.apps.CleanupConfig",
 
     "django.contrib.admin",
     "django.contrib.auth",
@@ -206,6 +209,24 @@ WAGTAILADMIN_BASE_URL = "http://example.com"
 # if untrusted users are allowed to upload files -
 # see https://docs.wagtail.org/en/stable/advanced_topics/deploying.html#user-uploaded-files
 WAGTAILDOCS_EXTENSIONS = ['csv', 'docx', 'key', 'odt', 'pdf', 'pptx', 'rtf', 'txt', 'xlsx', 'zip']
+
+# WIS2Box Configuration
+WIS2BOX_CENTRE_ID = env.str("WIS2BOX_CENTRE_ID", None)
+WIS2BOX_STORAGE_ENDPOINT = env.str("WIS2BOX_STORAGE_ENDPOINT", None)
+WIS2BOX_STORAGE_USERNAME = env.str("WIS2BOX_STORAGE_USERNAME", None)
+WIS2BOX_STORAGE_PASSWORD = env.str("WIS2BOX_STORAGE_PASSWORD", None)
+
+if WIS2BOX_CENTRE_ID is None:
+    raise ImproperlyConfigured("WIS2BOX_CENTRE_ID is not set")
+
+if WIS2BOX_STORAGE_ENDPOINT is None:
+    raise ImproperlyConfigured("WIS2BOX_STORAGE_ENDPOINT is not set")
+
+if WIS2BOX_STORAGE_USERNAME is None:
+    raise ImproperlyConfigured("WIS2BOX_STORAGE_USERNAME is not set")
+
+if WIS2BOX_STORAGE_PASSWORD is None:
+    raise ImproperlyConfigured("WIS2BOX_STORAGE_PASSWORD is not set")
 
 LOGGING = {
     "version": 1,

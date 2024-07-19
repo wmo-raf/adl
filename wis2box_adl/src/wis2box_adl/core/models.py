@@ -1,3 +1,5 @@
+from datetime import timezone
+
 from django.contrib.gis.db import models
 from django.utils.translation import gettext_lazy as _
 from django_countries.fields import CountryField
@@ -10,7 +12,7 @@ from wagtail.contrib.settings.models import BaseSiteSetting
 from wagtail.contrib.settings.registry import register_setting
 from wagtail.snippets.models import register_snippet
 
-from .utils import get_data_parameters_as_choices
+from .utils import get_data_parameters_as_choices, get_station_directory_path
 from .widgets import PluginSelectWidget
 
 
@@ -204,15 +206,31 @@ class DataIngestionRecord(TimescaleModel):
     created_at = models.DateTimeField(auto_now_add=True)
     modified_at = models.DateTimeField(auto_now=True)
     station = models.ForeignKey(Station, on_delete=models.CASCADE, verbose_name=_("Station"))
-    file = models.FileField(upload_to='data_ingestion_events/', verbose_name=_("File"))
+    file = models.FileField(upload_to=get_station_directory_path, verbose_name=_("File"))
     uploaded_to_wis2box = models.BooleanField(default=False, verbose_name=_("Uploaded to WIS2BOX"))
 
     class Meta:
         verbose_name = _("Data Ingestion Record")
         verbose_name_plural = _("Data Ingestion Records")
+        ordering = ['-time']
         constraints = [
             models.UniqueConstraint(fields=['time', 'station'], name='unique_station_ingestion_record')
         ]
+
+    @property
+    def utc_time(self):
+        return self.time.replace(tzinfo=timezone.utc)
+
+    def __str__(self):
+        return f"{self.station.name} - {self.utc_time}"
+
+    @property
+    def wis2box_filename(self):
+        utc_time = self.time.replace(tzinfo=timezone.utc)
+        return f"WIGOS_{self.station.wigos_id}_{utc_time.strftime('%Y%m%dT%H%M%S')}.csv"
+
+    def get_csv_content(self):
+        return self.file.read().decode('utf-8')
 
 
 @register_setting
