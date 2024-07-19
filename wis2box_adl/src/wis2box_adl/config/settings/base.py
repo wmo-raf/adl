@@ -17,6 +17,7 @@ from pathlib import Path
 import dj_database_url
 import environ
 import importlib
+from wis2box_adl.version import VERSION
 
 PROJECT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 BASE_DIR = os.path.dirname(PROJECT_DIR)
@@ -41,6 +42,7 @@ INSTALLED_APPS = [
     "core",
 
     "django_countries",
+    "django_celery_beat",
 
     "wagtail.contrib.forms",
     "wagtail.contrib.redirects",
@@ -111,7 +113,8 @@ TEMPLATES = [
     },
 ]
 
-WSGI_APPLICATION = "config.wsgi.application"
+WSGI_APPLICATION = "wis2box_adl.config.wsgi.application"
+ASGI_APPLICATION = "wis2box_adl.config.asgi.application"
 
 # Database
 # https://docs.djangoproject.com/en/5.0/ref/settings/#databases
@@ -206,6 +209,39 @@ WAGTAILADMIN_BASE_URL = "http://example.com"
 # if untrusted users are allowed to upload files -
 # see https://docs.wagtail.org/en/stable/advanced_topics/deploying.html#user-uploaded-files
 WAGTAILDOCS_EXTENSIONS = ['csv', 'docx', 'key', 'odt', 'pdf', 'pptx', 'rtf', 'txt', 'xlsx', 'zip']
+
+REDIS_HOST = env.str("REDIS_HOST", "redis")
+REDIS_PORT = env.str("REDIS_PORT", "6379")
+REDIS_USERNAME = env.str("REDIS_USER", "")
+REDIS_PASSWORD = env.str("REDIS_PASSWORD", "")
+REDIS_PROTOCOL = env.str("REDIS_PROTOCOL", "redis")
+REDIS_URL = env.str(
+    "REDIS_URL",
+    f"{REDIS_PROTOCOL}://{REDIS_USERNAME}:{REDIS_PASSWORD}@{REDIS_HOST}:{REDIS_PORT}/0",
+)
+
+CELERY_BROKER_URL = REDIS_URL
+
+CELERY_SOFT_TIME_LIMIT = 60 * 5  # 5 minutes
+CELERY_TIME_LIMIT = CELERY_SOFT_TIME_LIMIT + 60  # 60 seconds
+
+CELERY_REDBEAT_REDIS_URL = REDIS_URL
+CELERY_BEAT_MAX_LOOP_INTERVAL = env.int("CELERY_BEAT_MAX_LOOP_INTERVAL", 20)
+CELERY_REDBEAT_LOCK_TIMEOUT = env.int("CELERY_REDBEAT_LOCK_TIMEOUT", CELERY_BEAT_MAX_LOOP_INTERVAL + 60)
+
+CACHES = {
+    "default": {
+        "BACKEND": "django_redis.cache.RedisCache",
+        "LOCATION": REDIS_URL,
+        "OPTIONS": {"CLIENT_CLASS": "django_redis.client.DefaultClient"},
+        "KEY_PREFIX": "wis2box-adl-default-cache",
+        "VERSION": VERSION,
+    },
+}
+
+CELERY_SINGLETON_BACKEND_CLASS = (
+    "wis2box_adl.celery_singleton_backend.RedisBackendForSingleton"
+)
 
 LOGGING = {
     "version": 1,

@@ -8,3 +8,10 @@ django-countries==7.6.1
 django-countries-geoextent>=0.0.1
 pyoscar==0.7.0
 django-timezone-field>=6.1.0
+
+django-redis
+celery-singleton
+
+channels
+daphne
+django-celery-beat
