@@ -119,3 +119,10 @@ def get_stations_for_country(country, as_dict=False):
         stations = {station["wigos_id"]: station for station in stations}
 
     return stations
+
+
+def get_object_or_none(model_class, **kwargs):
+    try:
+        return model_class.objects.get(**kwargs)
+    except model_class.DoesNotExist:
+        return None

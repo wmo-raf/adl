@@ -1,4 +1,7 @@
 from django.contrib.gis.db import models
+from django.core.validators import MaxValueValidator, MinValueValidator
+from django.db.models.signals import post_save
+from django.dispatch import receiver
 from django.utils.translation import gettext_lazy as _
 from django_countries.fields import CountryField
 from django_countries.widgets import CountrySelectWidget
@@ -22,14 +25,25 @@ class Network(models.Model):
     name = models.CharField(max_length=255, verbose_name=_("Name"), help_text=_("Name of the network"))
     type = models.CharField(max_length=255, choices=WEATHER_STATION_TYPES, verbose_name=_("Weather Stations Type"),
                             help_text=_("Weather station type"))
-    plugin = models.CharField(max_length=255, blank=True, null=True, unique=True, verbose_name=_("Plugin"),
+    plugin = models.CharField(max_length=255, unique=True, verbose_name=_("Plugin"),
                               help_text=_("Plugin to use for this network"))
+    plugin_processing_enabled = models.BooleanField(default=True, verbose_name=_("Plugin Auto Processing Enabled"))
+    plugin_processing_interval = models.PositiveIntegerField(default=15,
+                                                             verbose_name=_("Plugin Auto Processing Interval "
+                                                                            "in Minutes"),
+                                                             help_text=_("How often the plugin should run in minutes"),
+                                                             validators=[
+                                                                 MaxValueValidator(30),
+                                                                 MinValueValidator(1)
+                                                             ])
     created_at = models.DateTimeField(auto_now_add=True)
 
     panels = [
         FieldPanel('name'),
         FieldPanel('type'),
         FieldPanel('plugin', widget=PluginSelectWidget),
+        FieldPanel("plugin_processing_enabled"),
+        FieldPanel("plugin_processing_interval"),
     ]
 
     class Meta:
@@ -222,3 +236,10 @@ class AdlSettings(ClusterableModel, BaseSiteSetting):
     panels = [
         FieldPanel("country", widget=CountrySelectWidget()),
     ]
+
+
+@receiver(post_save, sender=Network)
+def update_periodic_task(sender, instance, **kwargs):
+    from wis2box_adl.core.tasks import update_network_plugin_periodic_task
+
+    update_network_plugin_periodic_task(instance)

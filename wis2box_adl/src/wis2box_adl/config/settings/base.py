@@ -221,13 +221,12 @@ REDIS_URL = env.str(
 )
 
 CELERY_BROKER_URL = REDIS_URL
+CELERY_BROKER_CONNECTION_RETRY_ON_STARTUP = True
+CELERY_BEAT_SCHEDULER = "django_celery_beat.schedulers:DatabaseScheduler"
 
-CELERY_SOFT_TIME_LIMIT = 60 * 5  # 5 minutes
-CELERY_TIME_LIMIT = CELERY_SOFT_TIME_LIMIT + 60  # 60 seconds
-
-CELERY_REDBEAT_REDIS_URL = REDIS_URL
-CELERY_BEAT_MAX_LOOP_INTERVAL = env.int("CELERY_BEAT_MAX_LOOP_INTERVAL", 20)
-CELERY_REDBEAT_LOCK_TIMEOUT = env.int("CELERY_REDBEAT_LOCK_TIMEOUT", CELERY_BEAT_MAX_LOOP_INTERVAL + 60)
+CELERY_SINGLETON_BACKEND_CLASS = (
+    "wis2box_adl.celery_singleton_backend.RedisBackendForSingleton"
+)
 
 CACHES = {
     "default": {
@@ -238,10 +237,6 @@ CACHES = {
         "VERSION": VERSION,
     },
 }
-
-CELERY_SINGLETON_BACKEND_CLASS = (
-    "wis2box_adl.celery_singleton_backend.RedisBackendForSingleton"
-)
 
 LOGGING = {
     "version": 1,
