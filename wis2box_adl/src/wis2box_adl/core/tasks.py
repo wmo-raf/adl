@@ -1,6 +1,5 @@
 import json
 import logging
-from datetime import timedelta
 
 from celery.signals import worker_ready
 from celery_singleton import Singleton, clear_locks
@@ -44,21 +43,7 @@ def setup_network_plugin_processing_tasks(sender, **kwargs):
     networks = Network.objects.filter(plugin__isnull=False)
 
     for network in networks:
-        interval = network.plugin_processing_interval
-        enabled = network.plugin_processing_enabled
-
-        sig = run_network_plugin.s(network.id)
-        name = repr(sig)
-
-        sender.add_periodic_task(
-            timedelta(minutes=interval),
-            run_network_plugin.s(network.id),
-            name=name,
-        )
-
-        obj, created = PeriodicTask.objects.update_or_create(
-            name=name, defaults={"enabled": enabled}
-        )
+        create_or_update_network_plugin_periodic_task(network)
 
 
 @worker_ready.connect
@@ -66,7 +51,7 @@ def unlock_all(**kwargs):
     clear_locks(app)
 
 
-def update_network_plugin_periodic_task(network):
+def create_or_update_network_plugin_periodic_task(network):
     interval = network.plugin_processing_interval
     enabled = network.plugin_processing_enabled
 
