@@ -52,8 +52,6 @@ start_celery_worker() {
 run_server() {
     run_setup_commands_if_configured
 
-    EXTRA_GUNICORN_ARGS=()
-
     if [[ "$1" = "wsgi" ]]; then
         STARTUP_ARGS=(wis2box_adl.config.wsgi:application)
     elif [[ "$1" = "asgi" ]]; then
