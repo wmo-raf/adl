@@ -96,7 +96,7 @@ MIDDLEWARE = [
     "wagtail.contrib.redirects.middleware.RedirectMiddleware",
 ]
 
-ROOT_URLCONF = "config.urls"
+ROOT_URLCONF = "wis2box_adl.config.urls"
 
 TEMPLATES = [
     {

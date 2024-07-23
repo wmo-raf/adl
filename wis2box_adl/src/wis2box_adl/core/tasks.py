@@ -5,7 +5,7 @@ from celery.signals import worker_ready
 from celery_singleton import Singleton, clear_locks
 from django_celery_beat.models import PeriodicTask, IntervalSchedule
 
-from ..config.celery import app
+from wis2box_adl.config.celery import app
 from .models import Network
 from .utils import get_object_or_none
 
