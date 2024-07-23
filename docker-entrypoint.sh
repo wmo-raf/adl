@@ -75,8 +75,7 @@ run_server() {
         --log-file=- \
         --access-logfile=- \
         --capture-output \
-        "${EXTRA_GUNICORN_ARGS[@]}" \
-        -b 0.0.0.0:8000 \
+        -b "0.0.0.0:8000" \
         --log-level="${WIS2BOX_ADL_LOG_LEVEL}" \
         "${STARTUP_ARGS[@]}" \
         "${@:2}"
