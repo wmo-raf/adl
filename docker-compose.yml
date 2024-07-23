@@ -30,6 +30,7 @@ x-backend-variables: &backend-variables
   COLLECT_STATICFILES_ON_STARTUP: ${COLLECT_STATICFILES_ON_STARTUP:-true}
   MEDIA_ROOT: ${MEDIA_ROOT:-/wis2box_adl/media}
   STATIC_ROOT: ${MEDIA_ROOT:-/wis2box_adl/static}
+  REDIS_URL: redis://wis2box_adl_redis:6379/0
 
 services:
   wis2box_adl_db:
