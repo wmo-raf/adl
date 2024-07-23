@@ -24,6 +24,13 @@ celery-beat         : Start the celery beat service used to schedule periodic jo
 """
 }
 
+run_setup_commands_if_configured(){
+  startup_plugin_setup
+  if [ "$MIGRATE_ON_STARTUP" = "true" ] ; then
+    echo "python /wis2box_adl/app/src/wis2box_adl/manage.py migrate"
+  fi
+}
+
 start_celery_worker() {
     startup_plugin_setup
 
@@ -36,6 +43,7 @@ start_celery_worker() {
 }
 
 run_server() {
+    run_setup_commands_if_configured
 
     EXTRA_GUNICORN_ARGS=()
 
