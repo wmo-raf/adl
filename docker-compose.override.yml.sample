@@ -10,6 +10,6 @@ services:
     environment:
       <<: *backend-variables
 
-    wis2box_adl_celery_beat:
+  wis2box_adl_celery_beat:
     environment:
       <<: *backend-variables
