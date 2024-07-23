@@ -28,6 +28,7 @@ run_setup_commands_if_configured(){
   startup_plugin_setup
   if [ "$MIGRATE_ON_STARTUP" = "true" ] ; then
     echo "python /wis2box_adl/app/src/wis2box_adl/manage.py migrate"
+    /wis2box_adl/app/src/wis2box_adl/manage.py "$migration_command"
   fi
 }
 
