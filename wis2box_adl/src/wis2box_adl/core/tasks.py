@@ -35,7 +35,7 @@ def run_network_plugin(self, network_id):
             return
 
         logger.info(f"Starting plugin processing '{plugin}' for network {network.name}...")
-        plugin.get_data()
+        plugin.run_process()
 
 
 @app.on_after_finalize.connect

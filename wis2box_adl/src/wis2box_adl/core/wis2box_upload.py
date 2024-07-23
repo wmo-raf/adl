@@ -3,8 +3,6 @@ import logging
 from django.conf import settings
 from minio import Minio
 
-from wis2box_adl.core.models import DataIngestionRecord
-
 LOGGER = logging.getLogger(__name__)
 
 WIS2BOX_CENTRE_ID = getattr(settings, "WIS2BOX_CENTRE_ID", None)
@@ -21,11 +19,13 @@ minio_client = Minio(endpoint=WIS2BOX_STORAGE_ENDPOINT,
                      secure=False)
 
 
-def upload_to_wis2box(ingestion_record_id):
+def upload_to_wis2box(ingestion_record_id, overwrite=False):
+    from wis2box_adl.core.models import DataIngestionRecord
     ingestion_record = DataIngestionRecord.objects.get(id=ingestion_record_id)
 
-    if ingestion_record.uploaded_to_wis2box:
+    if ingestion_record.uploaded_to_wis2box and not overwrite:
         logging.warning(f"Data ingestion record {ingestion_record_id} has already been uploaded to WIS2BOX")
+        return
 
     logging.info(f"Uploading data record {ingestion_record_id} to WIS2BOX")
 

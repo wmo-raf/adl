@@ -1,6 +1,7 @@
 from django.core.exceptions import ImproperlyConfigured
 
 from .registry import Registry, Instance
+from .wis2box_upload import upload_to_wis2box
 
 
 class Plugin(Instance):
@@ -13,11 +14,10 @@ class Plugin(Instance):
     def get_data(self):
         raise NotImplementedError
 
-    def load_data(self):
-        raise NotImplementedError
-
-    def process_data(self):
+    def run_process(self):
         ingestion_record_ids = self.get_data()
+        for record_id in ingestion_record_ids:
+            upload_to_wis2box(record_id)
 
 
 class PluginRegistry(Registry):
