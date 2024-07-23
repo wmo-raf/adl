@@ -213,7 +213,7 @@ if [[ -d "$folder" ]]; then
     PLUGIN_RUNTIME_SETUP_MARKER=/wis2box_adl/container_markers/$plugin_name.runtime-setup
     if [[ ( ! -f "$PLUGIN_RUNTIME_SETUP_MARKER" || "$overwrite" == "true" ) && $runtime == "true" ]]; then
       check_and_run_script "$folder" runtime_setup.sh
-      touch "PLUGIN_RUNTIME_SETUP_MARKER"
+      touch "$PLUGIN_RUNTIME_SETUP_MARKER"
     else
       log "Skipping runtime setup of ${plugin_name}."
     fi
