@@ -72,10 +72,10 @@ INSTALLED_APPS = [
     "django.contrib.staticfiles",
 ]
 
-WIS2BOX_ADL_PLUGIN_DIR_PATH = Path(env.str("WIS2BOX_ADL_PLUGIN_DIR_PATH", "/wis2boxadl/plugins"))
+WIS2BOX_ADL_PLUGIN_DIR = Path(env.str("WIS2BOX_ADL_PLUGIN_DIR", "/wis2box_adl/plugins"))
 
-if WIS2BOX_ADL_PLUGIN_DIR_PATH.exists():
-    WIS2BOX_ADL_PLUGIN_FOLDERS = [file for file in WIS2BOX_ADL_PLUGIN_DIR_PATH.iterdir() if file.is_dir()]
+if WIS2BOX_ADL_PLUGIN_DIR.exists():
+    WIS2BOX_ADL_PLUGIN_FOLDERS = [file for file in WIS2BOX_ADL_PLUGIN_DIR.iterdir() if file.is_dir()]
 else:
     WIS2BOX_ADL_PLUGIN_FOLDERS = []
 
