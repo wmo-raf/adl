@@ -40,8 +40,8 @@ if os.path.isfile(dev_env_path):
 
 # Application definition
 INSTALLED_APPS = [
-    "home",
-    "core",
+    "wis2box_adl.home",
+    "wis2box_adl.core",
 
     "django_countries",
     "django_celery_beat",

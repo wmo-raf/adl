@@ -169,6 +169,7 @@ cython_debug/
 .idea/
 .DS_Store
 wis2boxadl-plugins
+docker
 
 
 # End of https://www.toptal.com/developers/gitignore/api/django

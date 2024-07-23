@@ -37,3 +37,7 @@ wheels/
 *.egg-info/
 .installed.cfg
 *.egg
+wis2boxadl-plugins
+.env
+.env.sample
+docker

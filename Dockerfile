@@ -1,60 +1,74 @@
-# Use an official Python runtime based on Debian 10 "buster" as a parent image.
-FROM python:3.8.1-slim-buster
+# syntax = docker/dockerfile:1.5
 
-# Add user that will be used in the container.
-RUN useradd wagtail
+# use osgeo gdal ubuntu small 3.7 image.
+# pre-installed with GDAL 3.7.0 and Python 3.10.6
+FROM ghcr.io/osgeo/gdal:ubuntu-small-3.7.0 as base
 
-# Port used by this container to serve HTTP.
-EXPOSE 8000
+ARG UID
+ENV UID=${UID:-9999}
+ARG GID
+ENV GID=${GID:-9999}
 
-# Set environment variables.
-# 1. Force Python stdout and stderr streams to be unbuffered.
-# 2. Set PORT variable that is used by Gunicorn. This should match "EXPOSE"
-#    command.
-ENV PYTHONUNBUFFERED=1 \
-    PORT=8000
+SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
-# Install system packages required by Wagtail and Django.
-RUN apt-get update --yes --quiet && apt-get install --yes --quiet --no-install-recommends \
+# We might be running as a user which already exists in this image. In that situation
+# Everything is OK and we should just continue on.
+RUN groupadd -g $GID wis2box_adl_docker_group || exit 0
+RUN useradd --shell /bin/bash -u $UID -g $GID -o -c "" -m wis2box_adl_docker_user -l || exit 0
+ENV DOCKER_USER=wis2box_adl_docker_user
+
+ENV POSTGRES_VERSION=15
+
+# install dependencies
+RUN apt-get update && apt-get install -y \
     build-essential \
+    lsb-release \
+    ca-certificates \
+    curl \
+    libgeos-dev \
     libpq-dev \
-    libmariadbclient-dev \
-    libjpeg62-turbo-dev \
-    zlib1g-dev \
-    libwebp-dev \
- && rm -rf /var/lib/apt/lists/*
+    python3-pip --fix-missing \
+    gosu \
+    && echo "deb http://apt.postgresql.org/pub/repos/apt/ $(lsb_release -cs)-pgdg main" > /etc/apt/sources.list.d/pgdg.list \
+    && curl --silent https://www.postgresql.org/media/keys/ACCC4CF8.asc | apt-key add - \
+    && apt-get update \
+    && apt-get install -y postgresql-client-$POSTGRES_VERSION \
+    python3-dev \
+    python3-venv \
+    && apt-get autoclean \
+    && apt-get clean \
+    && apt-get autoremove \
+    && rm -rf /var/lib/apt/lists/*
 
-# Install the application server.
-RUN pip install "gunicorn==20.0.4"
+# install docker-compose wait
+ADD https://github.com/ufoscout/docker-compose-wait/releases/download/2.12.1/wait /wait
+RUN chmod +x /wait
 
-# Install the project requirements.
-COPY requirements.txt /
-RUN pip install -r /requirements.txt
+USER $UID:$GID
 
-# Use /app folder as a directory where the source code is stored.
-WORKDIR /app
+# Install  dependencies into a virtual env.
+COPY --chown=$UID:$GID ./wis2box_adl/requirements.txt /wis2box_adl/requirements.txt
+RUN python3 -m venv /wis2box_adl/venv
 
-# Set this directory to be owned by the "wagtail" user. This Wagtail project
-# uses SQLite, the folder needs to be owned by the user that
-# will be writing to the database file.
-RUN chown wagtail:wagtail /app
+ENV PIP_CACHE_DIR=/tmp/wis2box_adl_pip_cache
+RUN --mount=type=cache,mode=777,target=$PIP_CACHE_DIR,uid=$UID,gid=$GID . /wis2box_adl/venv/bin/activate && pip3 install  -r /wis2box_adl/requirements.txt
 
-# Copy the source code of the project into the container.
-COPY --chown=wagtail:wagtail . .
+COPY --chown=$UID:$GID ./wis2box_adl /wis2box_adl/app
 
-# Use user "wagtail" to run the build commands below and the server itself.
-USER wagtail
+WORKDIR /wis2box_adl/app
 
-# Collect static files.
-RUN python manage.py collectstatic --noinput --clear
+# Ensure that Python outputs everything that's printed inside
+# the application rather than buffering it.
+ENV PYTHONUNBUFFERED 1
 
-# Runtime command that executes when "docker run" is called, it does the
-# following:
-#   1. Migrate the database.
-#   2. Start the application server.
-# WARNING:
-#   Migrating database at the same time as starting the server IS NOT THE BEST
-#   PRACTICE. The database should be migrated manually or using the release
-#   phase facilities of your hosting platform. This is used only so the
-#   Wagtail instance can be started with a simple "docker run" command.
-CMD set -xe; python manage.py migrate --noinput; gunicorn wis2box_adl.wsgi:application
+COPY --chown=$UID:$GID ./deploy/plugins/*.sh /wis2box_adl/plugins/
+
+RUN /wis2box_adl/venv/bin/pip install /wis2box_adl/app/
+
+COPY --chown=$UID:$GID ./docker-entrypoint.sh /wis2box_adl/docker-entrypoint.sh
+
+ENV DJANGO_SETTINGS_MODULE='wis2box_adl.config.settings.dev'
+
+ENTRYPOINT ["/wis2box_adl/docker-entrypoint.sh"]
+
+CMD ["gunicorn-wsgi"]
