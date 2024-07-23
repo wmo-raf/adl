@@ -2,7 +2,7 @@
 
 from django.db import migrations
 
-from core.utils import create_default_data_parameters
+from wis2box_adl.core.utils import create_default_data_parameters
 
 
 def add_default_data_parameters(apps, schema_editor):
