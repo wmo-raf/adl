@@ -1,0 +1,15 @@
+x-backend-variables: &backend-variables
+  WIS2BOX_ADL_ADCON_DATABASE_URL: sample
+
+services:
+  wis2box_adl:
+    environment:
+      <<: *backend-variables
+
+  wis2box_adl_celery_worker:
+    environment:
+      <<: *backend-variables
+
+    wis2box_adl_celery_beat:
+    environment:
+      <<: *backend-variables
