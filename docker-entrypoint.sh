@@ -30,6 +30,12 @@ run_setup_commands_if_configured(){
     echo "python /wis2box_adl/app/src/wis2box_adl/manage.py migrate"
     /wis2box_adl/app/src/wis2box_adl/manage.py migrate
   fi
+
+  # collect staticfiles
+  if [ "$COLLECT_STATICFILES_ON_STARTUP" = "true" ] ; then
+    echo "python /wis2box_adl/app/src/wis2box_adl/manage.py collectstatic --noinput"
+    /wis2box_adl/app/src/wis2box_adl/manage.py collectstatic --noinput
+  fi
 }
 
 start_celery_worker() {
