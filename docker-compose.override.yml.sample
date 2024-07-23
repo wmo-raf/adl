@@ -1,5 +1,5 @@
 x-backend-variables: &backend-variables
-  WIS2BOX_ADL_ADCON_DATABASE_URL: sample
+  ENV_KEY: value
 
 services:
   wis2box_adl:
