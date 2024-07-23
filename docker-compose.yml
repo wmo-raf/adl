@@ -28,6 +28,7 @@ x-backend-variables: &backend-variables
   WIS2BOX_STORAGE_PASSWORD: ${WIS2BOX_STORAGE_PASSWORD:-?}
   MIGRATE_ON_STARTUP: ${MIGRATE_ON_STARTUP:-true}
   COLLECT_STATICFILES_ON_STARTUP: ${COLLECT_STATICFILES_ON_STARTUP:-true}
+  MEDIA_ROOT: ${MEDIA_ROOT:-/wis2box_adl/media}
 
 services:
   wis2box_adl_db:
