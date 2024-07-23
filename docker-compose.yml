@@ -29,6 +29,7 @@ x-backend-variables: &backend-variables
   MIGRATE_ON_STARTUP: ${MIGRATE_ON_STARTUP:-true}
   COLLECT_STATICFILES_ON_STARTUP: ${COLLECT_STATICFILES_ON_STARTUP:-true}
   MEDIA_ROOT: ${MEDIA_ROOT:-/wis2box_adl/media}
+  STATIC_ROOT: ${MEDIA_ROOT:-/wis2box_adl/static}
 
 services:
   wis2box_adl_db:
