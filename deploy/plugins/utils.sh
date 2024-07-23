@@ -53,7 +53,7 @@ startup_plugin_setup(){
     if [[ -z "${WIS2BOX_ADL_DISABLE_PLUGIN_INSTALL_ON_STARTUP:-}" ]]; then
       # Make sure any plugins found in the data dir are installed in this container if not
       # already.
-      for plugin_dir in "WIS2BOX_ADL_PLUGIN_DIR"/*/; do
+      for plugin_dir in "$WIS2BOX_ADL_PLUGIN_DIR"/*/; do
         log "Found a plugin in $plugin_dir, ensuring it is installed..."
         if [[ -d "$plugin_dir" ]]; then
           /wis2box_adl/plugins/install_plugin.sh --runtime --folder "$plugin_dir"
