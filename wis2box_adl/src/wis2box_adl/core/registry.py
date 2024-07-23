@@ -1,3 +1,6 @@
+from django.core.exceptions import ImproperlyConfigured
+
+
 class Instance(object):
     """
     This abstract class represents a custom instance that can be added to the registry.
