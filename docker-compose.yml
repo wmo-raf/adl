@@ -30,7 +30,7 @@ x-backend-variables: &backend-variables
 services:
   wis2box_adl_db:
     container_name: wis2box_adl_db
-    image: postgis/postgis:15-master
+    image: timescale/timescaledb-ha:pg15
     restart: unless-stopped
     environment:
       - POSTGRES_USER=${WIS2BOX_ADL_DB_USER}
@@ -39,7 +39,7 @@ services:
     ports:
       - "5432"
     volumes:
-      - ${WIS2BOX_ADL_DB_VOLUME:-./docker/db_data/}:/var/lib/postgresql/data/
+      - ${WIS2BOX_ADL_DB_VOLUME:-./docker/db_data/}:/home/postgres/pgdata/data
 
   wis2box_adl_redis:
     image: redis:alpine
