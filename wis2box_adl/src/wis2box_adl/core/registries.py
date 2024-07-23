@@ -13,11 +13,11 @@ class Plugin(Instance):
     def get_data(self):
         raise NotImplementedError
 
-    def parse_data(self):
-        raise NotImplementedError
-
     def load_data(self):
         raise NotImplementedError
+
+    def process_data(self):
+        ingestion_record_ids = self.get_data()
 
 
 class PluginRegistry(Registry):
