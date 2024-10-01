@@ -1,0 +1,10 @@
+{
+  "name": "{{ cookiecutter.project_name }}",
+  "version": "0.0.1",
+  "description": "TODO",
+  "author": "TODO",
+  "author_url": "TODO",
+  "url": "TODO",
+  "license": "TODO",
+  "contact": "TODO"
+}

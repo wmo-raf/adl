@@ -4,6 +4,7 @@ from django.contrib.gis.db import models
 from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db.models.signals import post_save
 from django.dispatch import receiver
+from django.utils import timezone as dj_timezone
 from django.utils.translation import gettext_lazy as _
 from django_countries.fields import CountryField
 from django_countries.widgets import CountrySelectWidget
@@ -90,8 +91,8 @@ class Station(models.Model):
                                                    help_text=_("WIGOS issue number"))
     wsi_local = models.CharField(max_length=255, verbose_name=_("WSI Local"), help_text=_("WIGOS local identifier"))
     wmo_block_number = models.PositiveIntegerField(verbose_name=_("WMO Block Number"), help_text=_("WMO block number"))
-    wmo_station_number = models.PositiveIntegerField(verbose_name=_("WMO Station Number"),
-                                                     help_text=_("WMO station number"))
+    wmo_station_number = models.CharField(max_length=255, verbose_name=_("WMO Station Number"),
+                                          help_text=_("WMO station number"))
     station_type = models.PositiveIntegerField(verbose_name=_("Station Type"), choices=STATION_TYPE_CHOICES,
                                                help_text=_("Type of observing station, encoding using code table "
                                                            "0 02 001 (set to 0, automatic)"))
@@ -215,6 +216,32 @@ class DataParameter(models.Model):
 
 
 @register_snippet
+class PluginExecutionEvent(models.Model):
+    plugin = models.CharField(max_length=255)
+    started_at = models.DateTimeField(auto_now_add=True)
+    finished_at = models.DateTimeField(blank=True, null=True)
+    success = models.BooleanField(default=False)
+    error_message = models.TextField(blank=True, null=True)
+
+    class Meta:
+        verbose_name = _("Plugin Execution Event")
+        verbose_name_plural = _("Plugin Execution Events")
+        ordering = ['finished_at']
+
+    def __str__(self):
+        return f"{self.plugin} - {self.started_at}"
+
+    def get_data_ingestion_count(self):
+        return self.dataingestionrecord_set.count()
+
+    def finished_at_utc_timestamp(self):
+        if self.finished_at is None:
+            return None
+
+        return dj_timezone.localtime(self.finished_at, timezone.utc).timestamp()
+
+
+@register_snippet
 class DataIngestionRecord(TimescaleModel):
     # time field is inherited from TimescaleModel. We use it to store the observation time of the data
     created_at = models.DateTimeField(auto_now_add=True)
@@ -222,6 +249,7 @@ class DataIngestionRecord(TimescaleModel):
     station = models.ForeignKey(Station, on_delete=models.CASCADE, verbose_name=_("Station"))
     file = models.FileField(upload_to=get_station_directory_path, verbose_name=_("File"))
     uploaded_to_wis2box = models.BooleanField(default=False, verbose_name=_("Uploaded to WIS2BOX"))
+    event = models.ForeignKey(PluginExecutionEvent, on_delete=models.SET_NULL, blank=True, null=True)
 
     class Meta:
         verbose_name = _("Data Ingestion Record")
@@ -233,15 +261,14 @@ class DataIngestionRecord(TimescaleModel):
 
     @property
     def utc_time(self):
-        return self.time.replace(tzinfo=timezone.utc)
+        return dj_timezone.localtime(self.time, timezone.utc)
 
     def __str__(self):
         return f"{self.station.name} - {self.utc_time}"
 
     @property
     def wis2box_filename(self):
-        utc_time = self.time.replace(tzinfo=timezone.utc)
-        return f"WIGOS_{self.station.wigos_id}_{utc_time.strftime('%Y%m%dT%H%M%S')}.csv"
+        return f"WIGOS_{self.station.wigos_id}_{self.utc_time.strftime('%Y%m%dT%H%M%S')}.csv"
 
     def get_csv_content(self):
         return self.file.read().decode('utf-8')
@@ -254,6 +281,10 @@ class AdlSettings(ClusterableModel, BaseSiteSetting):
     panels = [
         FieldPanel("country", widget=CountrySelectWidget()),
     ]
+
+    class Meta:
+        verbose_name = _("WIS2Box ADL Settings")
+        verbose_name_plural = _("WIS2Box ADL Settings")
 
 
 @receiver(post_save, sender=Network)

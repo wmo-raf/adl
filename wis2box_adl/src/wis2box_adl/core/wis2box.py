@@ -19,7 +19,7 @@ minio_client = Minio(endpoint=WIS2BOX_STORAGE_ENDPOINT,
                      secure=False)
 
 
-def upload_to_wis2box(ingestion_record_id, overwrite=False):
+def upload_to_wis2box(ingestion_record_id, event_id, overwrite=False):
     from wis2box_adl.core.models import DataIngestionRecord
     ingestion_record = DataIngestionRecord.objects.get(id=ingestion_record_id)
 
@@ -39,6 +39,7 @@ def upload_to_wis2box(ingestion_record_id, overwrite=False):
 
         # mark the ingestion record as published to WIS2BOX
         ingestion_record.uploaded_to_wis2box = True
+        ingestion_record.event = event_id
         ingestion_record.save()
 
         logging.info(f"Data record {ingestion_record_id} uploaded to WIS2BOX successfully")

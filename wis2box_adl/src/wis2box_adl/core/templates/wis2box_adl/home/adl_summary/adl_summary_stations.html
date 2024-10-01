@@ -1,0 +1,12 @@
+{% load i18n wagtailadmin_tags %}
+
+<li>
+    {% icon name="map-pin" %}
+    <a href="">
+        {% blocktrans trimmed count counter=total_stations with total_stations|intcomma as total %}
+            <span>{{ total }}</span> Station <span class="w-sr-only">created</span>
+        {% plural %}
+            <span>{{ total }}</span> Stations <span class="w-sr-only">created </span>
+        {% endblocktrans %}
+    </a>
+</li>

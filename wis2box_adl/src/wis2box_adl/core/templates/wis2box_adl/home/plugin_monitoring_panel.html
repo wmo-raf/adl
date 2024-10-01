@@ -1,0 +1,109 @@
+{% load i18n wagtailadmin_tags %}
+<section class="w-summary" aria-labelledby="header-title" style="min-height: 500px">
+    <h2 class="w-sr-only">{% trans "Plugin Monitoring" %}</h2>
+    <div id="chart-container"></div>
+</section>
+
+<script>
+    const dataUrl = "{{ data_url }}";
+
+    let latestTimestamp
+
+    const getSeriesData = (data) => {
+        return data.reduce((acc, item) => {
+            const {plugin, timestamp, records_count} = item;
+            const seriesIndex = acc.findIndex(series => series.name === plugin);
+            if (seriesIndex === -1) {
+                acc.push({
+                    name: plugin,
+                    type: "column",
+                    data: [[timestamp, records_count]]
+                });
+            } else {
+                acc[seriesIndex].data.push([timestamp, records_count]);
+            }
+            return acc;
+        }, []);
+    }
+
+
+    const getData = (later_than = null, asSeries = false) => {
+        let baseUrl = dataUrl
+
+        if (later_than) {
+            baseUrl += `?later_than=${later_than}`
+        }
+
+        return fetch(baseUrl)
+            .then(response => response.json())
+            .then(data => {
+                if (data.length === 0) {
+                    return []
+                }
+
+                latestTimestamp = data[data.length - 1].timestamp
+
+                if (asSeries) {
+                    return getSeriesData(data)
+                }
+
+                return data
+            });
+    }
+
+    window.addEventListener('load', async function () {
+            const series = await getData(null, true);
+
+            Highcharts.stockChart('chart-container', {
+                chart: {
+                    events: {
+                        load: function () {
+                            const series = this.series
+                            const latestDate = new Date(latestTimestamp)
+                            latestDate.setSeconds(latestDate.getSeconds() + 60);
+
+                            setInterval(async function () {
+                                const data = await getData(latestDate.toISOString())
+                                if (data && !!data.length) {
+                                    data.forEach((item) => {
+                                        const seriesIndex = series.findIndex(series => series.name === item.plugin);
+                                        if (seriesIndex === -1) {
+                                            series[seriesIndex].addPoint([item.timestamp, item.records_count], true, true);
+                                        }
+                                    });
+                                }
+                            }, 60000)
+                        }
+                    }
+                },
+                title: {
+                    text: "Plugins data monitoring"
+                },
+                xAxis: {
+                    title: {
+                        text: 'Date/time',
+                    }
+                },
+                yAxis: {
+                    title: {
+                        text: 'Records count',
+                    }
+                },
+                time: {
+                    useUTC: true
+                },
+                accessibility: {
+                    enabled: false
+                },
+                exporting: {
+                    enabled: false
+                },
+                series: series,
+            });
+
+
+        }
+    )
+    ;
+
+</script>

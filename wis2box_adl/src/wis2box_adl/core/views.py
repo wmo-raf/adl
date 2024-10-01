@@ -3,15 +3,16 @@ import json
 
 from django.contrib.gis.geos import Point
 from django.core.cache import cache
-from django.http import HttpResponse
+from django.http import HttpResponse, JsonResponse
 from django.shortcuts import render, redirect
 from django.urls import reverse_lazy, reverse
 from django.utils.translation import gettext as _
 from wagtail.admin import messages
 
-from .forms import StationLoaderForm, StationsCSVTemplateDownloadForm, OSCARStationImportForm
 from .constants import STATION_ATTRIBUTES
-from .models import Station, AdlSettings
+from .forms import StationLoaderForm, StationsCSVTemplateDownloadForm, OSCARStationImportForm
+from .models import Station, AdlSettings, PluginExecutionEvent
+from .serializers import PluginExecutionEventSerializer
 from .utils import get_stations_for_country, get_wigos_id_parts
 
 
@@ -294,3 +295,16 @@ def import_oscar_station(request, wigos_id):
         })
 
     return render(request, template_name=template_name, context=context)
+
+
+def plugin_events_data(request):
+    events = PluginExecutionEvent.objects.filter(finished_at__isnull=False)
+
+    later_than = request.GET.get("later_than")
+
+    if later_than:
+        events = events.filter(finished_at__gt=later_than)
+
+    serializer = PluginExecutionEventSerializer(events, many=True)
+
+    return JsonResponse(serializer.data, safe=False)
