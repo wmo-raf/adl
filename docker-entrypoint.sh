@@ -90,6 +90,10 @@ if [[ -z "${1:-}" ]]; then
 fi
 
 source /wis2box_adl/venv/bin/activate
+
+# wait for required services to be available, using docker-compose-wait
+/wait
+
 source /wis2box_adl/plugins/utils.sh
 
 case "$1" in
