@@ -5,11 +5,16 @@ services:
   wis2box_adl:
     environment:
       <<: *backend-variables
-
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
   wis2box_adl_celery_worker:
     environment:
       <<: *backend-variables
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
 
   wis2box_adl_celery_beat:
     environment:
       <<: *backend-variables
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
