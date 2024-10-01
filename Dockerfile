@@ -68,6 +68,8 @@ RUN /wis2box_adl/venv/bin/pip install /wis2box_adl/app/
 
 COPY --chown=$UID:$GID ./docker-entrypoint.sh /wis2box_adl/docker-entrypoint.sh
 
+ENV DJANGO_SETTINGS_MODULE='wis2box_adl.config.settings.dev'
+
 ENTRYPOINT ["/wis2box_adl/docker-entrypoint.sh"]
 
 CMD ["gunicorn-wsgi"]
