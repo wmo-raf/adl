@@ -79,6 +79,7 @@ services:
       - ${WIS2BOX_ADL_STATIC_VOLUME:-./docker/static}:/wis2box_adl/static
       - ${WIS2BOX_ADL_MEDIA_VOLUME:-./docker/static}:/wis2box_adl/media
       - ${WIS2BOX_ADL_BACKUP_VOLUME:-./docker/backup}:/wis2box_adl/backup
+      - ./docker/container_markers:/wis2box_adl/container_markers
 
   wis2box_adl_celery_worker:
     container_name: wis2box_adl_celery_worker
