@@ -2,6 +2,14 @@
 # Bash strict mode: http://redsymbol.net/articles/unofficial-bash-strict-mode/
 set -euo pipefail
 
+MIGRATE_ON_STARTUP=${MIGRATE_ON_STARTUP:-true}
+COLLECT_STATICFILES_ON_STARTUP=${COLLECT_STATICFILES_ON_STARTUP:-true}
+
+WIS2BOX_ADL_GUNICORN_NUM_OF_WORKERS=${WIS2BOX_ADL_GUNICORN_NUM_OF_WORKERS:-}
+WIS2BOX_ADL_CELERY_BEAT_DEBUG_LEVEL=${WIS2BOX_ADL_CELERY_BEAT_DEBUG_LEVEL:-INFO}
+
+WIS2BOX_ADL_LOG_LEVEL=${WIS2BOX_ADL_LOG_LEVEL:-INFO}
+
 show_help() {
     echo """
 The available WIS2Box ADL related commands and services are shown below:
