@@ -94,6 +94,7 @@ services:
     command: celery-worker
     environment:
       <<: *backend-variables
+      WAIT_HOSTS: wis2box_adl_db:5432,wis2box_adl_redis:6379,wis2box_adl:8000
     depends_on:
       - wis2box_adl_db
       - wis2box_adl_redis
@@ -115,6 +116,7 @@ services:
     command: celery-beat
     environment:
       <<: *backend-variables
+      WAIT_HOSTS: wis2box_adl_db:5432,wis2box_adl_redis:6379,wis2box_adl:8000
     depends_on:
       - wis2box_adl_db
       - wis2box_adl_redis
