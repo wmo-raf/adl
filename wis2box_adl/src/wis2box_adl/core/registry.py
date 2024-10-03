@@ -1,5 +1,7 @@
 from django.core.exceptions import ImproperlyConfigured
 
+from .exceptions import InstanceTypeAlreadyRegistered, InstanceTypeDoesNotExist
+
 
 class Instance(object):
     """
@@ -27,6 +29,13 @@ class Instance(object):
 
 class Registry(Instance):
     name = None
+    """The unique name that is used when raising exceptions."""
+
+    does_not_exist_exception_class = InstanceTypeDoesNotExist
+    """The exception that is raised when an instance doesn't exist."""
+
+    already_registered_exception_class = InstanceTypeAlreadyRegistered
+    """The exception that is raised when an instance is already registered."""
 
     def __init__(self):
         if not getattr(self, "name", None):
