@@ -91,8 +91,8 @@ class Station(models.Model):
                                                    help_text=_("WIGOS issue number"))
     wsi_local = models.CharField(max_length=255, verbose_name=_("WSI Local"), help_text=_("WIGOS local identifier"))
     wmo_block_number = models.PositiveIntegerField(verbose_name=_("WMO Block Number"), help_text=_("WMO block number"))
-    wmo_station_number = models.CharField(max_length=255, verbose_name=_("WMO Station Number"),
-                                          help_text=_("WMO station number"))
+    wmo_station_number = models.PositiveIntegerField(verbose_name=_("WMO Station Number"),
+                                                     help_text=_("WMO station number"))
     station_type = models.PositiveIntegerField(verbose_name=_("Station Type"), choices=STATION_TYPE_CHOICES,
                                                help_text=_("Type of observing station, encoding using code table "
                                                            "0 02 001 (set to 0, automatic)"))
