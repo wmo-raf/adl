@@ -1,0 +1,4 @@
+include README.md
+recursive-include src *.py
+recursive-include src *.html
+recursive-include src/templates *
