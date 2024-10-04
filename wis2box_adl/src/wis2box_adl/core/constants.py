@@ -81,7 +81,7 @@ DATA_PARAMETERS_DICT = {
     },
     "wind_speed": {
         "name": _("Wind Speed"),
-        "unit": "ms-1",
+        "unit": "mps",
         "description": _("Wind speed (at anemometer height) averaged from the cartesian components over the indicated "
                          "time period, 1 decimal place"),
         "data_type": "float",
@@ -95,7 +95,7 @@ DATA_PARAMETERS_DICT = {
     },
     "maximum_wind_gust_speed_10_minutes": {
         "name": _("Maximum Wind Gust Speed (10 minutes)"),
-        "unit": "ms-1",
+        "unit": "mps",
         "description": _("Highest 3 second average over the preceeding 10 minutes, 1 decimal place"),
         "data_type": "float",
         "decimal_places": 1,
@@ -108,7 +108,7 @@ DATA_PARAMETERS_DICT = {
     },
     "maximum_wind_gust_speed_1_hour": {
         "name": _("Maximum Wind Gust Speed (1 hour)"),
-        "unit": "ms-1",
+        "unit": "mps",
         "description": _("Highest 3 second average over the preceeding hour, 1 decimal place"),
         "data_type": "float",
         "decimal_places": 1,
@@ -121,7 +121,7 @@ DATA_PARAMETERS_DICT = {
     },
     "maximum_wind_gust_speed_3_hours": {
         "name": _("Maximum Wind Gust Speed (3 hours)"),
-        "unit": "ms-1",
+        "unit": "mps",
         "description": _("Highest 3 second average over the preceeding 3 hours, 1 decimal place"),
         "data_type": "float",
         "decimal_places": 1,

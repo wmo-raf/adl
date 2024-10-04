@@ -18,6 +18,7 @@ from wagtail.snippets.models import register_snippet
 
 from .utils import get_data_parameters_as_choices, get_station_directory_path
 from .widgets import PluginSelectWidget
+from .constants import DATA_PARAMETERS_DICT
 
 
 class Network(models.Model):
@@ -211,8 +212,12 @@ class DataParameter(models.Model):
     unit = models.CharField(max_length=255, verbose_name=_("Unit"), help_text=_("Unit of the variable"))
     description = models.TextField(verbose_name=_("Description"), help_text=_("Description of the variable"))
 
+    @property
+    def units_pint(self):
+        return DATA_PARAMETERS_DICT.get(self.parameter, {}).get("unit")
+
     def __str__(self):
-        return self.name
+        return f"{self.name} - {self.unit}"
 
 
 @register_snippet
