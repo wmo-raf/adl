@@ -174,3 +174,6 @@ docker-compose.override.yml
 
 
 # End of https://www.toptal.com/developers/gitignore/api/django
+
+wis2box_adl/src/wis2box_adl/static
+wis2box_adl/src/wis2box_adl/media
