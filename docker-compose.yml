@@ -77,7 +77,7 @@ services:
       - "8000"
     volumes:
       - ${WIS2BOX_ADL_STATIC_VOLUME:-./docker/static}:/wis2box_adl/app/src/wis2box_adl/static
-      - ${WIS2BOX_ADL_MEDIA_VOLUME:-./docker/static}:/wis2box_adl/app/src/wis2box_adl/media
+      - ${WIS2BOX_ADL_MEDIA_VOLUME:-./docker/media}:/wis2box_adl/app/src/wis2box_adl/media
       - ${WIS2BOX_ADL_BACKUP_VOLUME:-./docker/backup}:/wis2box_adl/app/src/wis2box_adl/backup
 
   wis2box_adl_celery_worker:
@@ -99,7 +99,7 @@ services:
       - wis2box_adl_redis
     volumes:
       - ${WIS2BOX_ADL_STATIC_VOLUME:-./docker/static}:/wis2box_adl/app/src/wis2box_adl/static
-      - ${WIS2BOX_ADL_MEDIA_VOLUME:-./docker/static}:/wis2box_adl/app/src/wis2box_adl/media
+      - ${WIS2BOX_ADL_MEDIA_VOLUME:-./docker/media}:/wis2box_adl/app/src/wis2box_adl/media
       - ${WIS2BOX_ADL_BACKUP_VOLUME:-./docker/backup}:/wis2box_adl/app/src/wis2box_adl/backup
 
   wis2box_adl_celery_beat:
@@ -121,7 +121,7 @@ services:
       - wis2box_adl_redis
     volumes:
       - ${WIS2BOX_ADL_STATIC_VOLUME:-./docker/static}:/wis2box_adl/app/src/wis2box_adl/static
-      - ${WIS2BOX_ADL_MEDIA_VOLUME:-./docker/static}:/wis2box_adl/app/src/wis2box_adl/media
+      - ${WIS2BOX_ADL_MEDIA_VOLUME:-./docker/media}:/wis2box_adl/app/src/wis2box_adl/media
       - ${WIS2BOX_ADL_BACKUP_VOLUME:-./docker/backup}:/wis2box_adl/app/src/wis2box_adl/backup
 
   wis2box_adl_web_proxy:
