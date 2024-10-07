@@ -59,3 +59,27 @@ def setup_registry(reg):
 # Make our modifications using pint's application registry--which allows us to better
 # interoperate with other libraries using Pint.
 units = setup_registry(pint.get_application_registry())
+
+TEMPERATURE_UNITS = [
+    'degree_Celsius',
+    'celsius',
+    'degC',
+    'degreeC',
+    '°C',
+    'degree_Fahrenheit',
+    'fahrenheit',
+    'degF',
+    'degreeF',
+    '°F',
+    'degree_Kelvin',
+    'kelvin',
+    'degK',
+    'degreeK',
+    'K',
+    '°K',
+    'degree_Rankine',
+    'rankine',
+    'degR',
+    'degreeR',
+    '°R'
+]

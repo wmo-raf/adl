@@ -23,6 +23,7 @@ from .utils import (
 )
 from .widgets import PluginSelectWidget
 from .constants import DATA_PARAMETERS_DICT
+from .units import TEMPERATURE_UNITS, units
 
 
 class Network(models.Model):
@@ -219,6 +220,17 @@ class DataParameter(models.Model):
     @property
     def units_pint(self):
         return DATA_PARAMETERS_DICT.get(self.parameter, {}).get("unit")
+
+    def convert_value_units(self, value, from_units):
+
+        if from_units in TEMPERATURE_UNITS:
+            quantity = units.Quantity(value, from_units)
+        else:
+            quantity = value * units(from_units)
+
+        value_converted = quantity.to(self.units_pint).magnitude
+
+        return value_converted
 
     def __str__(self):
         return f"{self.name} - {self.unit}"
