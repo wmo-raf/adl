@@ -26,14 +26,14 @@ DATA_PARAMETERS_DICT = {
     },
     "air_temperature": {
         "name": _("Air Temperature"),
-        "unit": "Kelvin",
+        "unit": "degK",
         "description": _("Instantaneous air temperature to 2 decimal places"),
         "data_type": "float",
         "decimal_places": 2,
     },
     "dewpoint_temperature": {
         "name": "Dew Point Temperature",
-        "unit": "Kelvin",
+        "unit": "degK",
         "description": _("Instantaneous dew point temperature to 2 decimal places"),
         "data_type": "float",
         "decimal_places": 2,
