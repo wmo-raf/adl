@@ -64,7 +64,7 @@ ENV PYTHONUNBUFFERED 1
 
 COPY --chown=$UID:$GID ./deploy/plugins/*.sh /wis2box_adl/plugins/
 
-RUN /wis2box_adl/venv/bin/pip install /wis2box_adl/app/
+RUN /wis2box_adl/venv/bin/pip install --no-cache-dir -e /wis2box_adl/app/
 
 COPY --chown=$UID:$GID ./docker-entrypoint.sh /wis2box_adl/docker-entrypoint.sh
 
