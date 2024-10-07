@@ -2,6 +2,7 @@ import logging
 import re
 
 from django.contrib.gis.geos import Polygon, Point
+from django.core.exceptions import ValidationError
 from pyoscar import OSCARClient
 
 from .constants import DATA_PARAMETERS_DICT
@@ -133,3 +134,18 @@ def get_station_directory_path(ingestion_record, filename):
     time = ingestion_record.utc_time.strftime("%Y/%m/%d")
 
     return f"station_data/{wigos_id}/{time}/{filename}"
+
+
+def extract_digits(s):
+    # Regular expression to match the first continuous digits
+    match = re.match(r"(\d+)", s)
+    if match:
+        return match.group(0)
+    return None
+
+
+def validate_as_integer(value):
+    try:
+        int(value)
+    except ValueError:
+        raise ValidationError("The value must be an integer")

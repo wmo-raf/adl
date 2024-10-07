@@ -13,7 +13,11 @@ from .constants import STATION_ATTRIBUTES
 from .forms import StationLoaderForm, StationsCSVTemplateDownloadForm, OSCARStationImportForm
 from .models import Station, AdlSettings, PluginExecutionEvent
 from .serializers import PluginExecutionEventSerializer
-from .utils import get_stations_for_country, get_wigos_id_parts
+from .utils import (
+    get_stations_for_country,
+    get_wigos_id_parts,
+    extract_digits
+)
 
 
 def load_stations_csv(request):
@@ -241,10 +245,15 @@ def import_oscar_station(request, wigos_id):
             network = form.cleaned_data["network"]
             station_type = form.cleaned_data["station_type"]
             station_data = form.cleaned_data["oscar_data"]
+            station_number = form.cleaned_data["station_number"]
             station_data = json.loads(station_data)
 
             wigos_id = station_data.get("wigos_id")
             wigos_id_parts = get_wigos_id_parts(wigos_id)
+
+            print(station_number)
+
+            wigos_id_parts["wmo_station_number"] = station_number
 
             longitude = station_data.get("longitude")
             latitude = station_data.get("latitude")
@@ -282,13 +291,27 @@ def import_oscar_station(request, wigos_id):
 
         station = oscar_stations.get(wigos_id)
 
+        wigos_id_parts = get_wigos_id_parts(wigos_id)
+        station_number = wigos_id_parts.get("wmo_station_number")
+
+        try:
+            # check if station number is a number
+            int(station_number)
+        except ValueError:
+            digits = extract_digits(station_number)
+            if digits:
+                station_number = digits
+            else:
+                station_number = None
+
         if not station:
             context.update({
                 "oscar_error": _("Station not found in OSCAR database.")
             })
             return render(request, template_name=template_name, context=context)
 
-        form = OSCARStationImportForm(initial={"oscar_data": json.dumps(station), "station_id": wigos_id})
+        form = OSCARStationImportForm(
+            initial={"oscar_data": json.dumps(station), "station_id": wigos_id, "station_number": station_number})
         context.update({
             "form": form,
             "station": station

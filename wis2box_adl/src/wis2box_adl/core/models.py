@@ -16,7 +16,11 @@ from wagtail.contrib.settings.models import BaseSiteSetting
 from wagtail.contrib.settings.registry import register_setting
 from wagtail.snippets.models import register_snippet
 
-from .utils import get_data_parameters_as_choices, get_station_directory_path
+from .utils import (
+    get_data_parameters_as_choices,
+    get_station_directory_path,
+    validate_as_integer
+)
 from .widgets import PluginSelectWidget
 from .constants import DATA_PARAMETERS_DICT
 
@@ -92,8 +96,8 @@ class Station(models.Model):
                                                    help_text=_("WIGOS issue number"))
     wsi_local = models.CharField(max_length=255, verbose_name=_("WSI Local"), help_text=_("WIGOS local identifier"))
     wmo_block_number = models.PositiveIntegerField(verbose_name=_("WMO Block Number"), help_text=_("WMO block number"))
-    wmo_station_number = models.PositiveIntegerField(verbose_name=_("WMO Station Number"),
-                                                     help_text=_("WMO station number"))
+    wmo_station_number = models.CharField(verbose_name=_("WMO Station Number"),
+                                          help_text=_("WMO station number"), validators=[validate_as_integer])
     station_type = models.PositiveIntegerField(verbose_name=_("Station Type"), choices=STATION_TYPE_CHOICES,
                                                help_text=_("Type of observing station, encoding using code table "
                                                            "0 02 001 (set to 0, automatic)"))
