@@ -16,14 +16,14 @@ from wagtail.contrib.settings.models import BaseSiteSetting
 from wagtail.contrib.settings.registry import register_setting
 from wagtail.snippets.models import register_snippet
 
+from .constants import DATA_PARAMETERS_DICT, PRECIPITAION_PARAMETERS
+from .units import TEMPERATURE_UNITS, units
 from .utils import (
     get_data_parameters_as_choices,
     get_station_directory_path,
     validate_as_integer
 )
 from .widgets import PluginSelectWidget
-from .constants import DATA_PARAMETERS_DICT
-from .units import TEMPERATURE_UNITS, units
 
 
 class Network(models.Model):
@@ -222,15 +222,17 @@ class DataParameter(models.Model):
         return DATA_PARAMETERS_DICT.get(self.parameter, {}).get("unit")
 
     def convert_value_units(self, value, from_units):
-
         if from_units in TEMPERATURE_UNITS:
             quantity = units.Quantity(value, from_units)
         else:
             quantity = value * units(from_units)
 
-        value_converted = quantity.to(self.units_pint).magnitude
+        if self.parameter in PRECIPITAION_PARAMETERS:
+            quantity_converted = quantity.to(self.units_pint, context='precipitation')
+        else:
+            quantity_converted = quantity.to(self.units_pint)
 
-        return value_converted
+        return quantity_converted.magnitude
 
     def __str__(self):
         return f"{self.name} - {self.unit}"

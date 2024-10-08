@@ -53,6 +53,32 @@ def setup_registry(reg):
     # Alias geopotential meters (gpm) to just meters
     reg.define('@alias meter = gpm')
 
+    # custom contexts
+
+    # Define a context for precipitation
+    precipitation = pint.Context('precipitation')
+
+    # Precipitation amount
+    # 1 mm of rainfall = 1 kg/m² for water
+    # Forward transformation (mm -> kg/m²)
+    precipitation.add_transformation('[length]', '[mass] / [length] ** 2',
+                                     lambda reg, x: x * reg('kg/m^2') / reg('mm'))
+
+    # Reverse transformation (kg/m² -> mm)
+    precipitation.add_transformation('[mass] / [length] ** 2', '[length]',
+                                     lambda reg, x: x * reg('mm') / reg('kg/m^2'))
+
+    # Precipitation Rate
+    # Forward transformation (mm/h -> kg/m²/h)
+    precipitation.add_transformation('[length] / [time]', '[mass] / [length] ** 2 / [time]',
+                                     lambda reg, x: x * reg('kg/m^2/h') / reg('mm/h'))
+
+    # Reverse transformation (kg/m²/h -> mm/h)
+    precipitation.add_transformation('[mass] / [length] ** 2 / [time]', '[length] / [time]',
+                                     lambda reg, x: x * reg('mm/h') / reg('kg/m^2/h'))
+
+    reg.add_context(precipitation)
+
     return reg
 
 

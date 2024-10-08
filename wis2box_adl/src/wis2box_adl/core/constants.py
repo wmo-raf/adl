@@ -339,3 +339,12 @@ WIS2BOX_CSV_HEADER = [
     "total_precipitation_12_hours",
     "total_precipitation_24_hours",
 ]
+
+PRECIPITAION_PARAMETERS = [
+    "precipitation_intensity",
+    "total_precipitation_1_hour",
+    "total_precipitation_3_hours",
+    "total_precipitation_6_hours",
+    "total_precipitation_12_hours",
+    "total_precipitation_24_hours",
+]
