@@ -15,6 +15,10 @@ dynamic = ["version", "dependencies"]
 classifiers = []
 
 
+[project.scripts]
+manage = "wis2box_adl.manage:main"
+
+
 [tool.setuptools]
 include-package-data = true
 # https://setuptools.pypa.io/en/latest/userguide/pyproject_config.html
