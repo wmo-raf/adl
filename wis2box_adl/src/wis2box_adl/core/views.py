@@ -245,15 +245,18 @@ def import_oscar_station(request, wigos_id):
             network = form.cleaned_data["network"]
             station_type = form.cleaned_data["station_type"]
             station_data = form.cleaned_data["oscar_data"]
-            station_number = form.cleaned_data["station_number"]
+            wmo_block_number = form.cleaned_data.get("wmo_block_number")
+            wmo_station_number = form.cleaned_data.get("wmo_station_number")
             station_data = json.loads(station_data)
 
             wigos_id = station_data.get("wigos_id")
             wigos_id_parts = get_wigos_id_parts(wigos_id)
 
-            print(station_number)
+            if wmo_block_number:
+                wigos_id_parts["wmo_block_number"] = wmo_block_number
 
-            wigos_id_parts["wmo_station_number"] = station_number
+            if wmo_station_number:
+                wigos_id_parts["wmo_station_number"] = wmo_station_number
 
             longitude = station_data.get("longitude")
             latitude = station_data.get("latitude")
@@ -291,27 +294,54 @@ def import_oscar_station(request, wigos_id):
 
         station = oscar_stations.get(wigos_id)
 
-        wigos_id_parts = get_wigos_id_parts(wigos_id)
-        station_number = wigos_id_parts.get("wmo_station_number")
-
-        try:
-            # check if station number is a number
-            int(station_number)
-        except ValueError:
-            digits = extract_digits(station_number)
-            if digits:
-                station_number = digits
-            else:
-                station_number = None
-
         if not station:
             context.update({
                 "oscar_error": _("Station not found in OSCAR database.")
             })
             return render(request, template_name=template_name, context=context)
 
-        form = OSCARStationImportForm(
-            initial={"oscar_data": json.dumps(station), "station_id": wigos_id, "station_number": station_number})
+        initial_data = {
+            "oscar_data": json.dumps(station),
+            "station_id": wigos_id,
+        }
+
+        wigos_id_parts = get_wigos_id_parts(wigos_id)
+        wsi_issuer = wigos_id_parts.get("wsi_issuer")
+
+        # try to extract wmo_block_number and wmo_station_number from wsi_local for traditional WMO wsi format
+        if str(wsi_issuer) == "20000":
+            wsi_local = wigos_id_parts.get("wsi_local")
+            wmo_block_number = wsi_local[:2]
+            wmo_station_number = wsi_local[2:]
+
+            try:
+                # check if station number is a number
+                int(wmo_block_number)
+            except ValueError:
+                digits = extract_digits(wmo_block_number)
+                if digits:
+                    wmo_block_number = digits
+                else:
+                    wmo_block_number = None
+
+            try:
+                # check if station number is a number
+                int(wmo_station_number)
+            except ValueError:
+                digits = extract_digits(wmo_station_number)
+                if digits:
+                    wmo_station_number = digits
+                else:
+                    wmo_station_number = None
+
+            if wmo_block_number:
+                initial_data["wmo_block_number"] = wmo_block_number
+
+            if wmo_station_number:
+                initial_data["wmo_station_number"] = wmo_station_number
+
+        form = OSCARStationImportForm(initial=initial_data)
+
         context.update({
             "form": form,
             "station": station

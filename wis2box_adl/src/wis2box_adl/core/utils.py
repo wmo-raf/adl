@@ -64,16 +64,12 @@ def get_wigos_id_parts(wigos_id):
     wsi_issuer = parts[1]
     wsi_issue_number = parts[2]
     wsi_local = parts[3]
-    wmo_block_number = wsi_local[:2]
-    wmo_station_number = wsi_local[2:]
 
     return {
         "wsi_series": wsi_series,
         "wsi_issuer": wsi_issuer,
         "wsi_issue_number": wsi_issue_number,
         "wsi_local": wsi_local,
-        "wmo_block_number": wmo_block_number,
-        "wmo_station_number": wmo_station_number
     }
 
 

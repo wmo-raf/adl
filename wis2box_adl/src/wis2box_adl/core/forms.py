@@ -3,7 +3,11 @@ from django.contrib.gis.geos import Point
 from django.utils.translation import gettext_lazy as _
 
 from .models import Network
-from .utils import (is_valid_wigos_id, get_wigos_id_parts, validate_as_integer)
+from .utils import (
+    is_valid_wigos_id,
+    get_wigos_id_parts,
+    validate_as_integer
+)
 
 
 class StationLoaderForm(forms.Form):
@@ -80,7 +84,9 @@ class OSCARStationImportForm(forms.Form):
     )
 
     station_id = forms.CharField(label=_("Station ID"), required=True)
-    station_number = forms.CharField(label=_("Station Number"), required=True, validators=[validate_as_integer])
+    wmo_block_number = forms.CharField(label=_("WMO Block Number"), required=False)
+    wmo_station_number = forms.CharField(label=_("WMO Station Number"), required=False,
+                                         validators=[validate_as_integer])
     network = forms.ModelChoiceField(queryset=Network.objects.all(), label=_("Assign Network"), required=True)
     station_type = forms.ChoiceField(choices=STATION_TYPE_CHOICES, label=_("Assign Station Type"), required=True,
                                      initial=0)
