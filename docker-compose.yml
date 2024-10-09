@@ -131,4 +131,4 @@ services:
       - ${WIS2BOX_ADL_MEDIA_VOLUME:-./docker/media}:/wagtail_media
       - ./deploy/nginx/nginx.conf:/etc/nginx/nginx.conf
     ports:
-      - ${WIS2BOX_ADL_WEB_PROXY_PORT}:80
+      - ${WIS2BOX_ADL_WEB_PROXY_PORT:-80}:80
