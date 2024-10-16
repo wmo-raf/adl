@@ -48,7 +48,7 @@ def is_valid_wigos_id(wigos_id):
     bool: True if the WIGOS ID is valid, False otherwise.
     """
     # Define the regular expression pattern for a valid WIGOS ID
-    pattern = r"^\d+-\d+-\d+-\d+$"
+    pattern = r"^\d+-\d+-\d+-\w+$"
 
     # Use the re.match function to check if the input string matches the pattern
     if re.match(pattern, wigos_id):
