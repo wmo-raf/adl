@@ -230,7 +230,8 @@ class DataParameter(models.Model):
             quantity = value * units(from_units)
 
         if self.parameter in PRECIPITAION_PARAMETERS:
-            quantity_converted = quantity.to(self.units_pint, context='precipitation')
+            with units.context("precipitation"):
+                quantity_converted = quantity.to(self.units_pint)
         else:
             quantity_converted = quantity.to(self.units_pint)
 
