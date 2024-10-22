@@ -1,6 +1,7 @@
-from datetime import timezone
+from datetime import timezone, timedelta
 
 from django.contrib.gis.db import models
+from django.core.exceptions import ValidationError
 from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db.models.signals import post_save
 from django.dispatch import receiver
@@ -12,6 +13,7 @@ from modelcluster.models import ClusterableModel
 from timescale.db.models.models import TimescaleModel
 from timezone_field import TimeZoneField
 from wagtail.admin.panels import FieldPanel, TabbedInterface, ObjectList
+from wagtail.admin.panels import MultiFieldPanel
 from wagtail.contrib.settings.models import BaseSiteSetting
 from wagtail.contrib.settings.registry import register_setting
 from wagtail.snippets.models import register_snippet
@@ -31,20 +33,39 @@ class Network(models.Model):
         ("automatic", _("Automatic Weather Stations")),
         ("manual", _("Manual Weather Stations")),
     )
+
+    WIS2BOX_HOURLY_AGGREGATE_STRATEGIES = (
+        ("latest", _("Latest in the Hour")),
+        # ("average", _("Averages for the Hour")), # not implemented yet
+    )
+
     name = models.CharField(max_length=255, verbose_name=_("Name"), help_text=_("Name of the network"))
     type = models.CharField(max_length=255, choices=WEATHER_STATION_TYPES, verbose_name=_("Weather Stations Type"),
                             help_text=_("Weather station type"))
     plugin = models.CharField(max_length=255, unique=True, verbose_name=_("Plugin"),
                               help_text=_("Plugin to use for this network"))
-    plugin_processing_enabled = models.BooleanField(default=True, verbose_name=_("Plugin Auto Processing Enabled"))
+    plugin_processing_enabled = models.BooleanField(default=True, verbose_name=_("Plugin Auto Processing Enabled"),
+                                                    help_text=_("If unchecked, the plugin will not run automatically"))
     plugin_processing_interval = models.PositiveIntegerField(default=15,
                                                              verbose_name=_("Plugin Auto Processing Interval "
                                                                             "in Minutes"),
-                                                             help_text=_("How often the plugin should run in minutes"),
+                                                             help_text=_("How often the plugin should run, in minutes"),
                                                              validators=[
                                                                  MaxValueValidator(30),
                                                                  MinValueValidator(1)
                                                              ])
+
+    wis2box_hourly_aggregate = models.BooleanField(default=True, verbose_name=_("Enable WIS2BOX Hourly Aggregation"),
+                                                   help_text=_("Check this if you want only one record per "
+                                                               "hour to be uploaded to wis2box"))
+    wis2box_hourly_aggregate_strategy = models.CharField(max_length=255, blank=True, null=True,
+                                                         choices=WIS2BOX_HOURLY_AGGREGATE_STRATEGIES,
+                                                         default="latest",
+                                                         verbose_name=_("WIS2BOX Hourly Aggregate Strategy"),
+                                                         help_text=_("Method to use for aggregating hourly data "
+                                                                     "for ingestion to WIS2BOX")
+                                                         )
+
     created_at = models.DateTimeField(auto_now_add=True)
 
     panels = [
@@ -53,6 +74,11 @@ class Network(models.Model):
         FieldPanel('plugin', widget=PluginSelectWidget),
         FieldPanel("plugin_processing_enabled"),
         FieldPanel("plugin_processing_interval"),
+        MultiFieldPanel([
+            FieldPanel("wis2box_hourly_aggregate"),
+            FieldPanel("wis2box_hourly_aggregate_strategy"),
+        ], heading=_("WIS2BOX Data Ingestion Aggregation")),
+
     ]
 
     class Meta:
@@ -61,6 +87,19 @@ class Network(models.Model):
 
     def __str__(self):
         return self.name
+
+    def clean(self):
+        """
+        This method checks the following:
+
+        1. If WIS2BOX hourly aggregation is enabled, the aggregation strategy is required.
+
+        """
+
+        if self.wis2box_hourly_aggregate and not self.wis2box_hourly_aggregate_strategy:
+            raise ValidationError({
+                "wis2box_hourly_aggregate_strategy": _("WIS2BOX Hourly Aggregate Strategy is required")
+            })
 
 
 class Station(models.Model):
@@ -276,6 +315,8 @@ class DataIngestionRecord(TimescaleModel):
     file = models.FileField(upload_to=get_station_directory_path, verbose_name=_("File"))
     uploaded_to_wis2box = models.BooleanField(default=False, verbose_name=_("Uploaded to WIS2BOX"))
     event = models.ForeignKey(PluginExecutionEvent, on_delete=models.SET_NULL, blank=True, null=True)
+    is_hourly_aggregate = models.BooleanField(default=False, verbose_name=_("Is Hourly Aggregate"))
+    hourly_aggregate_file = models.FileField(upload_to=get_station_directory_path, blank=True, null=True)
 
     class Meta:
         verbose_name = _("Data Ingestion Record")
@@ -293,7 +334,14 @@ class DataIngestionRecord(TimescaleModel):
         return f"{self.station.name} - {self.utc_time}"
 
     @property
-    def wis2box_filename(self):
+    def next_top_of_hour(self):
+        return self.utc_time.replace(minute=0, second=0, microsecond=0, tzinfo=timezone.utc) + timedelta(hours=1)
+
+    @property
+    def filename(self):
+        if self.is_hourly_aggregate:
+            return f"WIGOS_{self.station.wigos_id}_{self.next_top_of_hour.strftime('%Y%m%dT%H%M%S')}.csv"
+
         return f"WIGOS_{self.station.wigos_id}_{self.utc_time.strftime('%Y%m%dT%H%M%S')}.csv"
 
     def get_csv_content(self):

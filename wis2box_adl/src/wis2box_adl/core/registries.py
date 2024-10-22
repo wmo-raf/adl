@@ -4,6 +4,7 @@ from django.core.exceptions import ImproperlyConfigured
 from django.utils import timezone
 
 from .registry import Registry, Instance
+from .utils import create_ingestion_file_with_hourly_time
 from .wis2box import upload_to_wis2box
 
 logger = logging.getLogger(__name__)
@@ -19,7 +20,7 @@ class Plugin(Instance):
     def get_data(self):
         raise NotImplementedError
 
-    def run_process(self):
+    def run_process(self, network):
         from wis2box_adl.core.models import PluginExecutionEvent
 
         event = PluginExecutionEvent.objects.create(plugin=self.type)
@@ -27,11 +28,8 @@ class Plugin(Instance):
         try:
             ingestion_record_ids = self.get_data()
 
-            if ingestion_record_ids and len(ingestion_record_ids) > 0:
-                for record_id in ingestion_record_ids:
-                    upload_to_wis2box(record_id, event)
-            else:
-                logger.info("[WIS2BOX_ADL_PLUGIN] No ingestion records returned by plugin get_data")
+            if ingestion_record_ids:
+                self.ingest_records(ingestion_record_ids, network, event)
 
             event.success = True
             event.finished_at = timezone.localtime()
@@ -43,7 +41,117 @@ class Plugin(Instance):
             event.success = False
             event.finished_at = timezone.localtime()
             event.save()
-            return
+
+    def check_unploaded_records(self, network):
+        from wis2box_adl.core.models import PluginExecutionEvent, DataIngestionRecord
+
+        unuploaded_record_ids = DataIngestionRecord.objects.filter(uploaded_to_wis2box=False,
+                                                                   station__network=network).values_list('id',
+                                                                                                         flat=True)
+
+        logger.info(f"[WIS2BOX_ADL_PLUGIN] Found {len(unuploaded_record_ids)} records not yet uploaded. "
+                    f"Trying to upload now...")
+
+        if unuploaded_record_ids:
+            event = PluginExecutionEvent.objects.create(plugin=self.type)
+
+            try:
+                self.ingest_records(unuploaded_record_ids, network, event)
+
+                event.success = True
+                event.finished_at = timezone.localtime()
+                event.save()
+
+            except Exception as e:
+                logger.error(f"[WIS2BOX_ADL_PLUGIN] Error in plugin execution: {e}")
+                event.error_message = str(e)
+                event.success = False
+                event.finished_at = timezone.localtime()
+                event.save()
+        else:
+            logger.info(f"[WIS2BOX_ADL_PLUGIN] No records not uploaded for network {network.name}")
+
+    def ingest_records(self, ingestion_record_ids, network, event):
+        from wis2box_adl.core.models import DataIngestionRecord
+
+        if ingestion_record_ids and len(ingestion_record_ids) > 0:
+            ingestion_records = DataIngestionRecord.objects.filter(id__in=ingestion_record_ids)
+
+            # hourly aggregation not set
+            if not network.wis2box_hourly_aggregate:
+                logger.info("[WIS2BOX_ADL_PLUGIN] Hourly aggregation not set, uploading every record to WIS2BOX")
+                for record in ingestion_records:
+                    upload_to_wis2box(record.id, event.id)
+            else:
+                # hourly aggregation set
+                if network.wis2box_hourly_aggregate_strategy == "latest":
+                    logger.info("[WIS2BOX_ADL_PLUGIN] Hourly aggregation set to latest, checking for latest records")
+
+                    # group by stations
+                    stations = {}
+                    for record in ingestion_records:
+                        if record.station_id not in stations:
+                            stations[record.station_id] = []
+                        stations[record.station_id].append(record)
+
+                    current_time = timezone.localtime()
+
+                    # iterate over stations
+                    for station_id, records in stations.items():
+                        station = records[0].station
+
+                        # group station records by day by hour
+                        data = {}
+
+                        for record in records:
+                            # skip if record time is today and record hour is equal to current hour
+                            # we want to aggregate data from full hours. If record hour is equal to current hour,
+                            # we do not know if we have all the data for the current hour
+                            if record.time.date() == current_time.date() and record.time.hour == current_time.hour:
+                                logger.info(
+                                    f"[WIS2BOX_ADL_PLUGIN] Skipping record for station {station.name} "
+                                    f"as it is from the current hour, {record.time}")
+                                continue
+
+                            key = record.time.strftime("%Y-%m-%d")
+
+                            if key not in data:
+                                data[key] = {}
+
+                            # group by hour
+                            hour_key = record.time.strftime("%H")
+                            if hour_key not in data[key]:
+                                data[key][hour_key] = []
+
+                            data[key][hour_key].append(record)
+
+                        # pick the latest record of each hour
+                        for day, hourly_data in data.items():
+                            for hour, hourly_records in hourly_data.items():
+                                latest_record = None
+                                for h_record in hourly_records:
+                                    if not latest_record or h_record.time > latest_record.time:
+                                        latest_record = h_record
+
+                                if latest_record:
+                                    logger.info(f"[WIS2BOX_ADL_PLUGIN] Found latest record for station {station.name}")
+
+                                    # mark the record as hourly aggregate
+                                    latest_record.is_hourly_aggregate = True
+
+                                    # create hourly aggregate file
+                                    hourly_file = create_ingestion_file_with_hourly_time(latest_record)
+
+                                    if latest_record.hourly_aggregate_file:
+                                        latest_record.hourly_aggregate_file.delete()
+
+                                    latest_record.hourly_aggregate_file = hourly_file
+                                    latest_record.save()
+
+                                    # upload latest record to WIS2BOX
+                                    upload_to_wis2box(latest_record.id, event.id)
+        else:
+            logger.info("[WIS2BOX_ADL_PLUGIN] No ingestion records returned by plugin get_data")
 
 
 class PluginRegistry(Registry):

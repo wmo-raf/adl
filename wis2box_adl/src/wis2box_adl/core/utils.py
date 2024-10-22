@@ -1,8 +1,10 @@
 import logging
 import re
 
+import pandas as pd
 from django.contrib.gis.geos import Polygon, Point
 from django.core.exceptions import ValidationError
+from django.core.files.base import ContentFile
 from pyoscar import OSCARClient
 
 from .constants import DATA_PARAMETERS_DICT
@@ -127,9 +129,9 @@ def get_object_or_none(model_class, **kwargs):
 
 def get_station_directory_path(ingestion_record, filename):
     wigos_id = ingestion_record.station.wigos_id
-    time = ingestion_record.utc_time.strftime("%Y/%m/%d")
+    date = ingestion_record.utc_time.strftime("%Y/%m/%d")
 
-    return f"station_data/{wigos_id}/{time}/{filename}"
+    return f"station_data/{wigos_id}/{date}/{filename}"
 
 
 def extract_digits(s):
@@ -145,3 +147,21 @@ def validate_as_integer(value):
         int(value)
     except ValueError:
         raise ValidationError("The value must be an integer")
+
+
+def create_ingestion_file_with_hourly_time(ingestion_record):
+    df = pd.read_csv(ingestion_record.file.path)
+
+    new_time = ingestion_record.next_top_of_hour
+
+    # Update the observation year, month, day, hour, and minute
+    df["year"] = new_time.year
+    df["month"] = new_time.month
+    df["day"] = new_time.day
+    df["hour"] = new_time.hour
+    df["minute"] = new_time.minute
+
+    csv_content = df.to_csv(index=False)
+    file = ContentFile(csv_content, ingestion_record.filename)
+
+    return file
