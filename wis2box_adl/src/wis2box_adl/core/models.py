@@ -54,6 +54,17 @@ class Network(models.Model):
                                                                  MaxValueValidator(30),
                                                                  MinValueValidator(1)
                                                              ])
+    plugin_unuploaded_check_interval = models.PositiveIntegerField(default=5,
+                                                                   verbose_name=_("Unuploaded Records Check Interval "
+                                                                                  "in Minutes"),
+                                                                   help_text=_("How often the plugin should check for "
+                                                                               "records that have not been uploaded, "
+                                                                               "in minutes. Allowed values between 5-30"),
+                                                                   validators=[
+                                                                       MinValueValidator(5),
+                                                                       MaxValueValidator(30),
+                                                                   ]
+                                                                   )
 
     wis2box_hourly_aggregate = models.BooleanField(default=True, verbose_name=_("Enable WIS2BOX Hourly Aggregation"),
                                                    help_text=_("Check this if you want only one record per "
@@ -78,6 +89,7 @@ class Network(models.Model):
             FieldPanel("wis2box_hourly_aggregate"),
             FieldPanel("wis2box_hourly_aggregate_strategy"),
         ], heading=_("WIS2BOX Data Ingestion Aggregation")),
+        FieldPanel("plugin_unuploaded_check_interval")
 
     ]
 

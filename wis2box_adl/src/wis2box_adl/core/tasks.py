@@ -69,7 +69,7 @@ def setup_network_plugin_processing_tasks(sender, **kwargs):
     networks = Network.objects.filter(plugin__isnull=False)
 
     for network in networks:
-        create_or_update_network_plugin_periodic_task(network)
+        create_or_update_network_plugin_periodic_tasks(network)
 
 
 @worker_ready.connect
@@ -77,7 +77,7 @@ def unlock_all(**kwargs):
     clear_locks(app)
 
 
-def create_or_update_network_plugin_periodic_task(network):
+def create_or_update_network_plugin_periodic_tasks(network):
     interval = network.plugin_processing_interval
     enabled = network.plugin_processing_enabled
 
@@ -99,19 +99,22 @@ def create_or_update_network_plugin_periodic_task(network):
         }
     )
 
-    # sig = check_plugin_unploaded_records.s(network.id)
-    # name = repr(sig)
-    # schedule, created = IntervalSchedule.objects.get_or_create(
-    #     every=5,
-    #     period=IntervalSchedule.MINUTES,
-    # )
-    #
-    # PeriodicTask.objects.update_or_create(
-    #     name=name,
-    #     defaults={
-    #         'interval': schedule,
-    #         'task': sig.name,
-    #         'args': json.dumps([network.id]),
-    #         'enabled': enabled,
-    #     }
-    # )
+    sig = check_plugin_unploaded_records.s(network.id)
+    name = repr(sig)
+
+    unuploaded_check_interval = network.plugin_unuploaded_check_interval
+
+    schedule, created = IntervalSchedule.objects.get_or_create(
+        every=unuploaded_check_interval,
+        period=IntervalSchedule.MINUTES,
+    )
+
+    PeriodicTask.objects.update_or_create(
+        name=name,
+        defaults={
+            'interval': schedule,
+            'task': sig.name,
+            'args': json.dumps([network.id]),
+            'enabled': enabled,
+        }
+    )
