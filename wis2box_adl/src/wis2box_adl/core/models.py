@@ -375,6 +375,6 @@ class AdlSettings(ClusterableModel, BaseSiteSetting):
 
 @receiver(post_save, sender=Network)
 def update_network_plugin_periodic_task(sender, instance, **kwargs):
-    from wis2box_adl.core.tasks import create_or_update_network_plugin_periodic_task
+    from wis2box_adl.core.tasks import create_or_update_network_plugin_periodic_tasks
 
-    create_or_update_network_plugin_periodic_task(instance)
+    create_or_update_network_plugin_periodic_tasks(instance)
