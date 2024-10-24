@@ -56,7 +56,7 @@ RUN --mount=type=cache,mode=777,target=$PIP_CACHE_DIR,uid=$UID,gid=$GID . /wis2b
 
 COPY --chown=$UID:$GID ./wis2box_adl /wis2box_adl/app
 
-WORKDIR /wis2box_adl/app
+WORKDIR /wis2box_adl/app/src/wis2box_adl
 
 # Ensure that Python outputs everything that's printed inside
 # the application rather than buffering it.
@@ -69,6 +69,9 @@ RUN /wis2box_adl/venv/bin/pip install --no-cache-dir -e /wis2box_adl/app/
 COPY --chown=$UID:$GID ./docker-entrypoint.sh /wis2box_adl/docker-entrypoint.sh
 
 ENV DJANGO_SETTINGS_MODULE='wis2box_adl.config.settings.dev'
+
+# Add the venv to the path
+ENV PATH="/wis2box_adl/venv/bin:$PATH"
 
 ENTRYPOINT ["/wis2box_adl/docker-entrypoint.sh"]
 
