@@ -10,6 +10,8 @@ WIS2BOX_ADL_CELERY_BEAT_DEBUG_LEVEL=${WIS2BOX_ADL_CELERY_BEAT_DEBUG_LEVEL:-INFO}
 
 WIS2BOX_ADL_LOG_LEVEL=${WIS2BOX_ADL_LOG_LEVEL:-INFO}
 
+WIS2BOX_ADL_PORT="${WIS2BOX_ADL_PORT:-8000}"
+
 show_help() {
     echo """
 The available WIS2Box ADL related commands and services are shown below:
@@ -57,6 +59,14 @@ start_celery_worker() {
     exec celery -A wis2box_adl worker "${EXTRA_CELERY_ARGS[@]}" -l INFO "$@"
 }
 
+# Lets devs attach to this container running the passed command, press ctrl-c and only
+# the command will stop. Additionally they will be able to use bash history to
+# re-run the containers command after they have done what they want.
+attachable_exec(){
+    echo "$@"
+    exec bash --init-file <(echo "history -s $*; $*")
+}
+
 run_server() {
     run_setup_commands_if_configured
 
@@ -81,7 +91,7 @@ run_server() {
         --log-file=- \
         --access-logfile=- \
         --capture-output \
-        -b "0.0.0.0:8000" \
+        -b "0.0.0.0":"${WIS2BOX_ADL_PORT}" \
         --log-level="${WIS2BOX_ADL_LOG_LEVEL}" \
         "${STARTUP_ARGS[@]}" \
         "${@:2}"
@@ -105,6 +115,17 @@ source /wis2box_adl/venv/bin/activate
 source /wis2box_adl/plugins/utils.sh
 
 case "$1" in
+django-dev)
+    run_setup_commands_if_configured
+    echo "Running Development Server on 0.0.0.0:"
+    echo "Press CTRL-p CTRL-q to close this session without stopping the container."
+    attachable_exec python /wis2box_adl/app/src/wis2box_adl/manage.py runserver "0.0.0.0:${WIS2BOX_ADL_PORT}"
+    ;;
+django-dev-no-attach)
+    run_setup_commands_if_configured
+    echo "Running Development Server on 0.0.0.0:${WIS2BOX_ADL_PORT}"
+    python /wis2box_adl/app/src/wis2box_adl/manage.py runserver "0.0.0.0:${WIS2BOX_ADL_PORT}"
+    ;;
 gunicorn)
     run_server asgi "${@:2}"
     ;;
