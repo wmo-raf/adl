@@ -32,6 +32,8 @@ and then develop small units (plugins) to handle the complexities of each AWS ve
 
 This project is an implementation of such a solution.
 
+![WIS2Box ADL Data Flow](docs/_static/images/wis2box-data-flow-adl.png)
+
 ## Introduction
 
 WIS2Box Automated Data Loader (ADL) is a plugin based system that defines an architecture for implementing wis2box data
