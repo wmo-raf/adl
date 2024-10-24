@@ -81,7 +81,7 @@ On the other hand, a plugin will have the following components and features:
 
 ### ✅ Objectives
 
-- To provide a standard way of ingesting data from different AWS vendors into a WIS2Box node.
+- To provide a tool for automating ingestion of data from different AWS vendors into a WIS2Box node.
 - To provide a plugin architecture that allows for the development of plugins for different AWS vendors.
 - To take advantage of the Wagtail CMS Admin interface to provide a user-friendly interface that facilitates easy setup
   and management of the data loaders for different AWS vendors.
@@ -96,8 +96,7 @@ The following are the plugins that have been developed and are available for int
 - [Adcon Telemetry Plugin](https://github.com/wmo-raf/wis2box-adl-adcon-plugin)
 - [Davis Instruments Weatherlink Plugin](https://github.com/wmo-raf/wis2box-adl-weatherlink-v2-plugin)
 
-
-
+# Getting Started
 
 
 
