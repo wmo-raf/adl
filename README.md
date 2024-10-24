@@ -11,7 +11,7 @@ data using standards-based approaches in alignment with the WIS2 principles. WIS
 Organization (WMO) members to publish and download data through the WIS2 network.
 
 One of the critical steps in the WIS2 data flow is the ingestion of realtime data from observation stations (either
-Manual or Automatic Weather Stations) into a WIS2 node. Setting up wis2box is one thing, but ensuring that the data from
+Manual or Automatic Weather Stations) into a WIS2 node. Setting up wis2box is one thing, ensuring that the data from
 stations is periodically ingested into the node in a timely way is another. Countries can develop their own tools and
 scripts to automate this process, but this can be time-consuming and costly especially for developing countries that
 have a 'cocktail' of different AWS vendors.
@@ -34,7 +34,7 @@ This project is an implementation of such a solution.
 
 ![WIS2Box ADL Data Flow](docs/_static/images/wis2box-data-flow-adl.png)
 
-## Introduction
+## 📜 Introduction
 
 WIS2Box Automated Data Loader (ADL) is a plugin based system that defines an architecture for implementing wis2box data
 loaders for different AWS vendors.
@@ -79,7 +79,7 @@ On the other hand, a plugin will have the following components and features:
 
 ![WIS2Box ADL Components](docs/_static/images/wis2box-adl-components.png)
 
-### Objectives
+### ✅ Objectives
 
 - To provide a standard way of ingesting data from different AWS vendors into a WIS2Box node.
 - To provide a plugin architecture that allows for the development of plugins for different AWS vendors.
@@ -88,6 +88,14 @@ On the other hand, a plugin will have the following components and features:
 - With minimal training, users at the NMHSs should be able to set up and configure an AWS vendor plugin for their
   observation data network and start ingesting data into WIS2Box node
 - Provide a repository of plugins for different AWS vendors that can be shared and reused by NMHSs in Africa.
+
+# 🧩 Plugins List
+
+The following are the plugins that have been developed and are available for integration with the WIS2Box ADL core:
+
+- [Adcon Telemetry Plugin](https://github.com/wmo-raf/wis2box-adl-adcon-plugin)
+- [Davis Instruments Weatherlink Plugin](https://github.com/wmo-raf/wis2box-adl-weatherlink-v2-plugin)
+
 
 
 
