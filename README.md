@@ -79,7 +79,7 @@ On the other hand, a plugin will have the following components and features:
 
 ![WIS2Box ADL Components](docs/_static/images/wis2box-adl-components.png)
 
-### ✅ Objectives
+### 📋 Objectives
 
 - To provide a tool for automating ingestion of data from different AWS vendors into a WIS2Box node.
 - To provide a plugin architecture that allows for the development of plugins for different AWS vendors.
@@ -89,14 +89,30 @@ On the other hand, a plugin will have the following components and features:
   observation data network and start ingesting data into WIS2Box node
 - Provide a repository of plugins for different AWS vendors that can be shared and reused by NMHSs in Africa.
 
-# 🧩 Plugins List
+### ⚗️ Technology Stack
+
+- The core application is built using the [Django](https://www.djangoproject.com/) framework
+  and [Wagtail](https://wagtail.org/). Wagtail is used mainly for the Admin interface since it allows for easy
+  customization and extension
+- [PostgreSQL](https://www.postgresql.org/) with [Timescale db](https://www.timescale.com/) extension is used as the
+  database for the system.
+- [Celery](https://docs.celeryq.dev/en/stable/index.html) is used for background tasks.
+- [Redis](https://redis.io/) is used as the message broker for Celery.
+- The system is containerized using [Docker](https://www.docker.com/)
+  and [docker-compose](https://docs.docker.com/compose/).
+- Plugins are developed as Django apps and integrated into wagtail
+  using [Wagtail hooks](https://docs.wagtail.org/en/stable/reference/hooks.html).
+- [Nginx](https://nginx.org) is used a static and reverse proxy server for the system.
+- Bash scripts are used for installing the plugins and their dependencies at runtime.
+
+## 🧩 Plugins List
 
 The following are the plugins that have been developed and are available for integration with the WIS2Box ADL core:
 
 - [Adcon Telemetry Plugin](https://github.com/wmo-raf/wis2box-adl-adcon-plugin)
 - [Davis Instruments Weatherlink Plugin](https://github.com/wmo-raf/wis2box-adl-weatherlink-v2-plugin)
 
-# Getting Started
+## 🏁 Getting Started
 
 
 
