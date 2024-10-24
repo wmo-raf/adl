@@ -4,5 +4,5 @@ set -euo pipefail
 
 # This file is automatically run by wis2box_adl when a wis2box_adl container starts up for the
 # first time with this plugin already installed and built. It should impotently run
-# any runtime setup that involves doing things with the embedded postgres database
+# any runtime setup that involves doing things with the  postgres database
 # and/or the data volume.

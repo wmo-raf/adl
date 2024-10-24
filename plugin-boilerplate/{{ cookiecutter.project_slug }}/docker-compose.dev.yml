@@ -1,0 +1,101 @@
+# MAKE SURE YOU HAVE SET THE REQUIRED VARIABLES IN the .env FILE.configs:
+
+# This compose file starts up a dev version of the plugin with hot code reloading.
+# It is accessible at http://localhost:4000 .
+
+x-adl-variables: &adl-variables
+  DATABASE_URL: postgis://${WIS2BOX_ADL_DB_USER:-adl}:${WIS2BOX_ADL_DB_PASSWORD}@adl_db:5432/${WIS2BOX_ADL_DB_NAME:-adl}
+  REDIS_URL: redis://adl_redis:6379/0
+
+services:
+  adl_db:
+    image: timescale/timescaledb-ha:pg15
+    env_file:
+      - .env
+    environment:
+      - POSTGRES_USER=${WIS2BOX_ADL_DB_USER:-adl}
+      - POSTGRES_DB=${WIS2BOX_ADL_DB_NAME:-adl}
+      - POSTGRES_PASSWORD=${WIS2BOX_ADL_DB_PASSWORD:-?}
+    ports:
+      - "5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+  adl_redis:
+    image: redis:alpine
+
+  adl:
+    image: adl-siapmicros-plugin_dev
+    build:
+      context: .
+      dockerfile: ./dev.Dockerfile
+      args:
+        - PLUGIN_BUILD_UID=${PLUGIN_BUILD_UID}
+        - PLUGIN_BUILD_GID=${PLUGIN_BUILD_GID}
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    environment:
+      <<: *adl-variables
+    depends_on:
+      - adl_db
+      - adl_redis
+    volumes:
+      - static:/wis2box_adl/app/src/wis2box_adl/static
+      - media:/wis2box_adl/app/src/wis2box_adl/media
+      - ./plugins/adl_siapmicros_plugin:/wis2box_adl/plugins/adl_siapmicros_plugin
+    # Open stdin and tty so when attaching key input works as expected.
+    stdin_open: true
+    tty: true
+
+  adl_celery_worker:
+    image: adl-siapmicros-plugin_dev
+    command: celery-worker
+    env_file:
+      - .env
+    environment:
+      <<: *adl-variables
+      WAIT_HOSTS: adl_db:5432,adl_redis:6379,adl:8000
+    depends_on:
+      - adl
+    volumes:
+      - static:/wis2box_adl/app/src/wis2box_adl/static
+      - media:/wis2box_adl/app/src/wis2box_adl/media
+      - ./plugins/adl_siapmicros_plugin:/wis2box_adl/plugins/adl_siapmicros_plugin
+    # Open stdin and tty so when attaching key input works as expected.
+    stdin_open: true
+    tty: true
+
+  adl_celery_beat:
+    image: adl-siapmicros-plugin_dev
+    command: celery-beat
+    env_file:
+      - .env
+    environment:
+      <<: *adl-variables
+      WAIT_HOSTS: adl_db:5432,adl_redis:6379,adl:8000
+    depends_on:
+      - adl
+    volumes:
+      - static:/wis2box_adl/app/src/wis2box_adl/static
+      - media:/wis2box_adl/app/src/wis2box_adl/media
+      - ./plugins/adl_siapmicros_plugin:/wis2box_adl/plugins/adl_siapmicros_plugin
+    # Open stdin and tty so when attaching key input works as expected.
+    stdin_open: true
+    tty: true
+
+  adl_web_proxy:
+    image: nginx:1.20.2-alpine
+    volumes:
+      - static:/wagtail_static
+      - media:/wagtail_media
+      - $PWD/nginx.conf:/etc/nginx/nginx.conf
+    ports:
+      - 4000:80
+
+
+volumes:
+  pgdata:
+  static:
+  media:

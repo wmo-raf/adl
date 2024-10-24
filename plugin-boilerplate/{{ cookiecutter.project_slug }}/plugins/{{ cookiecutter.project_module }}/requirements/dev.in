@@ -1,0 +1,5 @@
+-r base.in
+flake8==7.0.0
+pip-tools==7.4.1
+# build is used to compile a wheel package with `python -m build .` command.
+build
