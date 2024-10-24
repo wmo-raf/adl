@@ -56,6 +56,7 @@ services:
 
   wis2box_adl:
     container_name: wis2box_adl
+    image: wis2box_adl
     build:
       context: .
       dockerfile: Dockerfile
