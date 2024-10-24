@@ -39,4 +39,6 @@ wheels/
 wis2boxadl-plugins
 .env
 .env.sample
-docker
+docker/
+docs
+plugin-boilerplate
