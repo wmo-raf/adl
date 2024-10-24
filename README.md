@@ -1,4 +1,4 @@
-# WIS2Box Automated Data Loader
+# ⚙️ WIS2Box Automated Data Loader
 
 Wagtail based tool for automating periodic Observation data ingestion into WIS2Box node, from Automatic and or Manual
 Weather Stations.
@@ -197,7 +197,7 @@ source /wis2box_adl/venv/bin/activate
 manage createsuperuser
 ```
 
-`manage` is a script that is available in the container that calls Django's `manage.py`
+`manage` is a shortcut python script that is available in the container that calls Django's `manage.py`
 
 ### Environmental Variables
 
@@ -229,9 +229,142 @@ The following environmental variables are required to be set in the `.env` file:
 | WIS2BOX_STORAGE_PASSWORD            | wis2box storage password                                                                                                                                                                                                                                                                                          | YES      |                  |                                                                                                                    |
 | UID                                 | The id of the user to run adl docker services                                                                                                                                                                                                                                                                     |          |                  |                                                                                                                    |
 | GID                                 | The id of the group to run adl docker services                                                                                                                                                                                                                                                                    |          |                  |                                                                                                                    |
-| WIS2BOX_ADL_PLUGIN_GIT_REPOS        | A comma separated list of github repos, where ald plugins to install are located                                                                                                                                                                                                                                  | NO       |                  | If no repo is added, no plugin is installed. A plugin must follow a given structure as described in sections below |
+| WIS2BOX_ADL_PLUGIN_GIT_REPOS        | A comma separated list of github repos, where adl plugins to install are located                                                                                                                                                                                                                                  | NO       |                  | If no repo is added, no plugin is installed. A plugin must follow a given structure as described in sections below |
 
 `Note`: On linux, you can type `id` in the terminal to get the `UID` and `GID` of the current user.
+
+### Adding plugins
+
+To make this tool useful, you need to add plugins that will be used to load data from different AWS vendors.
+
+Currently, you can only install plugins that are hosted on a publicly accessible git repository.
+
+To add a plugin, you need to set the `WIS2BOX_ADL_PLUGIN_GIT_REPOS` variable in the `.env` file to a comma-separated
+list of git repositories where the plugins are located.
+
+For example, to add the Adcon Telemetry Plugin, you will need the link to its Github repository and add it to
+the `WIS2BOX_ADL_PLUGIN_GIT_REPOS` variable in the `.env` file.
+
+```
+WIS2BOX_ADL_PLUGIN_GIT_REPOS=https://github.com/wmo-raf/wis2box-adl-adcon-plugin.git
+```
+
+To add multiple plugins, separate the links with a comma.
+
+For example to add both the Adcon Telemetry Plugin and the Davis Instruments Weatherlink Plugin, you will set the
+variable as follows:
+
+```
+WIS2BOX_ADL_PLUGIN_GIT_REPOS=https://github.com/wmo-raf/wis2box-adl-adcon-plugin.git,https://github.com/wmo-raf/wis2box-adl-weatherlink-v2-plugin.git
+```
+
+Then restart the docker containers
+
+```sh
+docker-compose stop
+docker-compose up -d --force-recreate
+```
+
+## Developing Plugins
+
+In this guide we dive into how to create a wis2box-adl plugin, discuss the plugin architecture and give you sample
+plugins to get inspiration from.
+
+### Plugin Architecture
+
+A Wis2box ADL Plugin is fundamentally a folder named after the plugin. The folder should be
+a [Django/Wagtail App](https://docs.djangoproject.com/en/5.1/ref/applications/)
+
+#### Initialize your plugin from the plugin boilerplate
+
+With the plugin boilerplate you can easily create a new plugin and setup a docker development environment that installs
+wis2box-adl as a dependency. This can easily be installed via cookiecutter.
+
+
+
+
+#### Plugin Installation API
+
+A built wis2box-adl docker image contains the following bash scripts that are used to install plugins. They can be used
+to install a plugin into an existing wis2box-adl container at runtime. `install_plugin.sh` can be used to install a
+plugin from an url, a git repo or a local folder on the filesystem.
+
+You can find these scripts in the following locations in the built images:
+
+1. `/wis2box_adl/plugins/install_plugin.sh`
+
+On this repo, you can find the scripts in the `deploy/plugins` folder.
+
+These scripts expect a wis2box-adl plugin to follow the conventions described below:
+
+#### Plugin File Structure
+
+The `install_plugin.sh` script expect your plugin to have a specific structure as follows:
+
+```
+├── plugin_name
+│  ├── wis2box_adl_plugin_info.json (A simple json file containing info about your plugin)
+|  ├── setup.py
+|  ├── build.sh (Called when installing the plugin in a Dockerfile/container)
+|  ├── runtime_setup.sh (Called on first runtime startup of the plugin)
+|  ├── uninstall.sh (Called when uninstalling the plugin in a container)
+|  ├── src/plugin_name/src/config/settings/settings.py (Optional Django setting file)
+```
+
+The folder contains three bash files which will be automatically called by wis2box-adl's plugin scripts during
+installation and uninstallation of the plugin. You can use these scripts to perform extra build steps, installation of
+packages and other docker container build steps required by your plugin.
+
+1. `build.sh`: Called on container startup if a runtime installation is occurring.
+2. `runtime_setup.sh`: Called the first time a container starts up after the plugin has been installed, useful for
+   running superuser commands on the container.
+3. `uninstall.sh`: Called on uninstall, the database will be available and so any backwards migrations should be run
+   here.
+
+#### The plugin info file
+
+The `wis2box_adl_plugin_info.json` file is a json file, in your root plugin folder, containing metadata about your
+plugin. It should have the following JSON structure:
+
+```json
+{
+  "name": "TODO",
+  "version": "TODO",
+  "description": "TODO",
+  "author": "TODO",
+  "author_url": "TODO",
+  "url": "TODO",
+  "license": "TODO",
+  "contact": "TODO"
+}
+```
+
+#### Expected plugin structure when installing from a git repository
+
+When installing a plugin from git,the repo should contain a single plugins folder, inside which there should a single
+plugin folder following the structure above and has the same name as your plugin.
+
+By default, the `plugin boilerplate` generates a repository with this structure.
+
+For example a conforming git repo should contain something like:
+
+```
+├─ * (an outermost wrapper directory named anything is allowed but not required) 
+│  ├── plugins/ 
+│  │  ├── plugin_name
+│  |  |  ├── wis2box_adl_plugin_info.json
+|  |  |  ├── setup.py
+|  |  |  ├── build.sh
+|  |  |  ├── runtime_setup.sh
+|  |  |  ├── uninstall.sh
+|  |  |  ├── src/plugin_name/src/config/settings/settings.py (Optional Django setting file)
+```
+
+
+
+
+
+
 
 
 
