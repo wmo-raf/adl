@@ -41,9 +41,9 @@ services:
     image: timescale/timescaledb-ha:pg15
     restart: unless-stopped
     environment:
-      - POSTGRES_USER=${WIS2BOX_ADL_DB_USER}
-      - POSTGRES_DB=${WIS2BOX_ADL_DB_NAME}
-      - POSTGRES_PASSWORD=${WIS2BOX_ADL_DB_PASSWORD}
+      - POSTGRES_USER=${WIS2BOX_ADL_DB_USER:-?}
+      - POSTGRES_DB=${WIS2BOX_ADL_DB_NAME:-?}
+      - POSTGRES_PASSWORD=${WIS2BOX_ADL_DB_PASSWORD:-?}
     ports:
       - "5432"
     volumes:
