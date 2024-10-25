@@ -6,6 +6,7 @@ from wagtail.documents import urls as wagtaildocs_urls
 
 urlpatterns = [
     # path("django-admin/", admin.site.urls),
+    path("plugins/", include("wis2box_adl.core.urls", namespace="plugins")),
     path("", include(wagtailadmin_urls)),
     # path("documents/", include(wagtaildocs_urls)),
 ]

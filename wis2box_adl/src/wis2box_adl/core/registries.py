@@ -17,6 +17,32 @@ class Plugin(Instance):
         if not self.label:
             raise ImproperlyConfigured("The label of a plugin must be set.")
 
+    def get_urls(self):
+        """
+        If needed root urls related to the plugin can be added here.
+
+        Example:
+
+            def get_urls(self):
+                from . import plugin_urls
+
+                return [
+                    path('some-url/', include(plugin_urls, namespace=self.type)),
+                ]
+
+            # plugin_urls.py
+            from django.urls import path
+
+            urlpatterns = [
+                path('plugin-name/some-view', SomeView.as_view(), name='some_view'),
+            ]
+
+        :return: A list containing the urls.
+        :rtype: list
+        """
+
+        return []
+
     def get_data(self):
         raise NotImplementedError
 
@@ -161,6 +187,21 @@ class PluginRegistry(Registry):
     """
 
     name = "adl_plugin"
+
+    @property
+    def urls(self):
+        """
+        Returns a list of all the urls that are in the registered instances. They
+        are going to be added to the root url config.
+
+        :return: The urls of the registered instances.
+        :rtype: list
+        """
+
+        urls = []
+        for types in self.registry.values():
+            urls += types.get_urls()
+        return urls
 
 
 plugin_registry = PluginRegistry()
