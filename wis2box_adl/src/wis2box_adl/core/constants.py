@@ -293,6 +293,15 @@ STATION_ATTRIBUTES = {
     }
 }
 
+OSCAR_SURFACE_REQUIRED_CSV_COLUMNS = [
+    {"name": "Station", "type": "text"},
+    {"name": "Station type", "type": "text"},
+    {"name": "WIGOS Station Identifier(s)", "type": "text"},
+    {"name": "Latitude", "type": "numeric"},
+    {"name": "Longitude", "type": "numeric"},
+    {"name": "Elevation", "type": "numeric"},
+]
+
 WIS2BOX_CSV_HEADER = [
     "wsi_series",
     "wsi_issuer",

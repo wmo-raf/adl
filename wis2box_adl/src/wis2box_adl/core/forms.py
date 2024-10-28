@@ -1,5 +1,4 @@
 from django import forms
-from django.contrib.gis.geos import Point
 from django.utils.translation import gettext_lazy as _
 
 from .models import Network
@@ -11,12 +10,8 @@ from .utils import (
 
 
 class StationLoaderForm(forms.Form):
-    network = forms.ModelChoiceField(queryset=Network.objects.all(), label=_("Network"), required=True)
     file = forms.FileField(label=_("File"), required=True, help_text=_("CSV file"))
     data = forms.JSONField(widget=forms.HiddenInput)
-    update_existing = forms.BooleanField(label=_("Update existing"),
-                                         help_text=_("Update existing stations if found"),
-                                         required=False, initial=True)
 
     # only allow csv files
     def __init__(self, *args, **kwargs):
@@ -45,27 +40,21 @@ class StationLoaderForm(forms.Form):
                 if value and isinstance(value, str):
                     data_dict[key] = value.strip()
 
-            wigos_id = data_dict.get("wigos_id")
-            latitude = data_dict.get("latitude")
-            longitude = data_dict.get("longitude")
+            name = data_dict.get("Station")
+            wigos_id = data_dict.get("WIGOS Station Identifier(s)").split("|")[0]
+            latitude = data_dict.get("Latitude")
+            longitude = data_dict.get("Longitude")
+            elevation = data_dict.get("Elevation")
 
-            point = Point(x=longitude, y=latitude)
-            data_dict.update({
-                "location": point
-            })
+            station_data = {
+                "name": name,
+                "wigos_id": wigos_id,
+                "latitude": latitude,
+                "longitude": longitude,
+                "elevation": elevation
+            }
 
-            # delete latitude and longitude from the dict
-            del data_dict["latitude"]
-            del data_dict["longitude"]
-
-            if wigos_id and is_valid_wigos_id(wigos_id):
-                wigos_id_parts = get_wigos_id_parts(wigos_id)
-                data_dict.update({**wigos_id_parts})
-
-                # delete wigos_id from the dict
-                del data_dict["wigos_id"]
-
-            stations_data.append(data_dict)
+            stations_data.append(station_data)
 
         cleaned_data["stations_data"] = stations_data
 

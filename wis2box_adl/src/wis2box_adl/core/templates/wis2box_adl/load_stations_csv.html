@@ -4,61 +4,97 @@
 
 {% block main_content %}
     <div style="margin:40px 0;">
+        {% if found_existing_local %}
+            <div class="help-block help-info" style="margin-bottom: 20px">
+                <svg class="icon icon-info-circle icon" aria-hidden="true">
+                    <use href="#icon-info-circle"></use>
+                </svg>
+                <p>
+                    {% translate "We found stations that were loaded previously. " %}
+                </p>
 
-        <div class="help-block help-info" style="margin-bottom: 20px">
-            <svg class="icon icon-info-circle icon" aria-hidden="true">
-                <use href="#icon-info-circle"></use>
-            </svg>
-            <p>
-                <a href="{{ stations_csv_template_url }}">
-                    {% translate "Download CSV Template" %}
+                <a href="{{ loader_url }}" class="button bicolor button--icon" style="color:#fff">
+                    <span class="icon-wrapper">
+                        <svg class="icon icon-plus icon" aria-hidden="true">
+                            <use href="#icon-plus"></use>
+                        </svg>
+                    </span>
+                    {% translate "Use existing Stations" %}
                 </a>
-            </p>
-        </div>
-
-        <form method="POST" id="stations-form"
-              enctype="multipart/form-data">
-            {% if form.non_field_errors %}
-                <div class="non-field_errors" style="margin-bottom: 20px">
-                    {% include "wagtailadmin/shared/non_field_errors.html" with form=form %}
-                </div>
-            {% endif %}
-            <ul class="fields">
-                {% csrf_token %}
-                {% for field in form %}
-                    {% if field.is_hidden %}
-                        {{ field }}
-                    {% else %}
-                        {% include "wagtailadmin/shared/field.html" %}
-                    {% endif %}
-                {% endfor %}
-                <li>
-                    <button id="upload-btn" type="submit" class="button" disabled> {% trans 'Upload' %}</button>
-                </li>
-            </ul>
-        </form>
-
-        <div id="data-preview" style="display: none">
-            <h2>
-                {% translate "Data Preview" %}
-            </h2>
-
-            <div id="import-warnings">
-                <div class="help-block help-warning">
-                    <svg class="icon icon-warning icon" aria-hidden="true">
-                        <use href="#icon-warning"></use>
-                    </svg>
-                    <div>
-                        {% translate "The following columns were not found in the uploaded file. Starred columns are required" %}
-                    </div>
-                    <ul>
-                    </ul>
-                </div>
-
             </div>
-            <div id="table-container"></div>
-        </div>
-    </div>
+
+            <div style="margin-top: 20px">
+                {% translate "If you wish to load/update the local copy stations, you can load the new CSV downloaded from OSCAR Surface " %}
+                <div style="margin-top: 10px">
+                    <a href="{{ overwrite_url }}" class="button button-small bicolor button--icon button-secondary">
+                        <span class="icon-wrapper">
+                            <svg class="icon icon-plus icon" aria-hidden="true">
+                                <use href="#icon-plus"></use>
+                            </svg>
+                        </span>
+
+                        {% translate "Load new CSV file" %}
+                    </a>
+                </div>
+            </div>
+
+
+
+        {% else %}
+            <div class="help-block help-info" style="margin-bottom: 20px">
+                <svg class="icon icon-info-circle icon" aria-hidden="true">
+                    <use href="#icon-info-circle"></use>
+                </svg>
+                <p>
+                    {% translate "Use this form to upload the CSV file manually downloaded from OSCAR Surface for your country" %}
+                </p>
+            </div>
+
+            <form method="POST" id="stations-form"
+                  enctype="multipart/form-data">
+                {% if form.non_field_errors %}
+                    <div class="non-field_errors" style="margin-bottom: 20px">
+                        {% include "wagtailadmin/shared/non_field_errors.html" with form=form %}
+                    </div>
+                {% endif %}
+                <ul class="fields">
+                    {% csrf_token %}
+                    {% for field in form %}
+                        {% if field.is_hidden %}
+                            {{ field }}
+                        {% else %}
+                            {% include "wagtailadmin/shared/field.html" %}
+                        {% endif %}
+                    {% endfor %}
+                    <li>
+                        <button id="upload-btn" type="submit" class="button" disabled> {% trans 'Upload' %}</button>
+                    </li>
+                </ul>
+            </form>
+
+            <div id="data-preview" style="display: none">
+                <h2>
+                    {% translate "Data Preview" %}
+                </h2>
+
+                <div id="import-warnings">
+                    <div class="help-block help-warning">
+                        <svg class="icon icon-warning icon" aria-hidden="true">
+                            <use href="#icon-warning"></use>
+                        </svg>
+                        <div>
+                            {% translate "The following columns were not found in the uploaded file. Starred columns are required" %}
+                        </div>
+                        <ul>
+                        </ul>
+                    </div>
+
+                </div>
+                <div id="table-container"></div>
+            </div>
+            </div>
+
+        {% endif %}
 {% endblock %}
 
 {% block extra_css %}
@@ -109,6 +145,7 @@
 
             this.colHeaders = stationFields.map(field => field.name);
 
+
             this.hot = new Handsontable(tableContainer, {
                 autoWrapRow: true,
                 autoWrapCol: true,
@@ -150,26 +187,42 @@
             reader.onload = function (event) {
                 DataUtils.parseCSV(event.target.result).then(parsedData => {
                     const dataRows = parsedData.rows
-                    const columnHeaders = parsedData.fields.map(field => field.name);
+                    const columnHeaders = parsedData.fields.map(field => field.name.trim());
+
 
                     that.previewEl.style.display = 'block'
 
-
+                    const dataIdxs = []
                     const missingColumns = [];
                     that.colHeaders.forEach((header, index) => {
                         const colIndex = columnHeaders.indexOf(header);
                         if (colIndex === -1) {
-                            dataRows.replace_data(index, [])
+                            dataIdxs.push(null);
                             const field = that.stationFields.find(field => field.name === header);
                             if (field) {
                                 missingColumns.push(field);
                             }
+                        } else {
+                            dataIdxs.push(colIndex);
                         }
                     })
 
+                    // Filter data rows to only include columns that exist in the table
+                    const filteredDataRows = dataRows.map(row => {
+                        return row.filter((_, index) => dataIdxs.includes(index));
+                    });
 
-                    that.hot.updateData(dataRows);
+                    // Add empty columns for missing columns
+                    dataIdxs.forEach((idx, i) => {
+                        if (idx === null) {
+                            filteredDataRows.forEach(row => {
+                                row.splice(i, 0, '');
+                            });
+                        }
+                    });
 
+                    // Update the table with the filtered data
+                    that.hot.updateData(filteredDataRows);
 
                     if (missingColumns.length > 0) {
                         that.warningsEl.show();
@@ -200,7 +253,6 @@
                 this.submitBtn.disabled = true;
                 return
             }
-
 
             const colHeader = this.hot.getColHeader();
             const data = this.hot.getData();

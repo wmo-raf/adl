@@ -75,7 +75,7 @@ def get_wigos_id_parts(wigos_id):
     }
 
 
-def get_stations_for_country(country, as_dict=False):
+def get_stations_for_country_live(country, as_dict=False):
     client = OSCARClient()
     iso = country.alpha3
 
@@ -116,6 +116,17 @@ def get_stations_for_country(country, as_dict=False):
 
     if as_dict:
         stations = {station["wigos_id"]: station for station in stations}
+
+    return stations
+
+
+def get_stations_for_country_local(as_dict=False):
+    from .models import OscarSurfaceStationLocal
+
+    stations = OscarSurfaceStationLocal.objects.all().values()
+
+    if as_dict:
+        stations = {station.get("wigos_id"): station for station in stations}
 
     return stations
 

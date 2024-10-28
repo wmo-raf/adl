@@ -9,12 +9,13 @@ from django.urls import reverse_lazy, reverse
 from django.utils.translation import gettext as _
 from wagtail.admin import messages
 
-from .constants import STATION_ATTRIBUTES
+from .constants import STATION_ATTRIBUTES, OSCAR_SURFACE_REQUIRED_CSV_COLUMNS
 from .forms import StationLoaderForm, StationsCSVTemplateDownloadForm, OSCARStationImportForm
-from .models import Station, AdlSettings, PluginExecutionEvent
+from .models import Station, AdlSettings, PluginExecutionEvent, OscarSurfaceStationLocal
 from .serializers import PluginExecutionEventSerializer
 from .utils import (
-    get_stations_for_country,
+    get_stations_for_country_live,
+    get_stations_for_country_local,
     get_wigos_id_parts,
     extract_digits
 )
@@ -27,42 +28,35 @@ def load_stations_csv(request):
     template_name = "wis2box_adl/load_stations_csv.html"
     context = {}
 
+    overwrite = request.GET.get("overwrite", '').lower()
+    overwrite = overwrite in ['1', 'true']
+
     if request.POST:
         form = StationLoaderForm(request.POST, files=request.FILES)
 
         if form.is_valid():
-            network = form.cleaned_data["network"]
             stations_data = form.cleaned_data["stations_data"]
-            update_existing = form.cleaned_data["update_existing"]
 
             for data in stations_data:
-                new_station = {
-                    "network": network,
+                new_local_copy_station = {
                     **data,
                 }
 
-                existing_station = Station.objects.filter(network=network, station_id=new_station["station_id"]).first()
+                wigos_id = new_local_copy_station.get("wigos_id")
+                existing_station = OscarSurfaceStationLocal.objects.filter(wigos_id=wigos_id).first()
 
                 if existing_station:
-                    if not update_existing:
-                        form.add_error(None, f"Station with ID {new_station['station_id']} already "
-                                             f"exists for network {network.name}. Check the 'update existing' option "
-                                             f"if you wish update the existing record.")
-
-                        context.update({"form": form})
-
-                        return render(request, template_name=template_name, context=context)
-                    else:
-                        for attr, value in new_station.items():
-                            setattr(existing_station, attr, value)
-
-                        existing_station.save()
+                    for attr, value in new_local_copy_station.items():
+                        setattr(existing_station, attr, value)
+                    existing_station.save()
                 else:
-                    station = Station.objects.create(**new_station)
+                    station = OscarSurfaceStationLocal.objects.create(**new_local_copy_station)
 
             messages.success(request, _("Stations loaded successfully."))
 
-            return redirect(stations_url)
+            loader_url = reverse("load_stations_oscar") + '?use_local=1'
+
+            return redirect(loader_url)
         else:
             context.update({"form": form})
             return render(request, template_name, context)
@@ -82,16 +76,25 @@ def load_stations_csv(request):
             "header_icon": "icon-snippet",
         })
 
+        if not overwrite:
+            exists = OscarSurfaceStationLocal.objects.exists()
+            if exists:
+                context.update({
+                    "loader_url": reverse("load_stations_oscar") + '?use_local=1',
+                    "found_existing_local": True,
+                    "overwrite_url": reverse("load_stations_oscar_csv") + '?overwrite=1'
+                })
+
         form = StationLoaderForm()
         context["form"] = form
 
         station_fields = []
 
-        for name, value in STATION_ATTRIBUTES.items():
+        for station_col in OSCAR_SURFACE_REQUIRED_CSV_COLUMNS:
             station_fields.append({
-                "name": name,
-                "type": value.get("type"),
-                "required": value.get("required")
+                "name": station_col.get("name"),
+                "type": station_col.get("type"),
+                "required": True,
             })
 
         context["station_fields_json"] = json.dumps(station_fields)
@@ -152,6 +155,9 @@ def load_stations_oscar(request):
     template_name = "wis2box_adl/load_stations_oscar.html"
     context = {}
 
+    use_local_copy = request.GET.get("use_local", '').lower()
+    use_local_copy = use_local_copy in ['1', 'true']
+
     from .wagtail_hooks import StationViewSet
     stations_url = StationViewSet().menu_url
     station_edit_url_name = StationViewSet().get_url_name("edit")
@@ -165,6 +171,7 @@ def load_stations_oscar(request):
 
     context.update({
         "breadcrumbs_items": breadcrumbs_items,
+        "using_local_copy": use_local_copy
     })
 
     settings = AdlSettings.for_request(request)
@@ -187,15 +194,35 @@ def load_stations_oscar(request):
     for station in db_stations:
         db_stations_by_wigos_id[station.wigos_id] = station
 
-    oscar_stations = cache.get(f"{iso}_oscar_stations")
-    if not oscar_stations:
-        oscar_stations = get_stations_for_country(country)
-        # cache for 20 minutes
-        cache.set(f"{iso}_oscar_stations", oscar_stations, timeout=60 * 20)
+    if use_local_copy:
+        oscar_stations = get_stations_for_country_local()
+    else:
+        oscar_stations = cache.get(f"{iso}_oscar_stations")
+        if not oscar_stations:
+            try:
+                oscar_stations = get_stations_for_country_live(country)
+                # cache for 20 minutes
+                cache.set(f"{iso}_oscar_stations", oscar_stations, timeout=60 * 20)
+            except Exception as e:
+                oscar_stations = []
+                context.update({
+                    "error_getting_stations": True,
+                    "error": str(e),
+                })
+
+    context.update({
+        "load_live_from_oscar_url": reverse("load_stations_oscar"),
+        "load_from_csv_url": reverse("load_stations_oscar_csv")
+    })
 
     for station in oscar_stations:
+        import_url = reverse("import_oscar_station", args=[station.get("wigos_id")])
+
+        if use_local_copy:
+            import_url = import_url + "?use_local=1"
+
         station.update({
-            "import_url": reverse("import_oscar_station", args=[station.get("wigos_id")])
+            "import_url": import_url
         })
         db_station = db_stations_by_wigos_id.get(station.get("wigos_id"))
         if db_station:
@@ -216,6 +243,10 @@ def load_stations_oscar(request):
 
 def import_oscar_station(request, wigos_id):
     from .wagtail_hooks import StationViewSet
+
+    use_local_copy = request.GET.get("use_local", '').lower()
+    use_local_copy = use_local_copy in ['1', 'true']
+
     stations_url = StationViewSet().menu_url
 
     breadcrumbs_items = [
@@ -284,13 +315,17 @@ def import_oscar_station(request, wigos_id):
             context.update({"form": form})
             return render(request, template_name=template_name, context=context)
     else:
-        iso = country.alpha3
 
-        oscar_stations = cache.get(f"{iso}_oscar_stations_dict")
-        if not oscar_stations:
-            oscar_stations = get_stations_for_country(country, as_dict=True)
-            # cache for 20 minutes
-            cache.set(f"{iso}_oscar_stations_dict", oscar_stations, timeout=60 * 20)
+        if use_local_copy:
+            oscar_stations = get_stations_for_country_local(as_dict=True)
+        else:
+            iso = country.alpha3
+
+            oscar_stations = cache.get(f"{iso}_oscar_stations_dict")
+            if not oscar_stations:
+                oscar_stations = get_stations_for_country_live(country, as_dict=True)
+                # cache for 20 minutes
+                cache.set(f"{iso}_oscar_stations_dict", oscar_stations, timeout=60 * 20)
 
         station = oscar_stations.get(wigos_id)
 

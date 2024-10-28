@@ -21,7 +21,7 @@ wis2box_adl_register_plugin_menu_items_hook_name = "register_wis2box_adl_plugin_
 @hooks.register('register_admin_urls')
 def urlconf_wis2box_adl():
     return [
-        path('wis2box-adl/load-stations-csv/', load_stations_csv, name='load_stations_csv'),
+        path('wis2box-adl/load-stations-oscar-csv/', load_stations_csv, name='load_stations_oscar_csv'),
         path('wis2box-adl/stations-template/', download_stations_csv_template, name='download_stations_csv_template'),
         path('wis2box-adl/load-stations-oscar/', load_stations_oscar, name='load_stations_oscar'),
         path('wis2box-adl/import-oscar-station/<str:wigos_id>', import_oscar_station, name='import_oscar_station'),
@@ -48,16 +48,11 @@ class StationIndexView(IndexView):
 
         buttons.extend([
             HeaderButton(
-                label=_('Load Stations from CSV'),
-                url=reverse("load_stations_csv"),
-                icon_name="plus",
-            ),
-            HeaderButton(
                 label=_('Load Stations from OSCAR Surface'),
                 url=reverse("load_stations_oscar"),
                 icon_name="plus",
-            )]
-        )
+            ),
+        ])
 
         return buttons
 

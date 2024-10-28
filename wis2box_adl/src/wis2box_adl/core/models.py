@@ -373,6 +373,19 @@ class AdlSettings(ClusterableModel, BaseSiteSetting):
         verbose_name_plural = _("WIS2Box ADL Settings")
 
 
+@register_snippet
+class OscarSurfaceStationLocal(models.Model):
+    name = models.CharField(max_length=255, verbose_name=_("Name"), help_text=_("Name of the station"))
+    wigos_id = models.CharField(max_length=255, verbose_name=_("WIGOS ID"), help_text=_("WIGOS ID of the station"),
+                                unique=True)
+    latitude = models.FloatField(verbose_name=_("Latitude"), help_text=_("Latitude of the station"))
+    longitude = models.FloatField(verbose_name=_("Longitude"), help_text=_("Longitude of the station"))
+    elevation = models.FloatField(verbose_name=_("Elevation"), help_text=_("Elevation of the station"))
+
+    def __str__(self):
+        return self.wigos_id
+
+
 @receiver(post_save, sender=Network)
 def update_network_plugin_periodic_task(sender, instance, **kwargs):
     from wis2box_adl.core.tasks import create_or_update_network_plugin_periodic_tasks
