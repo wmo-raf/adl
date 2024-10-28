@@ -63,6 +63,7 @@ INSTALLED_APPS = [
     "taggit",
     "django_cleanup.apps.CleanupConfig",
     "wagtailfontawesomesvg",
+    "wagtailgeowidget",
 
     "django.contrib.admin",
     "django.contrib.auth",
@@ -213,6 +214,10 @@ WAGTAILADMIN_BASE_URL = "http://example.com"
 # if untrusted users are allowed to upload files -
 # see https://docs.wagtail.org/en/stable/advanced_topics/deploying.html#user-uploaded-files
 WAGTAILDOCS_EXTENSIONS = ['csv', 'docx', 'key', 'odt', 'pdf', 'pptx', 'rtf', 'txt', 'xlsx', 'zip']
+
+# Wagtail Geowidget settings
+GEO_WIDGET_DEFAULT_LOCATION = {'lat': 0, 'lng': 0}
+GEO_WIDGET_ZOOM = 3
 
 REDIS_HOST = env.str("REDIS_HOST", "redis")
 REDIS_PORT = env.str("REDIS_PORT", "6379")

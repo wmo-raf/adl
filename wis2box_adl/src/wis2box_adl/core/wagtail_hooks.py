@@ -6,7 +6,7 @@ from wagtail.admin.widgets import HeaderButton
 from wagtail.snippets.models import register_snippet
 from wagtail.snippets.views.snippets import SnippetViewSet, SnippetViewSetGroup, IndexView
 
-from .home import NetworksSummaryItem, StationsSummaryItem, PluginsSummaryItem, PluginMonitoringPanel
+from .home import NetworksSummaryItem, StationsSummaryItem, PluginsSummaryItem
 from .models import Network, Station, DataParameter
 from .views import (
     load_stations_csv,

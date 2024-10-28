@@ -17,6 +17,7 @@ from wagtail.admin.panels import MultiFieldPanel
 from wagtail.contrib.settings.models import BaseSiteSetting
 from wagtail.contrib.settings.registry import register_setting
 from wagtail.snippets.models import register_snippet
+from wagtailgeowidget.panels import LeafletPanel
 
 from .constants import DATA_PARAMETERS_DICT, PRECIPITAION_PARAMETERS
 from .units import TEMPERATURE_UNITS, units
@@ -196,7 +197,7 @@ class Station(models.Model):
         FieldPanel("name"),
         FieldPanel("network"),
         FieldPanel("station_type"),
-        FieldPanel("location"),
+        LeafletPanel("location"),
     ]
 
     identification_panels = [
