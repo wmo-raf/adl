@@ -314,7 +314,7 @@ selecting from the `Plugin` dropdown. This will be a list of plugins that have b
 - **WIS2Box Hourly Aggregation Method**: This is the method that will be used to aggregate data into an hourly
   interval. Currently, the method `Latest in the Hour` is implemented. This method will take the latest data point in
   the
-  hour and use it as the hourly data point. Other methods like `averaging` can be implemented on the future.
+  hour and use it as the hourly data point. Other methods like `averaging` can be implemented in the future.
 
 - **UnUploaded Records Check Interval in Minutes**: This is the interval in minutes that the plugin should check for
   records, that for some reason (like the wis2box node being down), were not uploaded to the WIS2Box node. This is to
@@ -350,10 +350,13 @@ You will be required to fill in the station details, WIGOS information, and stat
 
 #### Importing from WMO OSCAR Surface
 
-You can import stations from the WMO OSCAR Surface database by clicking on the `Station` link on the left sidebar and
-then clicking on the `Load Stations from OSCAR Surface` button.
+The quickest way to load stations is by importing from the [WMO OSCAR Surface](https://oscar.wmo.int/surface/#/)
+database.
 
-This will load stations from the OSCAR Surface database and you can select the stations to add to the network.
+You can do so by clicking on the `Stations` link on the left sidebar and then clicking on
+the `Load Stations from OSCAR Surface` button.
+
+This will load stations from the OSCAR Surface database, and you can select the stations to add to the network.
 
 ![Load Stations from OSCAR Surface](docs/_static/images/user/oscar_stations_list.png)
 
