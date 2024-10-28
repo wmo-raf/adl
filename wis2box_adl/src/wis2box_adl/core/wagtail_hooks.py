@@ -125,3 +125,16 @@ def register_icons(icons):
         'wagtailfontawesomesvg/solid/location-dot.svg',
         'wagtailfontawesomesvg/solid/plug.svg',
     ]
+
+
+@hooks.register('construct_reports_menu')
+def hide_some_report_menu_items(request, menu_items):
+    visible_items = ['site-history']
+    menu_items[:] = [item for item in menu_items if item.name in visible_items]
+
+
+@hooks.register('construct_settings_menu')
+def hide_some_setting_menu_items(request, menu_items):
+    hidden_items = ['workflows', 'workflow-tasks', 'collections', 'redirects']
+
+    menu_items[:] = [item for item in menu_items if item.name not in hidden_items]
