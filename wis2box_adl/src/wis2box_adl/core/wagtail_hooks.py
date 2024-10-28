@@ -102,10 +102,10 @@ def hide_some_menus(request, menu_items):
     menu_items[:] = [item for item in menu_items if item.name not in hidden_menus]
 
 
-@hooks.register('construct_homepage_panels')
-def add_plugin_monitoring_panel(request, panels):
-    plugin_monitoring_panel = PluginMonitoringPanel()
-    panels.append(plugin_monitoring_panel)
+# @hooks.register('construct_homepage_panels')
+# def add_plugin_monitoring_panel(request, panels):
+#     plugin_monitoring_panel = PluginMonitoringPanel()
+#     panels.append(plugin_monitoring_panel)
 
 
 @hooks.register('construct_homepage_summary_items')
