@@ -275,17 +275,25 @@ plugins to get inspiration from.
 A Wis2box ADL Plugin is fundamentally a folder named after the plugin. The folder should be
 a [Django/Wagtail App](https://docs.djangoproject.com/en/5.1/ref/applications/)
 
-#### Initialize your plugin from the plugin boilerplate
+#### Initialize your plugin from the plugin template
 
-With the plugin boilerplate you can easily create a new plugin and setup a docker development environment that installs
-wis2box-adl as a dependency. This can easily be installed via cookiecutter.
+The plugin template is a [cookiecutter](https://cookiecutter.readthedocs.io/en/stable/installation.html) template that
+generates a plugin with the required structure and files. This ensures that the plugin follows the expected structure
+and can be easily installed into the wis2box-adl core application.
 
+To instantiate the template, execute the following commands from the directory where you want to create the plugin:
 
+```sh
+pip install cookiecutter
+cookiecutter gh:wmo-raf/wis2box-adl --directory plugin-boilerplate
+```
 
+For more details on using the plugin boilerplate, you can follow the [step-by-step guide](#plugin-boilerplate) on
+creating a plugin using the plugin boilerplate.
 
 #### Plugin Installation API
 
-A built wis2box-adl docker image contains the following bash scripts that are used to install plugins. They can be used
+A wis2box-adl docker image contains the following bash scripts that are used to install plugins. They can be used
 to install a plugin into an existing wis2box-adl container at runtime. `install_plugin.sh` can be used to install a
 plugin from an url, a git repo or a local folder on the filesystem.
 
@@ -360,17 +368,48 @@ For example a conforming git repo should contain something like:
 |  |  |  ├── src/plugin_name/src/config/settings/settings.py (Optional Django setting file)
 ```
 
+#### Plugin Boilerplate
 
+With the plugin boilerplate you can easily create a new plugin and setup a docker development environment that installs
+wis2box-adl as a dependency. This can easily be installed via cookiecutter.
 
+##### Creating a plugin
 
+To use the plugin boilerplate you must first install
+the [Cookiecutter](https://cookiecutter.readthedocs.io/en/stable/installation.html) tool (`pip install cookiecutter`).
 
+Once you have installed Cookiecutter you can execute the following command to create a new ADL plugin from our
+template. In this guide we will name our plugin “My WIS2Box ADL Plugin”, however you can choose your own plugin name
+when prompted to by Cookiecutter.
 
+> The python module depends on your chosen plugin name. If we for example go with “My WIS2Box ADL Plugin” the Django app
+> name should be my_wis2box_adl_plugin
 
+```sh
+cookiecutter gh:wmo-raf/wis2box-adl --directory plugin-boilerplate
+project_name [My WIS2Box ADL Plugin]: 
+project_slug [my-wis2box-adl-plugin]: 
+project_module [my_wis2box_adl_plugin]:
+```
 
+If you do not see any errors it means that your plugin has been created.
 
+##### Starting the development environment
 
+Now to start your development environment please run the following commands:
 
-
-
-
-
+```sh
+cd my-wis2box-adl-plugin
+# Enable Docker buildkit
+export COMPOSE_DOCKER_CLI_BUILD=1
+export DOCKER_BUILDKIT=1
+# Set these variables so the images are built and run with the same uid/gid as your 
+# user. This prevents permission issues when mounting your local source into
+# the images.
+export PLUGIN_BUILD_UID=$(id -u)
+export PLUGIN_BUILD_GID=$(id -g)
+# You can optionally `export COMPOSE_FILE=docker-compose.dev.yml` so you don't need to 
+# use the `-f docker-compose.dev.yml` flag each time.
+docker-compose -f docker-compose.dev.yml up -d --build
+docker-compose -f docker-compose.dev.yml logs -f
+```
