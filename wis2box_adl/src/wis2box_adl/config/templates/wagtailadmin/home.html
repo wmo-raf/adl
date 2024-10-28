@@ -1,0 +1,11 @@
+{% extends "wagtailadmin/home.html" %}
+{% load i18n wagtailsettings_tags adl_tags %}
+
+{% block branding_welcome %}
+    {% trans "Welcome to" %}
+    {% if 'WAGTAIL_SITE_NAME'|django_settings %}
+        {{ 'WAGTAIL_SITE_NAME'|django_settings }}
+    {% else %}
+        {% trans "WIS2Box ADL" %}
+    {% endif %}
+{% endblock %}

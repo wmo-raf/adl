@@ -1,0 +1,19 @@
+{% extends "wagtailadmin/login.html" %}
+{% load static adl_tags %}
+
+{% block branding_login %}
+    {% if 'WAGTAIL_SITE_NAME'|django_settings %}
+        Sign in to {{ 'WAGTAIL_SITE_NAME'|django_settings }}
+    {% else %}
+        Sign in
+    {% endif %}
+{% endblock %}
+
+{% block branding_logo %}
+    <div class="login-logo">
+        <figure style="max-height: 70px;max-width: 70px;">
+            <img src="{% static 'images/adl_black.png' %}" alt="ADL Logo"
+                 style="height: 100%;width: 100%;object-fit: contain"/>
+        </figure>
+    </div>
+{% endblock %}
