@@ -265,6 +265,101 @@ docker-compose stop
 docker-compose up -d --force-recreate
 ```
 
+## User Guide
+
+### 1. Access the Admin Interface
+
+The admin interface can be accessed at `http://<ip_or_domain>:<WIS2BOX_ADL_WEB_PROXY_PORT>`.
+
+Replace `<ip_or_domain>` with the IP address or domain name of the machine where the application is running and
+`<WIS2BOX_ADL_WEB_PROXY_PORT>` with the port number as set in the `.env` file.
+
+For example, if the IP address of the machine is set as `127.0.0.1` and the port as `8000`, you can access the admin
+through `http://127.0.0.1:8000`. If the port is set as `80`, you can access the admin directly
+through `http://127.0.0.1`.
+
+Below is how the admin interface will look when first accessed.
+
+![Admin Dashboard](docs/_static/images/user/dashboard.png)
+
+### 2. Create a Network
+
+A network is a representation of a given AWS vendor type and its stations, or a collection of manual stations.
+
+You can add a network by clicking on the `Networks` link on the left sidebar and then clicking on the `Add Network`
+
+![Add Network](docs/_static/images/user/add_network.png)
+
+Fill in the details for the network and click on the `Save` button.
+
+![Network Details](docs/_static/images/user/add_network_form.png)
+
+A network must be associated with a plugin to make it useful. You can select the plugin to associate with the network by
+selecting from the `Plugin` dropdown. This will be a list of plugins that have been installed.
+
+### 3. Add Stations to a Network
+
+After creating a network, you can add stations to the network. Stations are the actual AWS stations or manual stations.
+
+![Load Stations from OSCAR Surface](docs/_static/images/user/stations_loading_options.png)
+
+There are two ways to add stations to a network as shown in the image above:
+
+#### Manual Entry
+
+You can manually add stations to a network by clicking on the `Stations` link on the left sidebar
+and then clicking on the `Add Station` button.
+
+You will be required to fill in the station details, WIGOS information, and station metadata.
+
+**Station Base Info**
+![Add Station Base Info](docs/_static/images/user/add_station_manually_base_info.png)
+
+**Station WIGOS Info**
+![Add Station WIGOS Info](docs/_static/images/user/add_station_manually_wigos_info.png)
+
+**Station Metadata**
+![Add Station Medata](docs/_static/images/user/add_station_manually_metadata.png)
+
+#### Importing from WMO OSCAR Surface
+
+You can import stations from the WMO OSCAR Surface database by clicking on the `Station` link on the left sidebar and
+then clicking on the `Load Stations from OSCAR Surface` button.
+
+This will load stations from the OSCAR Surface database and you can select the stations to add to the network.
+
+![Load Stations from OSCAR Surface](docs/_static/images/user/oscar_stations_list.png)
+
+##### Using a local CSV Copy of stations data downloaded from OSCAR Surface
+
+If you face network issues when connecting to the WMO OSCAR Surface API, you can import a pre-downloaded CSV file of
+stations data for your country. The data should be downloaded from the
+official [WMO OSCAR Surface](https://oscar.wmo.int/surface) website.
+
+![Load Stations from OSCAR Surface CSV](docs/_static/images/user/load_stations_from_local_csv_button.png)
+
+This will open a form where you can upload the CSV file. The CSV file should be in the structure as downloaded from WMO
+OSCAR Surface.
+
+![Load Stations from OSCAR Surface CSV Form](docs/_static/images/user/upload_local_oscar_csv.png)
+
+If the CSV file is successfully uploaded, you will be redirected to a page where you can select the stations to import.
+
+![OSCAR Surface Local CSV Stations List](docs/_static/images/user/oscar_stations_local_list.png)
+
+Irrespective of the method used to load stations from OSCAR Surface database, the importing process of the loaded
+stations into the system will be the same.
+
+![OSCAR Surface Stations Import](docs/_static/images/user/import_oscar_station.png)
+
+After clicking on the `Import Station` button, a form with the station to import will be displayed. Here you will be
+required to set the `Staton ID` and assign the station to a network and select if the station is an AWS station or
+manual.
+
+![OSCAR Surface Stations Import Form](docs/_static/images/user/import_oscar_station_form.png)
+
+Then click on the `Import` button to import the station.
+
 ## Developing Plugins
 
 In this guide we dive into how to create a wis2box-adl plugin, discuss the plugin architecture and give you sample
