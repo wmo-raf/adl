@@ -299,24 +299,28 @@ selecting from the `Plugin` dropdown. This will be a list of plugins that have b
 
 #### The following fields control how the plugin will be processing data:
 
-**Plugin Auto Processing Enabled**: This is a boolean field that determines if the plugin is active and should be
-ingesting data
+- **Plugin Auto Processing Enabled**: This is a boolean field that determines if the plugin is active and should be
+  ingesting data
 
-**Plugin Auto Processing Interval**: This is the interval in minutes that the plugin should check for new data to ingest
+- **Plugin Auto Processing Interval**: This is the interval in minutes that the plugin should check for new data to
+  ingest
 
-**Enable WIS2Box Hourly Aggregation**: This is a boolean field that determines if the plugin should aggregate data that
-is ingested into a wis2box node on an hourly basis. This is in-support of the `GBON` requirement that requires data to
-be transmitted to the WIS2.0 system in an hourly intervals. If this is enabled, the plugin will aggregate data pushed
-into wis2box node into an hourly interval depending on the selected method.
+- **Enable WIS2Box Hourly Aggregation**: This is a boolean field that determines if the plugin should aggregate data
+  that
+  is ingested into a wis2box node on an hourly basis. This is in-support of the `GBON` requirement that requires data to
+  be transmitted to the WIS2.0 system in an hourly intervals. If this is enabled, the plugin will aggregate data pushed
+  into wis2box node into an hourly interval depending on the selected method.
 
-**WIS2Box Hourly Aggregation Method**: This is the method that will be used to aggregate data into an hourly
-interval. Currently, the method `Latest in the Hour` is implemented. This method will take the latest data point in the
-hour and use it as the hourly data point. Other methods like `averaging` can be implemented on the future.
+- **WIS2Box Hourly Aggregation Method**: This is the method that will be used to aggregate data into an hourly
+  interval. Currently, the method `Latest in the Hour` is implemented. This method will take the latest data point in
+  the
+  hour and use it as the hourly data point. Other methods like `averaging` can be implemented on the future.
 
-**UnUploaded Records Check Interval in Minutes**: This is the interval in minutes that the plugin should check for
-records, that for some reason (like the wis2box node being down), were not uploaded to the WIS2Box node. This is to
-ensure that all that was collected is pushed to wis2box. This also ensures that hourly aggregation data is ingested into
-wis2box.
+- **UnUploaded Records Check Interval in Minutes**: This is the interval in minutes that the plugin should check for
+  records, that for some reason (like the wis2box node being down), were not uploaded to the WIS2Box node. This is to
+  ensure that all that was collected is pushed to wis2box. This also ensures that hourly aggregation data is ingested
+  into
+  wis2box.
 
 ### 3. Add Stations to a Network
 
