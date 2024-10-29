@@ -38,6 +38,7 @@ services:
       - .env
     environment:
       <<: *adl-variables
+      WAIT_HOSTS: adl_db:5432,adl_redis:6379
     depends_on:
       - adl_db
       - adl_redis
