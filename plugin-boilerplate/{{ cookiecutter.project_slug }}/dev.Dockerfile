@@ -16,11 +16,11 @@ COPY --from=base --chown=$PLUGIN_BUILD_UID:$PLUGIN_BUILD_GID /wis2box_adl /wis2b
 RUN usermod -u $PLUGIN_BUILD_UID $DOCKER_USER
 
 # Install your dev dependencies manually.
-COPY --chown=$PLUGIN_BUILD_UID:$PLUGIN_BUILD_GID ./plugins/adl_siapmicros_plugin/requirements/dev.txt /tmp/plugin-dev-requirements.txt
+COPY --chown=$PLUGIN_BUILD_UID:$PLUGIN_BUILD_GID ./plugins/{{ cookiecutter.project_module }}/requirements/dev.txt /tmp/plugin-dev-requirements.txt
 RUN . /wis2box_adl/venv/bin/activate && pip3 install -r /tmp/plugin-dev-requirements.txt
 
-COPY --chown=$PLUGIN_BUILD_UID:$PLUGIN_BUILD_GID ./plugins/adl_siapmicros_plugin/ $WIS2BOX_ADL_PLUGIN_DIR/adl_siapmicros_plugin/
-RUN . /wis2box_adl/venv/bin/activate && /wis2box_adl/plugins/install_plugin.sh --folder $WIS2BOX_ADL_PLUGIN_DIR/adl_siapmicros_plugin --dev
+COPY --chown=$PLUGIN_BUILD_UID:$PLUGIN_BUILD_GID ./plugins/{{ cookiecutter.project_module }}/ $WIS2BOX_ADL_PLUGIN_DIR/{{ cookiecutter.project_module }}/
+RUN . /wis2box_adl/venv/bin/activate && /wis2box_adl/plugins/install_plugin.sh --folder $WIS2BOX_ADL_PLUGIN_DIR/{{ cookiecutter.project_module }} --dev
 
 USER $PLUGIN_BUILD_UID:$PLUGIN_BUILD_GID
 ENV DJANGO_SETTINGS_MODULE='wis2box_adl.config.settings.dev'

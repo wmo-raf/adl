@@ -25,7 +25,7 @@ services:
     image: redis:alpine
 
   adl:
-    image: adl-siapmicros-plugin_dev
+    image: {{ cookiecutter.project_slug }}_dev
     build:
       context: .
       dockerfile: ./dev.Dockerfile
@@ -33,7 +33,7 @@ services:
         - PLUGIN_BUILD_UID=${PLUGIN_BUILD_UID}
         - PLUGIN_BUILD_GID=${PLUGIN_BUILD_GID}
     ports:
-      - "8000:8000"
+      - "8000"
     env_file:
       - .env
     environment:
@@ -44,13 +44,13 @@ services:
     volumes:
       - static:/wis2box_adl/app/src/wis2box_adl/static
       - media:/wis2box_adl/app/src/wis2box_adl/media
-      - ./plugins/adl_siapmicros_plugin:/wis2box_adl/plugins/adl_siapmicros_plugin
+      - ./plugins/{{ cookiecutter.project_module }}:/wis2box_adl/plugins/{{ cookiecutter.project_module }}
     # Open stdin and tty so when attaching key input works as expected.
     stdin_open: true
     tty: true
 
   adl_celery_worker:
-    image: adl-siapmicros-plugin_dev
+    image: {{ cookiecutter.project_slug }}_dev
     command: celery-worker
     env_file:
       - .env
@@ -62,13 +62,13 @@ services:
     volumes:
       - static:/wis2box_adl/app/src/wis2box_adl/static
       - media:/wis2box_adl/app/src/wis2box_adl/media
-      - ./plugins/adl_siapmicros_plugin:/wis2box_adl/plugins/adl_siapmicros_plugin
+      - ./plugins/{{ cookiecutter.project_module }}:/wis2box_adl/plugins/{{ cookiecutter.project_module }}
     # Open stdin and tty so when attaching key input works as expected.
     stdin_open: true
     tty: true
 
   adl_celery_beat:
-    image: adl-siapmicros-plugin_dev
+    image: {{ cookiecutter.project_slug }}_dev
     command: celery-beat
     env_file:
       - .env
@@ -80,19 +80,21 @@ services:
     volumes:
       - static:/wis2box_adl/app/src/wis2box_adl/static
       - media:/wis2box_adl/app/src/wis2box_adl/media
-      - ./plugins/adl_siapmicros_plugin:/wis2box_adl/plugins/adl_siapmicros_plugin
+      - ./plugins/{{ cookiecutter.project_module }}:/wis2box_adl/plugins/{{ cookiecutter.project_module }}
     # Open stdin and tty so when attaching key input works as expected.
     stdin_open: true
     tty: true
 
   adl_web_proxy:
     image: nginx:1.20.2-alpine
+    env_file:
+      - .env
     volumes:
       - static:/wagtail_static
       - media:/wagtail_media
       - $PWD/nginx.conf:/etc/nginx/nginx.conf
     ports:
-      - 80:80
+      - ${WIS2BOX_ADL_WEB_PROXY_PORT:-80}:80
 
 volumes:
   pgdata:

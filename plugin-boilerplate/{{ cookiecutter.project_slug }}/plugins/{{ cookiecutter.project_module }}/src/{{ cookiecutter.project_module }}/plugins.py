@@ -7,3 +7,6 @@ class PluginNamePlugin(Plugin):
 
     def get_urls(self):
         return []
+
+    def get_data(self):
+        return []
