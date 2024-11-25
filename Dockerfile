@@ -54,6 +54,7 @@ RUN python3 -m venv /wis2box_adl/venv
 ENV PIP_CACHE_DIR=/tmp/wis2box_adl_pip_cache
 RUN --mount=type=cache,mode=777,target=$PIP_CACHE_DIR,uid=$UID,gid=$GID . /wis2box_adl/venv/bin/activate && pip3 install  -r /wis2box_adl/requirements.txt
 
+# Copy over code
 COPY --chown=$UID:$GID ./wis2box_adl /wis2box_adl/app
 
 WORKDIR /wis2box_adl/app/src/wis2box_adl
