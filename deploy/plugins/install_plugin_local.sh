@@ -119,13 +119,13 @@ if [[ -n "$url" ]]; then
 fi
 # copy the plugin at the folder location into the plugin dir if it has not been already.
 plugin_name="$(basename -- "$folder")"
-plugin_install_dir="$WIS2BOX_ADL_PLUGIN_DIR/$plugin_name"
+plugin_install_dir="$ADL_PLUGIN_DIR/$plugin_name"
 if [[ ! "$folder" -ef "$plugin_install_dir" ]]; then
   log "Copying plugin $plugin_name into plugins folder at $plugin_install_dir."
-  mkdir -p "$WIS2BOX_ADL_PLUGIN_DIR"
+  mkdir -p "$ADL_PLUGIN_DIR"
   rm -rf "$plugin_install_dir"
   cp -r "$folder" "$plugin_install_dir"
-  folder="$WIS2BOX_ADL_PLUGIN_DIR/$plugin_name"
+  folder="$ADL_PLUGIN_DIR/$plugin_name"
 fi
 
 # Now we've copied the plugin into the plugin dir we can delete the tmp download dir

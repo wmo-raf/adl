@@ -1,0 +1,120 @@
+import json
+import logging
+
+from celery.signals import worker_ready
+from celery_singleton import Singleton, clear_locks
+from django_celery_beat.models import PeriodicTask, IntervalSchedule
+
+from adl.config.celery import app
+from .models import Network
+from .utils import get_object_or_none
+
+logger = logging.getLogger(__name__)
+
+
+@app.task(
+    base=Singleton,
+    bind=True
+)
+def run_network_plugin(self, network_id):
+    from adl.core.registries import plugin_registry
+    network = get_object_or_none(Network, id=network_id)
+    
+    if not network:
+        logger.error(f"Network with id {network_id} does not exist. Skipping...")
+        return
+    
+    network_plugin_type = network.plugin
+    plugin = plugin_registry.get(network_plugin_type)
+    
+    if plugin:
+        plugin_processing_enabled = network.plugin_processing_enabled
+        
+        if not plugin_processing_enabled:
+            logger.info(f"Network plugin processing is disabled for network {network.name}.Skipping...")
+            return
+        
+        logger.info(f"Starting plugin processing '{plugin}' for network {network.name}...")
+        plugin.run_process(network)
+
+
+@app.task(
+    base=Singleton,
+    bind=True
+)
+def check_plugin_unploaded_records(self, network_id):
+    from adl.core.registries import plugin_registry
+    network = get_object_or_none(Network, id=network_id)
+    
+    if not network:
+        logger.error(f"Network with id {network_id} does not exist. Skipping...")
+        return
+    
+    network_plugin_type = network.plugin
+    plugin = plugin_registry.get(network_plugin_type)
+    
+    if plugin:
+        plugin_processing_enabled = network.plugin_processing_enabled
+        
+        if not plugin_processing_enabled:
+            logger.info(f"Network plugin processing is disabled for network {network.name}.Skipping...")
+            return
+        
+        logger.info(f"Starting unploaded records check for '{plugin}' for network {network.name}...")
+        plugin.check_unploaded_records(network)
+
+
+@app.on_after_finalize.connect
+def setup_network_plugin_processing_tasks(sender, **kwargs):
+    networks = Network.objects.filter(plugin__isnull=False)
+    
+    for network in networks:
+        create_or_update_network_plugin_periodic_tasks(network)
+
+
+@worker_ready.connect
+def unlock_all(**kwargs):
+    clear_locks(app)
+
+
+def create_or_update_network_plugin_periodic_tasks(network):
+    # interval = network.plugin_processing_interval
+    # enabled = network.plugin_processing_enabled
+    
+    sig = run_network_plugin.s(network.id)
+    name = repr(sig)
+    
+    # schedule, created = IntervalSchedule.objects.get_or_create(
+    #     every=interval,
+    #     period=IntervalSchedule.MINUTES,
+    # )
+    
+    # PeriodicTask.objects.update_or_create(
+    #     name=name,
+    #     defaults={
+    #         'interval': schedule,
+    #         'task': sig.name,
+    #         'args': json.dumps([network.id]),
+    #         'enabled': enabled,
+    #     }
+    # )
+    
+    sig = check_plugin_unploaded_records.s(network.id)
+    name = repr(sig)
+    
+    # unuploaded_check_interval = network.plugin_unuploaded_check_interval
+    #
+    # schedule, created = IntervalSchedule.objects.get_or_create(
+    #     every=unuploaded_check_interval,
+    #     period=IntervalSchedule.MINUTES,
+    # )
+    #
+    # PeriodicTask.objects.update_or_create(
+    #     name=name,
+    #     defaults={
+    #         'interval': schedule,
+    #         'task': sig.name,
+    #         'args': json.dumps([network.id]),
+    #         'enabled': enabled,
+    #     }
+    # )

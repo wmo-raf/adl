@@ -1,6 +1,6 @@
 from django.apps import AppConfig
 
-from wis2box_adl.core.registries import plugin_registry
+from adl.core.registries import plugin_registry
 
 
 class PluginNameConfig(AppConfig):

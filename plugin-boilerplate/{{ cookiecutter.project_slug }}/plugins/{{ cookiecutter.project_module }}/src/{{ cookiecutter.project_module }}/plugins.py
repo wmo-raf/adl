@@ -1,4 +1,4 @@
-from wis2box_adl.core.registries import Plugin
+from adl.core.registries import Plugin
 
 
 class PluginNamePlugin(Plugin):

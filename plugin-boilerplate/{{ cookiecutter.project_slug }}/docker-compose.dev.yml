@@ -4,7 +4,7 @@
 # It is accessible at http://localhost .
 
 x-adl-variables: &adl-variables
-  DATABASE_URL: postgis://${WIS2BOX_ADL_DB_USER:-adl}:${WIS2BOX_ADL_DB_PASSWORD}@adl_db:5432/${WIS2BOX_ADL_DB_NAME:-adl}
+  DATABASE_URL: postgis://${ADL_DB_USER:-adl}:${ADL_DB_PASSWORD}@adl_db:5432/${ADL_DB_NAME:-adl}
   REDIS_URL: redis://adl_redis:6379/0
 
 services:
@@ -13,9 +13,9 @@ services:
     env_file:
       - .env
     environment:
-      - POSTGRES_USER=${WIS2BOX_ADL_DB_USER:-adl}
-      - POSTGRES_DB=${WIS2BOX_ADL_DB_NAME:-adl}
-      - POSTGRES_PASSWORD=${WIS2BOX_ADL_DB_PASSWORD:-?}
+      - POSTGRES_USER=${ADL_DB_USER:-adl}
+      - POSTGRES_DB=${ADL_DB_NAME:-adl}
+      - POSTGRES_PASSWORD=${ADL_DB_PASSWORD:-?}
     ports:
       - "5432"
     volumes:
@@ -43,9 +43,9 @@ services:
       - adl_db
       - adl_redis
     volumes:
-      - static:/wis2box_adl/app/src/wis2box_adl/static
-      - media:/wis2box_adl/app/src/wis2box_adl/media
-      - ./plugins/{{ cookiecutter.project_module }}:/wis2box_adl/plugins/{{ cookiecutter.project_module }}
+      - static:/adl/app/src/adl/static
+      - media:/adl/app/src/adl/media
+      - ./plugins/{{ cookiecutter.project_module }}:/adl/plugins/{{ cookiecutter.project_module }}
     # Open stdin and tty so when attaching key input works as expected.
     stdin_open: true
     tty: true
@@ -61,9 +61,9 @@ services:
     depends_on:
       - adl
     volumes:
-      - static:/wis2box_adl/app/src/wis2box_adl/static
-      - media:/wis2box_adl/app/src/wis2box_adl/media
-      - ./plugins/{{ cookiecutter.project_module }}:/wis2box_adl/plugins/{{ cookiecutter.project_module }}
+      - static:/adl/app/src/adl/static
+      - media:/adl/app/src/adl/media
+      - ./plugins/{{ cookiecutter.project_module }}:/adl/plugins/{{ cookiecutter.project_module }}
     # Open stdin and tty so when attaching key input works as expected.
     stdin_open: true
     tty: true
@@ -79,9 +79,9 @@ services:
     depends_on:
       - adl
     volumes:
-      - static:/wis2box_adl/app/src/wis2box_adl/static
-      - media:/wis2box_adl/app/src/wis2box_adl/media
-      - ./plugins/{{ cookiecutter.project_module }}:/wis2box_adl/plugins/{{ cookiecutter.project_module }}
+      - static:/adl/app/src/adl/static
+      - media:/adl/app/src/adl/media
+      - ./plugins/{{ cookiecutter.project_module }}:/adl/plugins/{{ cookiecutter.project_module }}
     # Open stdin and tty so when attaching key input works as expected.
     stdin_open: true
     tty: true
@@ -95,7 +95,7 @@ services:
       - media:/wagtail_media
       - $PWD/nginx.conf:/etc/nginx/nginx.conf
     ports:
-      - ${WIS2BOX_ADL_WEB_PROXY_PORT:-80}:80
+      - ${ADL_WEB_PROXY_PORT:-80}:80
 
 volumes:
   pgdata:

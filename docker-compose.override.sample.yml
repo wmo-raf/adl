@@ -2,18 +2,18 @@ x-backend-variables: &backend-variables
   ENV_KEY: value
 
 services:
-  wis2box_adl:
+  adl:
     environment:
       <<: *backend-variables
     extra_hosts:
       - "host.docker.internal:host-gateway"
-  wis2box_adl_celery_worker:
+  adl_celery_worker:
     environment:
       <<: *backend-variables
     extra_hosts:
       - "host.docker.internal:host-gateway"
 
-  wis2box_adl_celery_beat:
+  adl_celery_beat:
     environment:
       <<: *backend-variables
     extra_hosts:

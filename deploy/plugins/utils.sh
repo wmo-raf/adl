@@ -32,7 +32,7 @@ BOLD="$(safe_tput bold)"
 
 NC=$(safe_tput sgr0) # No Color
 
-WIS2BOX_ADL_PLUGIN_DIR=${WIS2BOX_ADL_PLUGIN_DIR:-/wis2box_adl/plugins}
+ADL_PLUGIN_DIR=${ADL_PLUGIN_DIR:-/adl/plugins}
 
 simple_log(){
   echo -e "${BLUE}[PLUGIN] $*${NC}"
@@ -49,36 +49,36 @@ error(){
 
 
 startup_plugin_setup(){
-  if [[ -z "${WIS2BOX_ADL_PLUGIN_SETUP_ALREADY_RUN:-}" ]]; then
-    if [[ -z "${WIS2BOX_ADL_DISABLE_PLUGIN_INSTALL_ON_STARTUP:-}" ]]; then
+  if [[ -z "${ADL_PLUGIN_SETUP_ALREADY_RUN:-}" ]]; then
+    if [[ -z "${ADL_DISABLE_PLUGIN_INSTALL_ON_STARTUP:-}" ]]; then
       # Make sure any plugins found in the data dir are installed in this container if not
       # already.
-      for plugin_dir in "$WIS2BOX_ADL_PLUGIN_DIR"/*/; do
+      for plugin_dir in "$ADL_PLUGIN_DIR"/*/; do
         log "Found a plugin in $plugin_dir, ensuring it is installed..."
         if [[ -d "$plugin_dir" ]]; then
-          /wis2box_adl/plugins/install_plugin.sh --runtime --folder "$plugin_dir"
+          /adl/plugins/install_plugin.sh --runtime --folder "$plugin_dir"
         fi
       done
 
       # Make sure any plugins configured via the environment variable are installed.
-      for url in $(echo "${WIS2BOX_ADL_PLUGIN_URLS:-}" | tr "," "\n")
+      for url in $(echo "${ADL_PLUGIN_URLS:-}" | tr "," "\n")
       do
         log "Downloading and installing the plugin found at $url"
-        /wis2box_adl/plugins/install_plugin.sh --runtime --url "$url"
+        /adl/plugins/install_plugin.sh --runtime --url "$url"
       done
 
-      for repo in $(echo "${WIS2BOX_ADL_PLUGIN_GIT_REPOS:-}" | tr "," "\n")
+      for repo in $(echo "${ADL_PLUGIN_GIT_REPOS:-}" | tr "," "\n")
       do
         log "Downloading and installing the plugin found at $repo"
-        /wis2box_adl/plugins/install_plugin.sh --runtime --git "$repo"
+        /adl/plugins/install_plugin.sh --runtime --git "$repo"
       done
 
       # Ensure we don't run this function multiple times in the same shell.
-      export WIS2BOX_ADL_PLUGIN_SETUP_ALREADY_RUN="yes"
+      export ADL_PLUGIN_SETUP_ALREADY_RUN="yes"
     else
-      log "Not installing any plugins found in WIS2BOX_ADL_PLUGIN_DIR or set in the
-      WIS2BOX_ADL_PLUGIN_URLS or WIS2BOX_ADL_PLUGIN_GIT_REPOS env variables as
-      WIS2BOX_ADL_DISABLE_PLUGIN_INSTALL_ON_STARTUP is set."
+      log "Not installing any plugins found in ADL_PLUGIN_DIR or set in the
+      ADL_PLUGIN_URLS or ADL_PLUGIN_GIT_REPOS env variables as
+      ADL_DISABLE_PLUGIN_INSTALL_ON_STARTUP is set."
     fi
   fi
 }
