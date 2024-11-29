@@ -5,7 +5,7 @@ from wagtail import hooks
 from wagtail.admin.menu import MenuItem
 from wagtail.admin.widgets import HeaderButton
 from wagtail.snippets.models import register_snippet
-from wagtail.snippets.views.snippets import SnippetViewSet, SnippetViewSetGroup, IndexView
+from wagtail.snippets.views.snippets import SnippetViewSet, IndexView
 
 from .home import NetworksSummaryItem, StationsSummaryItem, PluginsSummaryItem
 from .models import Network, Station, DataParameter
@@ -14,7 +14,10 @@ from .views import (
     load_stations_oscar,
     import_oscar_station,
     plugin_events_data,
-    connections_list, connection_add_select
+    connections_list,
+    connection_add_select,
+    dispatch_channels_list,
+    dispatch_channel_add_select
 )
 
 adl_register_plugin_menu_items_hook_name = "register_adl_plugin_menu_items"
@@ -27,8 +30,10 @@ def urlconf_adl():
         path('adl/load-stations-oscar/', load_stations_oscar, name='load_stations_oscar'),
         path('adl/import-oscar-station/<str:wigos_id>', import_oscar_station, name='import_oscar_station'),
         path('adl/plugin-events-data', plugin_events_data, name='plugin_events_data'),
-        path('connections/', connections_list, name="connections_list"),
-        path('connections/select', connection_add_select, name="connections_add_select"),
+        path('adl/connections/', connections_list, name="connections_list"),
+        path('adl/connections/select', connection_add_select, name="connections_add_select"),
+        path('adl/dispatch-channels', dispatch_channels_list, name="dispatch_channels_list"),
+        path('adl/dispatch-channels/select', dispatch_channel_add_select, name="dispatch_channel_add_select"),
     ]
 
 
@@ -72,25 +77,6 @@ register_snippet(StationViewSet)
 
 class DataParameterViewSet(SnippetViewSet):
     model = DataParameter
-
-
-class PluginsViewSetGroup(SnippetViewSetGroup):
-    menu_label = _('Plugins')
-    menu_name = "adl_plugins"
-    menu_icon = "plug"
-    
-    def get_submenu_items(self):
-        menu_items = super().get_submenu_items()
-        
-        for fn in hooks.get_hooks(adl_register_plugin_menu_items_hook_name):
-            hook_menu_items = fn()
-            if isinstance(hook_menu_items, list):
-                menu_items.extend(hook_menu_items)
-        
-        return menu_items
-
-
-register_snippet(PluginsViewSetGroup)
 
 
 @hooks.register('construct_main_menu')
@@ -146,4 +132,13 @@ def hide_some_setting_menu_items(request, menu_items):
 @hooks.register('register_admin_menu_item')
 def register_connections_menu():
     list_url = reverse('connections_list')
-    return MenuItem('Connections', list_url, icon_name='plug', order=9999)
+    label = _("Connections")
+    return MenuItem(label, list_url, icon_name='plug', order=9999)
+
+
+@hooks.register('register_admin_menu_item')
+def register_dispatch_channels_menu():
+    list_url = reverse('dispatch_channels_list')
+    label = _("Dispatch Channels")
+    
+    return MenuItem(label, list_url, icon_name='resubmit', order=9999)

@@ -13,7 +13,8 @@ from wagtail.admin.widgets import ListingButton, HeaderButton
 
 from .constants import OSCAR_SURFACE_REQUIRED_CSV_COLUMNS
 from .forms import StationLoaderForm, OSCARStationImportForm
-from .models import Station, AdlSettings, PluginExecutionEvent, OscarSurfaceStationLocal, NetworkConnection
+from .models import Station, AdlSettings, PluginExecutionEvent, OscarSurfaceStationLocal, NetworkConnection, \
+    DispatchChannel
 from .serializers import PluginExecutionEventSerializer
 from .utils import (
     get_stations_for_country_live,
@@ -425,10 +426,7 @@ def connection_add_select(request):
     ]
     
     connection_types = get_all_child_models(NetworkConnection)
-    
-    print(connection_types, "HERE")
-    
-    items = [{"name": cls.__name__} for cls in NetworkConnection.__subclasses__()]
+    items = [{"name": cls.__name__} for cls in connection_types]
     count = len(items)
     
     # Get search parameters from the query string.
@@ -475,3 +473,125 @@ def connection_add_select(request):
     }
     
     return render(request, "core/connection_add_select.html", context)
+
+
+def dispatch_channels_list(request):
+    queryset = DispatchChannel.objects.all()
+    
+    breadcrumbs_items = [
+        {"url": "", "label": _("Dispatch Channels")},
+    ]
+    
+    # Get search parameters from the query string.
+    try:
+        page_num = int(request.GET.get("p", 0))
+    except ValueError:
+        page_num = 0
+    
+    user = request.user
+    all_count = queryset.count()
+    result_count = all_count
+    paginator = Paginator(queryset, 20)
+    
+    try:
+        page_obj = paginator.page(page_num + 1)
+    except InvalidPage:
+        page_obj = paginator.page(1)
+    
+    class ColumnWithButtons(ButtonsColumnMixin, Column):
+        cell_template_name = "wagtailadmin/tables/title_cell.html"
+        
+        def get_buttons(self, instance, parent_context):
+            edit_url = "#"
+            return [
+                ListingButton(
+                    _("Edit"),
+                    url=edit_url,
+                    icon_name="pencil",
+                    priority=20,
+                    classname="serious",
+                ),
+            ]
+    
+    columns = [
+        ColumnWithButtons("name", label=_("Name")),
+    ]
+    
+    add_url = reverse("dispatch_channel_add_select")
+    
+    buttons = [
+        HeaderButton(
+            label=_('Add Dispatch Channel'),
+            url=add_url,
+            icon_name="plus",
+        ),
+    ]
+    
+    context = {
+        "breadcrumbs_items": breadcrumbs_items,
+        "all_count": all_count,
+        "result_count": result_count,
+        "paginator": paginator,
+        "page_obj": page_obj,
+        "object_list": page_obj.object_list,
+        "header_buttons": buttons,
+        "table": Table(columns, page_obj.object_list),
+    }
+    
+    return render(request, "core/dispatch_channel_list.html", context)
+
+
+def dispatch_channel_add_select(request):
+    breadcrumbs_items = [
+        {"url": "", "label": _("Select Dispatch Channel Type")},
+    ]
+    
+    channel_types = get_all_child_models(DispatchChannel)
+    
+    items = [{"name": cls.__name__} for cls in channel_types]
+    count = len(items)
+    
+    # Get search parameters from the query string.
+    try:
+        page_num = int(request.GET.get("p", 0))
+    except ValueError:
+        page_num = 0
+    
+    user = request.user
+    paginator = Paginator(items, 20)
+    
+    try:
+        page_obj = paginator.page(page_num + 1)
+    except InvalidPage:
+        page_obj = paginator.page(1)
+    
+    class ColumnWithButtons(ButtonsColumnMixin, Column):
+        cell_template_name = "wagtailadmin/tables/title_cell.html"
+        
+        def get_buttons(self, instance, parent_context):
+            edit_url = "#"
+            return [
+                ListingButton(
+                    _("Edit"),
+                    url=edit_url,
+                    icon_name="pencil",
+                    priority=20,
+                    classname="serious",
+                ),
+            ]
+    
+    columns = [
+        ColumnWithButtons("name", label=_("Name")),
+    ]
+    
+    context = {
+        "breadcrumbs_items": breadcrumbs_items,
+        "all_count": count,
+        "result_count": count,
+        "paginator": paginator,
+        "page_obj": page_obj,
+        "object_list": page_obj.object_list,
+        "table": Table(columns, page_obj.object_list),
+    }
+    
+    return render(request, "core/dispatch_channel_add_select.html", context)

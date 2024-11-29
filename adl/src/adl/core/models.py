@@ -9,18 +9,21 @@ from django.utils import timezone as dj_timezone
 from django.utils.translation import gettext_lazy as _
 from django_countries.fields import CountryField
 from django_countries.widgets import CountrySelectWidget
+from modelcluster.fields import ParentalKey
 from modelcluster.models import ClusterableModel
 from polymorphic.models import PolymorphicModel
 from timescale.db.models.models import TimescaleModel
 from timezone_field import TimeZoneField
-from wagtail.admin.panels import FieldPanel, TabbedInterface, ObjectList
+from wagtail.admin.panels import FieldPanel, TabbedInterface, ObjectList, InlinePanel
 from wagtail.admin.panels import MultiFieldPanel
 from wagtail.contrib.settings.models import BaseSiteSetting
 from wagtail.contrib.settings.registry import register_setting
+from wagtail.models import Orderable
 from wagtail.snippets.models import register_snippet
 from wagtailgeowidget.panels import LeafletPanel
 
 from .constants import DATA_PARAMETERS_DICT, PRECIPITAION_PARAMETERS
+from .dispatchers.wis2box import upload_to_wis2box, get_minio_client
 from .units import TEMPERATURE_UNITS, units
 from .utils import (
     get_data_parameters_as_choices,
@@ -257,31 +260,6 @@ class PluginExecutionEvent(models.Model):
         return dj_timezone.localtime(self.finished_at, timezone.utc).timestamp()
 
 
-@register_snippet
-class ObservationRecord(TimescaleModel, ClusterableModel):
-    # time field is inherited from TimescaleModel. We use it to store the observation time of the data
-    created_at = models.DateTimeField(auto_now_add=True)
-    modified_at = models.DateTimeField(auto_now=True)
-    station = models.ForeignKey(Station, on_delete=models.CASCADE, verbose_name=_("Station"))
-    parameter = models.ForeignKey(DataParameter, on_delete=models.CASCADE, verbose_name=_("Parameter"))
-    value = models.FloatField(verbose_name=_("Value"))
-    
-    class Meta:
-        verbose_name = _("Observation Record")
-        verbose_name_plural = _("Observation Records")
-        ordering = ['-time']
-        constraints = [
-            models.UniqueConstraint(fields=['time', 'station', 'parameter'], name='unique_station_param_obs_record')
-        ]
-    
-    @property
-    def utc_time(self):
-        return dj_timezone.localtime(self.time, timezone.utc)
-    
-    def __str__(self):
-        return f"{self.station.name} - {self.utc_time}"
-
-
 @register_setting
 class AdlSettings(ClusterableModel, BaseSiteSetting):
     country = CountryField(blank_label=_("Select Country"), verbose_name=_("Country"))
@@ -355,23 +333,73 @@ class StationLink(PolymorphicModel):
         unique_together = ['network_connection', 'station']
 
 
-class DispatchChannel(PolymorphicModel):
+@register_snippet
+class ObservationRecord(TimescaleModel, ClusterableModel):
+    # time field is inherited from TimescaleModel. We use it to store the observation time of the data
+    created_at = models.DateTimeField(auto_now_add=True)
+    modified_at = models.DateTimeField(auto_now=True)
+    station = models.ForeignKey(Station, on_delete=models.CASCADE, verbose_name=_("Station"))
+    connection = models.ForeignKey(NetworkConnection, on_delete=models.CASCADE, verbose_name=_("Network Connection"))
+    parameter = models.ForeignKey(DataParameter, on_delete=models.CASCADE, verbose_name=_("Parameter"))
+    value = models.FloatField(verbose_name=_("Value"))
+    
+    class Meta:
+        verbose_name = _("Observation Record")
+        verbose_name_plural = _("Observation Records")
+        ordering = ['-time']
+        constraints = [
+            models.UniqueConstraint(fields=['time', 'station', 'parameter'], name='unique_station_param_obs_record')
+        ]
+    
+    @property
+    def utc_time(self):
+        return dj_timezone.localtime(self.time, timezone.utc)
+    
+    def __str__(self):
+        return f"{self.station.name} - {self.utc_time} - {self.parameter.name} - {self.value}"
+
+
+class DispatchChannel(PolymorphicModel, ClusterableModel):
     name = models.CharField(max_length=255, verbose_name=_("Name"))
     network_connection = models.ForeignKey(NetworkConnection, on_delete=models.CASCADE,
                                            verbose_name=_("Network Connection"),
                                            related_name="dispatch_channels")
     enabled = models.BooleanField(default=True, verbose_name=_("Enabled"))
+    data_check_interval = models.PositiveIntegerField(default=10, verbose_name=_("Data Check Interval in Minutes"),
+                                                      help_text=_(
+                                                          "How often the channel should check the database for new "
+                                                          "data, in minutes"),
+                                                      validators=[
+                                                          MaxValueValidator(30),
+                                                          MinValueValidator(1)
+                                                      ])
+    last_upload_obs_time = models.DateTimeField(blank=True, null=True, verbose_name=_("Last Upload's Observation Time"))
     
     panels = [
         MultiFieldPanel([
             FieldPanel("name"),
             FieldPanel("network_connection"),
             FieldPanel("enabled"),
-        ], heading=_("Base"))
+            FieldPanel("data_check_interval"),
+        ], heading=_("Base")),
+        InlinePanel("parameter_mappings", label=_("Parameter Mappings"), heading=_("Parameter Mappings")),
     ]
     
-    def send_data(self, data):
+    def send_data(self, station, data_record_ids):
         raise NotImplementedError("Method send_data must be implemented in the subclass")
+
+
+class DispatchChannelParameterMapping(Orderable):
+    dispatch_channel = ParentalKey(DispatchChannel, on_delete=models.CASCADE, related_name="parameter_mappings")
+    parameter = models.ForeignKey(DataParameter, on_delete=models.CASCADE, verbose_name=_("Parameter"))
+    channel_parameter = models.CharField(max_length=255, verbose_name=_("Channel Parameter"),
+                                         help_text=_("Parameter name in the channel"))
+    
+    class Meta:
+        unique_together = ['dispatch_channel', 'parameter']
+    
+    def __str__(self):
+        return f"{self.dispatch_channel.name} - {self.parameter.name}"
 
 
 @register_snippet
@@ -394,8 +422,7 @@ class Wis2BoxUpload(DispatchChannel):
                                                          default="latest",
                                                          verbose_name=_("WIS2BOX Hourly Aggregate Strategy"),
                                                          help_text=_("Method to use for aggregating hourly data "
-                                                                     "for ingestion to WIS2BOX")
-                                                         )
+                                                                     "for ingestion to WIS2BOX"))
     
     panels = DispatchChannel.panels + [
         MultiFieldPanel([
@@ -410,10 +437,14 @@ class Wis2BoxUpload(DispatchChannel):
         ], heading=_("Wis2Box Data Ingestion Aggregation")),
     ]
     
+    class Meta:
+        verbose_name = _("WIS2BOX Upload")
+        verbose_name_plural = _("WIS2BOX Uploads")
+    
     def clean(self):
         """
         This method checks the following:
-
+        
         1. If WIS2BOX hourly aggregation is enabled, the aggregation strategy is required.
 
         """
@@ -422,6 +453,20 @@ class Wis2BoxUpload(DispatchChannel):
             raise ValidationError({
                 "wis2box_hourly_aggregate_strategy": _("WIS2BOX Hourly Aggregate Strategy is required")
             })
+    
+    def send_data(self, station, data_record_ids):
+        client = get_minio_client(self.storage_endpoint, self.storage_username, self.storage_password)
+        
+        for data_record_id in data_record_ids:
+            upload_to_wis2box(client, station, data_record_id)
+    
+    def connection_details(self):
+        return {
+            "storage_endpoint": self.storage_endpoint,
+            "storage_username": self.storage_username,
+            "storage_password": self.storage_password,
+            "dataset_id": self.dataset_id,
+        }
 
 
 @receiver(post_save, sender=Network)
