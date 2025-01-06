@@ -21,3 +21,4 @@ wagtail-font-awesome-svg==1.0.1
 pint==0.24.4
 pandas==2.2.3
 wagtailgeowidget==8.1.1
+wagtail-modeladmin==2.0.0

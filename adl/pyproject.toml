@@ -16,7 +16,7 @@ classifiers = []
 
 
 [project.scripts]
-manage = "adl.manage:main"
+adl = "adl.manage:main"
 
 
 [tool.setuptools]

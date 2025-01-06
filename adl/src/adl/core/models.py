@@ -1,5 +1,6 @@
 from datetime import timezone
 
+from django import forms
 from django.contrib.gis.db import models
 from django.core.exceptions import ValidationError
 from django.core.validators import MaxValueValidator, MinValueValidator
@@ -19,11 +20,10 @@ from wagtail.admin.panels import MultiFieldPanel
 from wagtail.contrib.settings.models import BaseSiteSetting
 from wagtail.contrib.settings.registry import register_setting
 from wagtail.models import Orderable
-from wagtail.snippets.models import register_snippet
 from wagtailgeowidget.panels import LeafletPanel
 
 from .constants import DATA_PARAMETERS_DICT, PRECIPITAION_PARAMETERS
-from .dispatchers.wis2box import upload_to_wis2box, get_minio_client
+from .dispatchers.wis2box import hourly_aggregate_data_records, upload_to_wis2box
 from .units import TEMPERATURE_UNITS, units
 from .utils import (
     get_data_parameters_as_choices,
@@ -182,27 +182,6 @@ class Station(models.Model):
     @property
     def wigos_id(self):
         return f"{self.wsi_series}-{self.wsi_issuer}-{self.wsi_issue_number}-{self.wsi_local}"
-    
-    @property
-    def wis2box_csv_metadata(self):
-        return {
-            "wsi_series": self.wsi_series,
-            "wsi_issuer": self.wsi_issuer,
-            "wsi_issue_number": self.wsi_issue_number,
-            "wsi_local": self.wsi_local,
-            "wmo_block_number": self.wmo_block_number,
-            "wmo_station_number": self.wmo_station_number,
-            "station_type": self.station_type,
-            "latitude": self.location.y,
-            "longitude": self.location.x,
-            "station_height_above_msl": self.station_height_above_msl,
-            "barometer_height_above_msl": self.barometer_height_above_msl,
-            "anemometer_height": self.anemometer_height,
-            "rain_sensor_height": self.rain_sensor_height,
-            "method_of_ground_state_measurement": self.method_of_ground_state_measurement,
-            "method_of_snow_depth_measurement": self.method_of_snow_depth_measurement,
-            "time_period_of_wind": self.time_period_of_wind,
-        }
 
 
 class DataParameter(models.Model):
@@ -234,7 +213,6 @@ class DataParameter(models.Model):
         return f"{self.name} - {self.unit}"
 
 
-@register_snippet
 class PluginExecutionEvent(models.Model):
     plugin = models.CharField(max_length=255)
     started_at = models.DateTimeField(auto_now_add=True)
@@ -273,7 +251,6 @@ class AdlSettings(ClusterableModel, BaseSiteSetting):
         verbose_name_plural = _("WIS2Box ADL Settings")
 
 
-@register_snippet
 class OscarSurfaceStationLocal(models.Model):
     name = models.CharField(max_length=255, verbose_name=_("Name"), help_text=_("Name of the station"))
     wigos_id = models.CharField(max_length=255, verbose_name=_("WIGOS ID"), help_text=_("WIGOS ID of the station"),
@@ -333,7 +310,6 @@ class StationLink(PolymorphicModel):
         unique_together = ['network_connection', 'station']
 
 
-@register_snippet
 class ObservationRecord(TimescaleModel, ClusterableModel):
     # time field is inherited from TimescaleModel. We use it to store the observation time of the data
     created_at = models.DateTimeField(auto_now_add=True)
@@ -385,7 +361,7 @@ class DispatchChannel(PolymorphicModel, ClusterableModel):
         InlinePanel("parameter_mappings", label=_("Parameter Mappings"), heading=_("Parameter Mappings")),
     ]
     
-    def send_data(self, station, data_record_ids):
+    def send_data(self, data_records):
         raise NotImplementedError("Method send_data must be implemented in the subclass")
 
 
@@ -402,7 +378,6 @@ class DispatchChannelParameterMapping(Orderable):
         return f"{self.dispatch_channel.name} - {self.parameter.name}"
 
 
-@register_snippet
 class Wis2BoxUpload(DispatchChannel):
     WIS2BOX_HOURLY_AGGREGATE_STRATEGIES = (
         ("latest", _("Latest in the Hour")),
@@ -428,7 +403,7 @@ class Wis2BoxUpload(DispatchChannel):
         MultiFieldPanel([
             FieldPanel("storage_endpoint"),
             FieldPanel("storage_username"),
-            FieldPanel("storage_password"),
+            FieldPanel("storage_password", widget=forms.PasswordInput()),
             FieldPanel("dataset_id"),
         ], heading=_("Wis2Box Storage Configuration")),
         MultiFieldPanel([
@@ -440,6 +415,9 @@ class Wis2BoxUpload(DispatchChannel):
     class Meta:
         verbose_name = _("WIS2BOX Upload")
         verbose_name_plural = _("WIS2BOX Uploads")
+    
+    def __str__(self):
+        return self.name
     
     def clean(self):
         """
@@ -454,11 +432,10 @@ class Wis2BoxUpload(DispatchChannel):
                 "wis2box_hourly_aggregate_strategy": _("WIS2BOX Hourly Aggregate Strategy is required")
             })
     
-    def send_data(self, station, data_record_ids):
-        client = get_minio_client(self.storage_endpoint, self.storage_username, self.storage_password)
+    def send_data(self, data_records):
+        hourly_aggregated_data = hourly_aggregate_data_records(self, data_records)
         
-        for data_record_id in data_record_ids:
-            upload_to_wis2box(client, station, data_record_id)
+        upload_to_wis2box(self, hourly_aggregated_data)
     
     def connection_details(self):
         return {

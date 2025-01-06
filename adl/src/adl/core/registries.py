@@ -162,20 +162,10 @@ class Plugin(Instance):
                                 if latest_record:
                                     logger.info(f"[ADL_PLUGIN] Found latest record for station {station.name}")
                                     
+                                    print(latest_record)
+                                    
                                     # mark the record as hourly aggregate
-                                    latest_record.is_hourly_aggregate = True
-                                    
-                                    # create hourly aggregate file
-                                    hourly_file = create_ingestion_file_with_hourly_time(latest_record)
-                                    
-                                    if latest_record.hourly_aggregate_file:
-                                        latest_record.hourly_aggregate_file.delete()
-                                    
-                                    latest_record.hourly_aggregate_file = hourly_file
-                                    latest_record.save()
-                                    
-                                    # upload latest record to WIS2BOX
-                                    # upload_to_wis2box(latest_record.id, event.id)
+        
         else:
             logger.info("[ADL_PLUGIN] No ingestion records returned by plugin get_data")
 

@@ -63,4 +63,4 @@ def run_dispatch_channel(dispatcher_id):
     
     data = get_dispatch_channel_data(dispatch_channel)
     
-    print(data)
+    dispatch_channel.send_data(data)

@@ -8,19 +8,28 @@ from django.shortcuts import render, redirect
 from django.urls import reverse_lazy, reverse
 from django.utils.translation import gettext as _
 from wagtail.admin import messages
-from wagtail.admin.ui.tables import ButtonsColumnMixin, Column, Table
-from wagtail.admin.widgets import ListingButton, HeaderButton
+from wagtail.admin.ui.tables import Table, TitleColumn
+from wagtail.admin.widgets import HeaderButton
+from wagtail_modeladmin.helpers import AdminURLHelper
 
 from .constants import OSCAR_SURFACE_REQUIRED_CSV_COLUMNS
 from .forms import StationLoaderForm, OSCARStationImportForm
-from .models import Station, AdlSettings, PluginExecutionEvent, OscarSurfaceStationLocal, NetworkConnection, \
+from .models import (
+    Station,
+    AdlSettings,
+    PluginExecutionEvent,
+    OscarSurfaceStationLocal,
+    NetworkConnection,
     DispatchChannel
+)
 from .serializers import PluginExecutionEventSerializer
 from .utils import (
     get_stations_for_country_live,
     get_stations_for_country_local,
     get_wigos_id_parts,
-    extract_digits, get_all_child_models
+    extract_digits,
+    get_all_child_models,
+    get_child_model_by_name
 )
 
 
@@ -358,6 +367,7 @@ def connections_list(request):
     queryset = NetworkConnection.objects.all()
     
     breadcrumbs_items = [
+        {"url": reverse_lazy("wagtailadmin_home"), "label": _("Home")},
         {"url": "", "label": _("Network Connections")},
     ]
     
@@ -367,7 +377,6 @@ def connections_list(request):
     except ValueError:
         page_num = 0
     
-    user = request.user
     all_count = queryset.count()
     result_count = all_count
     paginator = Paginator(queryset, 20)
@@ -377,23 +386,17 @@ def connections_list(request):
     except InvalidPage:
         page_obj = paginator.page(1)
     
-    class ColumnWithButtons(ButtonsColumnMixin, Column):
-        cell_template_name = "wagtailadmin/tables/title_cell.html"
+    def get_edit_url(instance):
+        model_cls = instance.__class__
+        if model_cls:
+            url_helper = AdminURLHelper(model_cls)
+            edit_url = url_helper.get_action_url("edit", instance.id)
+            return edit_url
         
-        def get_buttons(self, instance, parent_context):
-            edit_url = "#"
-            return [
-                ListingButton(
-                    _("Edit"),
-                    url=edit_url,
-                    icon_name="pencil",
-                    priority=20,
-                    classname="serious",
-                ),
-            ]
+        return None
     
     columns = [
-        ColumnWithButtons("name", label=_("Name")),
+        TitleColumn("name", label=_("Name"), get_url=get_edit_url),
     ]
     
     add_url = reverse("connections_add_select")
@@ -422,6 +425,8 @@ def connections_list(request):
 
 def connection_add_select(request):
     breadcrumbs_items = [
+        {"url": reverse_lazy("wagtailadmin_home"), "label": _("Home")},
+        {"url": reverse_lazy("connections_list"), "label": _("Network Connections")},
         {"url": "", "label": _("Select Connection Type")},
     ]
     
@@ -443,23 +448,17 @@ def connection_add_select(request):
     except InvalidPage:
         page_obj = paginator.page(1)
     
-    class ColumnWithButtons(ButtonsColumnMixin, Column):
-        cell_template_name = "wagtailadmin/tables/title_cell.html"
+    def get_url(instance):
+        model_cls = get_child_model_by_name(NetworkConnection, instance["name"])
+        if model_cls:
+            url_helper = AdminURLHelper(model_cls)
+            create_url = url_helper.get_action_url("create")
+            return create_url
         
-        def get_buttons(self, instance, parent_context):
-            edit_url = "#"
-            return [
-                ListingButton(
-                    _("Edit"),
-                    url=edit_url,
-                    icon_name="pencil",
-                    priority=20,
-                    classname="serious",
-                ),
-            ]
+        return None
     
     columns = [
-        ColumnWithButtons("name", label=_("Name")),
+        TitleColumn("name", label=_("Name"), get_url=get_url),
     ]
     
     context = {
@@ -479,6 +478,7 @@ def dispatch_channels_list(request):
     queryset = DispatchChannel.objects.all()
     
     breadcrumbs_items = [
+        {"url": reverse_lazy("wagtailadmin_home"), "label": _("Home")},
         {"url": "", "label": _("Dispatch Channels")},
     ]
     
@@ -488,7 +488,6 @@ def dispatch_channels_list(request):
     except ValueError:
         page_num = 0
     
-    user = request.user
     all_count = queryset.count()
     result_count = all_count
     paginator = Paginator(queryset, 20)
@@ -498,23 +497,17 @@ def dispatch_channels_list(request):
     except InvalidPage:
         page_obj = paginator.page(1)
     
-    class ColumnWithButtons(ButtonsColumnMixin, Column):
-        cell_template_name = "wagtailadmin/tables/title_cell.html"
+    def get_edit_url(instance):
+        model_cls = instance.__class__
+        if model_cls:
+            url_helper = AdminURLHelper(model_cls)
+            edit_url = url_helper.get_action_url("edit", instance.id)
+            return edit_url
         
-        def get_buttons(self, instance, parent_context):
-            edit_url = "#"
-            return [
-                ListingButton(
-                    _("Edit"),
-                    url=edit_url,
-                    icon_name="pencil",
-                    priority=20,
-                    classname="serious",
-                ),
-            ]
+        return None
     
     columns = [
-        ColumnWithButtons("name", label=_("Name")),
+        TitleColumn("name", label=_("Name"), get_url=get_edit_url),
     ]
     
     add_url = reverse("dispatch_channel_add_select")
@@ -543,6 +536,9 @@ def dispatch_channels_list(request):
 
 def dispatch_channel_add_select(request):
     breadcrumbs_items = [
+        {"url": reverse_lazy("wagtailadmin_home"), "label": _("Home")},
+        {"url": reverse_lazy("wagtailsnippets:index"), "label": _("Snippets")},
+        {"url": reverse_lazy("dispatch_channels_list"), "label": _("Dispatch Channels")},
         {"url": "", "label": _("Select Dispatch Channel Type")},
     ]
     
@@ -565,23 +561,17 @@ def dispatch_channel_add_select(request):
     except InvalidPage:
         page_obj = paginator.page(1)
     
-    class ColumnWithButtons(ButtonsColumnMixin, Column):
-        cell_template_name = "wagtailadmin/tables/title_cell.html"
+    def get_url(instance):
+        model_cls = get_child_model_by_name(DispatchChannel, instance["name"])
+        if model_cls:
+            url_helper = AdminURLHelper(model_cls)
+            create_url = url_helper.get_action_url("create")
+            return create_url
         
-        def get_buttons(self, instance, parent_context):
-            edit_url = "#"
-            return [
-                ListingButton(
-                    _("Edit"),
-                    url=edit_url,
-                    icon_name="pencil",
-                    priority=20,
-                    classname="serious",
-                ),
-            ]
+        return None
     
     columns = [
-        ColumnWithButtons("name", label=_("Name")),
+        TitleColumn("name", label=_("Name"), get_url=get_url),
     ]
     
     context = {

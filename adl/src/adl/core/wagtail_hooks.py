@@ -4,11 +4,22 @@ from django.utils.translation import gettext_lazy as _
 from wagtail import hooks
 from wagtail.admin.menu import MenuItem
 from wagtail.admin.widgets import HeaderButton
-from wagtail.snippets.models import register_snippet
-from wagtail.snippets.views.snippets import SnippetViewSet, IndexView
+from wagtail.snippets.views.snippets import SnippetViewSet
+from wagtail_modeladmin.options import ModelAdmin, modeladmin_register
+from wagtail_modeladmin.views import IndexView
 
-from .home import NetworksSummaryItem, StationsSummaryItem, PluginsSummaryItem
-from .models import Network, Station, DataParameter
+from .home import (
+    NetworksSummaryItem,
+    StationsSummaryItem,
+    PluginsSummaryItem
+)
+from .models import (
+    Network,
+    Station,
+    DataParameter,
+    NetworkConnection, DispatchChannel
+)
+from .utils import get_all_child_models
 from .views import (
     load_stations_csv,
     load_stations_oscar,
@@ -37,13 +48,43 @@ def urlconf_adl():
     ]
 
 
-class NetworkViewSet(SnippetViewSet):
+class NetworkAdmin(ModelAdmin):
     model = Network
+    base_url_path = "network"
     menu_icon = "circle-nodes"
     add_to_admin_menu = True
 
 
-register_snippet(NetworkViewSet)
+modeladmin_register(NetworkAdmin)
+
+
+# Register all NetworkConnection models
+def register_network_connections_models():
+    connection_model_cls = get_all_child_models(NetworkConnection)
+    
+    for model_cls in connection_model_cls:
+        class ConnectionAdmin(ModelAdmin):
+            model = model_cls
+            add_to_admin_menu = False
+        
+        modeladmin_register(ConnectionAdmin)
+
+
+register_network_connections_models()
+
+
+def register_dispatch_channels_models():
+    dispatch_channels_model_cls = get_all_child_models(DispatchChannel)
+    
+    for model_cls in dispatch_channels_model_cls:
+        class DispatchChannelAdmin(ModelAdmin):
+            model = model_cls
+            add_to_admin_menu = False
+        
+        modeladmin_register(DispatchChannelAdmin)
+
+
+register_dispatch_channels_models()
 
 
 class StationIndexView(IndexView):
@@ -65,14 +106,15 @@ class StationIndexView(IndexView):
         return buttons
 
 
-class StationViewSet(SnippetViewSet):
+class StationAdmin(ModelAdmin):
     model = Station
+    base_url_path = "station"
     index_view_class = StationIndexView
     menu_icon = "map-pin"
     add_to_admin_menu = True
 
 
-register_snippet(StationViewSet)
+modeladmin_register(StationAdmin)
 
 
 class DataParameterViewSet(SnippetViewSet):
