@@ -20,5 +20,6 @@ uvicorn[standard]==0.30.3
 wagtail-font-awesome-svg==1.0.1
 pint==0.24.4
 pandas==2.2.3
+python-dateutil==2.9.0.post0
 wagtailgeowidget==8.1.1
 wagtail-modeladmin==2.0.0

@@ -6,6 +6,7 @@ from django.core.paginator import Paginator, InvalidPage
 from django.http import JsonResponse
 from django.shortcuts import render, redirect
 from django.urls import reverse_lazy, reverse
+from django.urls.exceptions import NoReverseMatch
 from django.utils.translation import gettext as _
 from wagtail.admin import messages
 from wagtail.admin.ui.tables import Table, TitleColumn
@@ -23,13 +24,14 @@ from .models import (
     DispatchChannel
 )
 from .serializers import PluginExecutionEventSerializer
+from .table import LinkColumnWithIcon
 from .utils import (
     get_stations_for_country_live,
     get_stations_for_country_local,
     get_wigos_id_parts,
     extract_digits,
     get_all_child_models,
-    get_child_model_by_name
+    get_child_model_by_name, get_model_by_string_label
 )
 
 
@@ -395,8 +397,28 @@ def connections_list(request):
         
         return None
     
+    def get_stations_link_url(instance):
+        model_cls = instance.__class__
+        
+        index_url = None
+        
+        if hasattr(model_cls, "station_link_model_string_label"):
+            station_link_model = get_model_by_string_label(model_cls.station_link_model_string_label)
+            
+            if station_link_model:
+                url_helper = AdminURLHelper(station_link_model)
+                try:
+                    index_url = url_helper.index_url
+                    index_url += f"?network_connection={instance.id}"
+                except NoReverseMatch:
+                    pass
+        
+        return index_url
+    
     columns = [
         TitleColumn("name", label=_("Name"), get_url=get_edit_url),
+        LinkColumnWithIcon("stations_link", label=_("Stations Link"), icon_name="map-pin",
+                           get_url=get_stations_link_url),
     ]
     
     add_url = reverse("connections_add_select")
@@ -475,7 +497,7 @@ def connection_add_select(request):
 
 
 def dispatch_channels_list(request):
-    queryset = DispatchChannel.objects.all()
+    queryset = DispatchChannel.objects.all().order_by("name")
     
     breadcrumbs_items = [
         {"url": reverse_lazy("wagtailadmin_home"), "label": _("Home")},

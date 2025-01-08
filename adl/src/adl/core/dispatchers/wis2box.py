@@ -1,10 +1,11 @@
 import csv
 import logging
 from datetime import timedelta
-from io import StringIO
+from io import StringIO, BytesIO
 
 from django.utils import timezone as dj_timezone
 from minio import Minio
+from minio.error import S3Error
 from urllib3 import PoolManager
 
 from adl.core.utils import get_object_or_none
@@ -145,8 +146,15 @@ def hourly_aggregate_data_records(channel, data_records):
     return hourly_data_records
 
 
-def upload_to_wis2box(channel, data_records, overwrite=False, hourly_aggregate=False):
+def upload_to_wis2box(channel, data_records, overwrite=False):
     from adl.core.models import Station
+    
+    minio_client = get_minio_client(
+        endpoint=channel.storage_endpoint,
+        access_key=channel.storage_username,
+        secret_key=channel.storage_password,
+        secure=channel.secure
+    )
     
     for record in data_records:
         station_id = record.get("station_id")
@@ -197,49 +205,27 @@ def upload_to_wis2box(channel, data_records, overwrite=False, hourly_aggregate=F
         csv_content = output.getvalue()
         output.close()
         
-        print(csv_content)
-    
-    uploaded = False
-    # obs_record = DataIngestionRecord.objects.get(id=ingestion_record_id)
-    #
-    # if ingestion_record.uploaded_to_wis2box and not overwrite:
-    #     logging.warning(f"Data ingestion record {ingestion_record_id} has already been uploaded to WIS2BOX")
-    #     uploaded = True
-    #     return uploaded
-    #
-    # logging.info(f"Uploading data record {ingestion_record_id} to WIS2BOX")
-    #
-    # try:
-    #     filename = ingestion_record.filename
-    #     object_name = f"{MINIO_PATH}{filename}"
-    #     file_path = ingestion_record.file.path
-    #
-    #     all_hourly_records = []
-    #
-    #     if ingestion_record.is_hourly_aggregate and ingestion_record.hourly_aggregate_file:
-    #         file_path = ingestion_record.hourly_aggregate_file.path
-    #
-    #         # get other ingestion_records that are related to this hourly aggregate
-    #         start_datetime = datetime(ingestion_record.time.year,
-    #                                   ingestion_record.time.month,
-    #                                   ingestion_record.time.day,
-    #                                   ingestion_record.time.hour).replace(tzinfo=ingestion_record.time.tzinfo)
-    #
-    #         end_datetime = start_datetime + timedelta(hours=1)
-    #         all_hourly_records = DataIngestionRecord.objects.filter(time__gte=start_datetime, time__lt=end_datetime)
-    #
-    #     # publish message
-    #     minio_client.fput_object(bucket_name="wis2box-incoming", object_name=object_name, file_path=file_path)
-    #
-    #     if all_hourly_records:
-    #         # mark all hourly records as uploaded to WIS2BOX
-    #         all_hourly_records.update(uploaded_to_wis2box=True, event=event_id)
-    #     else:
-    #         # mark the single ingestion record as published to WIS2BOX
-    #         ingestion_record.uploaded_to_wis2box = True
-    #         ingestion_record.event = event_id
-    #         ingestion_record.save()
-    #
-    #     logging.info(f"Data record {ingestion_record_id} uploaded to WIS2BOX successfully")
-    # except Exception as e:
-    #     logging.error(f"Error uploading data record {ingestion_record_id} to WIS2BOX: {e}")
+        # Convert csv_content to bytes for uploading
+        csv_bytes = BytesIO(csv_content.encode('utf-8'))
+        
+        bucket_name = "wis2box-incoming"
+        object_name = f"{channel.dataset_id}/{station_id}_{timestamp.strftime('%Y%m%d%H%M%S')}.csv"
+        
+        # Upload the CSV content to MinIO
+        try:
+            minio_client.put_object(
+                bucket_name,
+                object_name,
+                csv_bytes,
+                length=len(csv_content),
+                content_type="text/csv"
+            )
+            
+            logger.info(f"CSV uploaded successfully as {object_name} in bucket {bucket_name}.")
+            
+            # Update last upload time
+            channel.last_upload_obs_time = timestamp
+            channel.save()
+        
+        except S3Error as e:
+            logger.error(f"Error uploading CSV to MinIO: {e}")

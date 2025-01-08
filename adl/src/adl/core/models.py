@@ -1,8 +1,6 @@
 from datetime import timezone
 
-from django import forms
 from django.contrib.gis.db import models
-from django.core.exceptions import ValidationError
 from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db.models.signals import post_save
 from django.dispatch import receiver
@@ -20,10 +18,13 @@ from wagtail.admin.panels import MultiFieldPanel
 from wagtail.contrib.settings.models import BaseSiteSetting
 from wagtail.contrib.settings.registry import register_setting
 from wagtail.models import Orderable
+from wagtail.snippets.models import register_snippet
 from wagtailgeowidget.panels import LeafletPanel
 
 from .constants import DATA_PARAMETERS_DICT, PRECIPITAION_PARAMETERS
-from .dispatchers.wis2box import hourly_aggregate_data_records, upload_to_wis2box
+from .dispatchers import get_dispatch_channel_data
+from .dispatchers.wis2box import upload_to_wis2box
+from .tasks import create_or_update_aggregation_periodic_tasks
 from .units import TEMPERATURE_UNITS, units
 from .utils import (
     get_data_parameters_as_choices,
@@ -242,8 +243,15 @@ class PluginExecutionEvent(models.Model):
 class AdlSettings(ClusterableModel, BaseSiteSetting):
     country = CountryField(blank_label=_("Select Country"), verbose_name=_("Country"))
     
+    hourly_aggregation_interval = models.PositiveIntegerField(default=10, verbose_name=_("Hourly Aggregation Interval "
+                                                                                         "in Minutes"), )
+    
+    daily_aggregation_time = models.TimeField(default="00:00", verbose_name=_("Daily Aggregation Time"))
+    
     panels = [
         FieldPanel("country", widget=CountrySelectWidget()),
+        FieldPanel("hourly_aggregation_interval"),
+        FieldPanel("daily_aggregation_time"),
     ]
     
     class Meta:
@@ -310,6 +318,7 @@ class StationLink(PolymorphicModel):
         unique_together = ['network_connection', 'station']
 
 
+@register_snippet
 class ObservationRecord(TimescaleModel, ClusterableModel):
     # time field is inherited from TimescaleModel. We use it to store the observation time of the data
     created_at = models.DateTimeField(auto_now_add=True)
@@ -318,6 +327,7 @@ class ObservationRecord(TimescaleModel, ClusterableModel):
     connection = models.ForeignKey(NetworkConnection, on_delete=models.CASCADE, verbose_name=_("Network Connection"))
     parameter = models.ForeignKey(DataParameter, on_delete=models.CASCADE, verbose_name=_("Parameter"))
     value = models.FloatField(verbose_name=_("Value"))
+    is_daily = models.BooleanField(default=False, verbose_name=_("Is Daily"))
     
     class Meta:
         verbose_name = _("Observation Record")
@@ -335,7 +345,42 @@ class ObservationRecord(TimescaleModel, ClusterableModel):
         return f"{self.station.name} - {self.utc_time} - {self.parameter.name} - {self.value}"
 
 
+class AggregatedObservationRecord(TimescaleModel, ClusterableModel):
+    # time field is inherited from TimescaleModel. We use it to store the observation time of the data
+    created_at = models.DateTimeField(auto_now_add=True)
+    modified_at = models.DateTimeField(auto_now=True)
+    station = models.ForeignKey(Station, on_delete=models.CASCADE, verbose_name=_("Station"))
+    connection = models.ForeignKey(NetworkConnection, on_delete=models.CASCADE, verbose_name=_("Network Connection"))
+    parameter = models.ForeignKey(DataParameter, on_delete=models.CASCADE, verbose_name=_("Parameter"))
+    min_value = models.FloatField(verbose_name=_("Min Value"))
+    max_value = models.FloatField(verbose_name=_("Max Value"))
+    avg_value = models.FloatField(verbose_name=_("Avg Value"))
+    sum_value = models.FloatField(verbose_name=_("Sum Value"))
+    records_count = models.PositiveIntegerField(verbose_name=_("Records Count"))
+    
+    def __str__(self):
+        return f"{self.station.name} - {self.time} - {self.parameter.name}"
+    
+    class Meta:
+        abstract = True
+
+
+@register_snippet
+class HourlyAggregatedObservationRecord(AggregatedObservationRecord):
+    pass
+
+
+@register_snippet
+class DailyAggregatedObservationRecord(AggregatedObservationRecord):
+    pass
+
+
 class DispatchChannel(PolymorphicModel, ClusterableModel):
+    AGGREGATION_PERIOD_CHOICES = (
+        ("hourly", _("Hourly")),
+        ("daily", _("Daily")),
+    )
+    
     name = models.CharField(max_length=255, verbose_name=_("Name"))
     network_connection = models.ForeignKey(NetworkConnection, on_delete=models.CASCADE,
                                            verbose_name=_("Network Connection"),
@@ -351,25 +396,54 @@ class DispatchChannel(PolymorphicModel, ClusterableModel):
                                                       ])
     last_upload_obs_time = models.DateTimeField(blank=True, null=True, verbose_name=_("Last Upload's Observation Time"))
     
-    panels = [
+    send_aggregated_data = models.BooleanField(default=False, verbose_name=_("Send Aggregated Data"))
+    aggregation_period = models.CharField(max_length=255, blank=True, null=True, choices=AGGREGATION_PERIOD_CHOICES,
+                                          default="hourly", verbose_name=_("Aggregation Period"))
+    
+    base_panels = [
         MultiFieldPanel([
             FieldPanel("name"),
             FieldPanel("network_connection"),
             FieldPanel("enabled"),
             FieldPanel("data_check_interval"),
+            FieldPanel("send_aggregated_data"),
+            FieldPanel("aggregation_period"),
         ], heading=_("Base")),
+    ]
+    
+    parameter_panels = [
         InlinePanel("parameter_mappings", label=_("Parameter Mappings"), heading=_("Parameter Mappings")),
     ]
     
     def send_data(self, data_records):
         raise NotImplementedError("Method send_data must be implemented in the subclass")
+    
+    def get_data_records(self):
+        data_records = get_dispatch_channel_data(self)
+        
+        return data_records
+    
+    def dispatch(self):
+        data_records = self.get_data_records()
+        self.send_data(data_records)
 
 
 class DispatchChannelParameterMapping(Orderable):
+    AGGREGATION_MEASURE_CHOICES = (
+        ("avg_value", _("Average Value")),
+        ("sum_value", _("Sum Value")),
+        ("min_value", _("Minimum Value")),
+        ("max_value", _("Maximum Value")),
+    )
+    
     dispatch_channel = ParentalKey(DispatchChannel, on_delete=models.CASCADE, related_name="parameter_mappings")
     parameter = models.ForeignKey(DataParameter, on_delete=models.CASCADE, verbose_name=_("Parameter"))
     channel_parameter = models.CharField(max_length=255, verbose_name=_("Channel Parameter"),
                                          help_text=_("Parameter name in the channel"))
+    
+    aggregation_measure = models.CharField(max_length=255, default="avg_value",
+                                           choices=AGGREGATION_MEASURE_CHOICES,
+                                           verbose_name=_("Aggregation Measure"), )
     
     class Meta:
         unique_together = ['dispatch_channel', 'parameter']
@@ -379,38 +453,22 @@ class DispatchChannelParameterMapping(Orderable):
 
 
 class Wis2BoxUpload(DispatchChannel):
-    WIS2BOX_HOURLY_AGGREGATE_STRATEGIES = (
-        ("latest", _("Latest in the Hour")),
-        # ("average", _("Averages for the Hour")), # not implemented yet
-    )
-    
     storage_endpoint = models.CharField(max_length=255, verbose_name=_("Storage Endpoint"))
     storage_username = models.CharField(max_length=255, verbose_name=_("Storage Username"))
     storage_password = models.CharField(max_length=255, verbose_name=_("Storage Password"))
+    secure = models.BooleanField(default=False, verbose_name=_("Use Secure Connection"),
+                                 help_text=_("If checked, HTTPS connection will be used,otherwise HTTP"))
     dataset_id = models.CharField(max_length=255, verbose_name=_("Dataset ID"))
     
-    wis2box_hourly_aggregate = models.BooleanField(default=True, verbose_name=_("Enable WIS2BOX Hourly Aggregation"),
-                                                   help_text=_("Check this if you want only one record per "
-                                                               "hour to be uploaded to wis2box"))
-    wis2box_hourly_aggregate_strategy = models.CharField(max_length=255, blank=True, null=True,
-                                                         choices=WIS2BOX_HOURLY_AGGREGATE_STRATEGIES,
-                                                         default="latest",
-                                                         verbose_name=_("WIS2BOX Hourly Aggregate Strategy"),
-                                                         help_text=_("Method to use for aggregating hourly data "
-                                                                     "for ingestion to WIS2BOX"))
-    
-    panels = DispatchChannel.panels + [
+    panels = DispatchChannel.base_panels + [
         MultiFieldPanel([
             FieldPanel("storage_endpoint"),
             FieldPanel("storage_username"),
-            FieldPanel("storage_password", widget=forms.PasswordInput()),
+            FieldPanel("storage_password"),
+            FieldPanel("secure"),
             FieldPanel("dataset_id"),
         ], heading=_("Wis2Box Storage Configuration")),
-        MultiFieldPanel([
-            FieldPanel("wis2box_hourly_aggregate"),
-            FieldPanel("wis2box_hourly_aggregate_strategy"),
-        ], heading=_("Wis2Box Data Ingestion Aggregation")),
-    ]
+    ] + DispatchChannel.parameter_panels
     
     class Meta:
         verbose_name = _("WIS2BOX Upload")
@@ -419,35 +477,24 @@ class Wis2BoxUpload(DispatchChannel):
     def __str__(self):
         return self.name
     
-    def clean(self):
-        """
-        This method checks the following:
-        
-        1. If WIS2BOX hourly aggregation is enabled, the aggregation strategy is required.
-
-        """
-        
-        if self.wis2box_hourly_aggregate and not self.wis2box_hourly_aggregate_strategy:
-            raise ValidationError({
-                "wis2box_hourly_aggregate_strategy": _("WIS2BOX Hourly Aggregate Strategy is required")
-            })
-    
     def send_data(self, data_records):
-        hourly_aggregated_data = hourly_aggregate_data_records(self, data_records)
-        
-        upload_to_wis2box(self, hourly_aggregated_data)
+        upload_to_wis2box(self, data_records)
     
     def connection_details(self):
         return {
             "storage_endpoint": self.storage_endpoint,
             "storage_username": self.storage_username,
             "storage_password": self.storage_password,
+            "secure": self.secure,
             "dataset_id": self.dataset_id,
         }
 
 
-@receiver(post_save, sender=Network)
-def update_network_plugin_periodic_task(sender, instance, **kwargs):
-    from adl.core.tasks import create_or_update_network_plugin_periodic_tasks
-    
-    create_or_update_network_plugin_periodic_tasks(instance)
+@receiver(post_save, sender=AdlSettings)
+def update_aggregation_period_tasks(sender, instance, **kwargs):
+    create_or_update_aggregation_periodic_tasks(instance)
+
+
+class ChannelDispatchedRecords(models.Model):
+    obs_record_id = models.BigIntegerField(verbose_name=_("Observation Record ID"))
+    dispatch_channel = models.ForeignKey(DispatchChannel, on_delete=models.CASCADE, verbose_name=_("Dispatch Channel"))

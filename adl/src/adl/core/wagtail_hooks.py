@@ -19,7 +19,7 @@ from .models import (
     DataParameter,
     NetworkConnection, DispatchChannel
 )
-from .utils import get_all_child_models
+from .utils import get_all_child_models, get_model_by_string_label
 from .views import (
     load_stations_csv,
     load_stations_oscar,
@@ -68,6 +68,27 @@ def register_network_connections_models():
             add_to_admin_menu = False
         
         modeladmin_register(ConnectionAdmin)
+        
+        if hasattr(model_cls, "station_link_model_string_label"):
+            station_link_model = get_model_by_string_label(model_cls.station_link_model_string_label)
+            
+            if station_link_model:
+                class StationLinkAdmin(ModelAdmin):
+                    model = station_link_model
+                    add_to_admin_menu = False
+                    list_filter = ["network_connection"]
+                    
+                    def get_queryset(self, request):
+                        qs = super().get_queryset(request)
+                        
+                        network_connection = request.GET.get("network_connection")
+                        
+                        if network_connection:
+                            qs = qs.filter(network_connection=network_connection)
+                        
+                        return qs
+                
+                modeladmin_register(StationLinkAdmin)
 
 
 register_network_connections_models()

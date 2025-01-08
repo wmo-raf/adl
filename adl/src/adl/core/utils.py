@@ -204,3 +204,16 @@ def get_child_model_by_name(base_model, model_name):
             return model
     
     return None
+
+
+def get_model_by_string_label(model_string_label):
+    """
+    Get a model by its string label.
+    """
+    
+    try:
+        model = apps.get_model(model_string_label)
+    except LookupError:
+        return None
+    
+    return model
