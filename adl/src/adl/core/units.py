@@ -4,6 +4,11 @@ import contextlib
 import re
 
 import pint
+from django.core.exceptions import ValidationError
+from django.utils.translation import gettext_lazy as _
+
+from adl.core.registries import custom_unit_context_registry
+from adl.core.registry import Instance
 
 _base_unit_of_dimensionality = {
     '[pressure]': 'Pa',
@@ -33,58 +38,77 @@ _unit_preprocessors = [_fix_udunits_powers, lambda string: string.replace('%', '
 def setup_registry(reg):
     """Set up a given registry with MetPy's default tweaks and settings."""
     reg.autoconvert_offset_to_baseunit = True
-
+    
     # For Pint 0.18.0, need to deal with the fact that the wrapper isn't forwarding on setting
     # the attribute.
     with contextlib.suppress(AttributeError):
         reg.get().autoconvert_offset_to_baseunit = True
-
+    
     for pre in _unit_preprocessors:
         if pre not in reg.preprocessors:
             reg.preprocessors.append(pre)
-
+    
     # Define commonly encountered units not defined by pint
     reg.define('degrees_north = degree = degrees_N = degreesN = degree_north = degree_N '
                '= degreeN')
     reg.define('degrees_east = degree = degrees_E = degreesE = degree_east = degree_E '
                '= degreeE')
     reg.define('dBz = 1e-18 m^3; logbase: 10; logfactor: 10 = dBZ')
-
+    
     # Alias geopotential meters (gpm) to just meters
     reg.define('@alias meter = gpm')
-
+    
     # custom contexts
-
+    
     # Define a context for precipitation
     precipitation = pint.Context('precipitation')
-
+    
     # Precipitation amount
     # 1 mm of rainfall = 1 kg/m² for water
     # Forward transformation (mm -> kg/m²)
     precipitation.add_transformation('[length]', '[mass] / [length] ** 2',
                                      lambda reg, x: x * reg('kg/m^2') / reg('mm'))
-
+    
     # Reverse transformation (kg/m² -> mm)
     precipitation.add_transformation('[mass] / [length] ** 2', '[length]',
                                      lambda reg, x: x * reg('mm') / reg('kg/m^2'))
-
+    
     # Precipitation Rate
     # Forward transformation (mm/h -> kg/m²/h)
     precipitation.add_transformation('[length] / [time]', '[mass] / [length] ** 2 / [time]',
                                      lambda reg, x: x * reg('kg/m^2/h') / reg('mm/h'))
-
+    
     # Reverse transformation (kg/m²/h -> mm/h)
     precipitation.add_transformation('[mass] / [length] ** 2 / [time]', '[length] / [time]',
                                      lambda reg, x: x * reg('mm/h') / reg('kg/m^2/h'))
-
+    
     reg.add_context(precipitation)
-
+    
+    # register the custom context for use in other parts of the application
+    class CustomUnitContextEntry(Instance):
+        type = "precipitation"
+        label = _("Precipitation")
+    
+    custom_unit_context_registry.register(CustomUnitContextEntry())
+    
     return reg
 
 
 # Make our modifications using pint's application registry--which allows us to better
 # interoperate with other libraries using Pint.
 units = setup_registry(pint.get_application_registry())
+
+
+def validate_unit(unit):
+    """Check if a unit is valid."""
+    try:
+        units(unit)
+    except pint.errors.UndefinedUnitError as e:
+        raise ValidationError(
+            _("'%(unit)s' is not defined in the unit registry"),
+            params={"unit": unit},
+        )
+
 
 TEMPERATURE_UNITS = [
     'degree_Celsius',

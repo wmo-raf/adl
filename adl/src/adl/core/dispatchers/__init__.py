@@ -28,8 +28,11 @@ def get_dispatch_channel_data(dispatch_channel):
     parameter_channel_mapping = {
         pm.parameter_id: {
             "channel_parameter": pm.channel_parameter,
-            "value_field": "value" if not send_agg_data else pm.aggregation_measure
-        } for pm in parameter_mappings}
+            "adl_parameter": pm.parameter,
+            "value_field": "value" if not send_agg_data else pm.aggregation_measure,
+            "channel_unit": pm.channel_unit
+        } for pm in parameter_mappings
+    }
     
     records_model = ObservationRecord
     
@@ -39,6 +42,7 @@ def get_dispatch_channel_data(dispatch_channel):
         elif aggregation_period == "daily":
             records_model = DailyAggregatedObservationRecord
     
+    # get all records for the channel connection
     obs_records = records_model.objects.filter(connection_id=connection.id)
     
     logger.info(f"Found {obs_records.count()} records for network connection {connection}")
@@ -61,15 +65,23 @@ def get_dispatch_channel_data(dispatch_channel):
     records = []
     for station_id, time_obs_map in by_station_by_time.items():
         for time, obs_list in time_obs_map.items():
+            values = {}
+            for obs in obs_list:
+                key = parameter_channel_mapping[obs.parameter_id]["channel_parameter"]
+                value = getattr(obs, parameter_channel_mapping[obs.parameter_id]["value_field"])
+                channel_unit = parameter_channel_mapping[obs.parameter_id]["channel_unit"]
+                
+                # convert value to channel unit if necessary
+                if channel_unit != obs.parameter.unit:
+                    adl_parameter = parameter_channel_mapping[obs.parameter_id]["adl_parameter"]
+                    value = adl_parameter.convert_value_units(value, channel_unit)
+                
+                values[key] = value
+            
             record = {
                 "station_id": station_id,
                 "timestamp": time,
-                "values": {
-                    parameter_channel_mapping[obs.parameter_id]["channel_parameter"]: getattr(
-                        obs,
-                        parameter_channel_mapping[obs.parameter_id]["value_field"])
-                    for obs in obs_list
-                }
+                "values": values
             }
             
             records.append(record)

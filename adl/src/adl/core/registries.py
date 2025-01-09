@@ -75,3 +75,20 @@ class PluginRegistry(Registry):
 
 
 plugin_registry = PluginRegistry()
+
+
+class CustomUnitContextRegistry(Registry):
+    name = "adl_unit_context_registry"
+    
+    def get_choices(self):
+        """
+        Returns the choices for the custom unit context.
+
+        :return: The choices for the custom unit context.
+        :rtype: List[Tuple[str, str]]
+        """
+        
+        return [(k, v.label) for k, v in self.registry.items()]
+
+
+custom_unit_context_registry = CustomUnitContextRegistry()

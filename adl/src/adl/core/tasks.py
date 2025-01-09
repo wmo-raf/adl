@@ -11,6 +11,8 @@ from .utils import get_object_or_none
 
 logger = logging.getLogger(__name__)
 
+from django.utils.dateparse import parse_time
+
 
 @app.task(
     base=Singleton,
@@ -37,35 +39,6 @@ def run_network_plugin(self, network_id):
         
         logger.info(f"Starting plugin processing '{plugin}' for network {network_connection.name}...")
         plugin.run_process(network_connection)
-
-
-@app.task(
-    base=Singleton,
-    bind=True
-)
-def check_plugin_unploaded_records(self, network_connection_id):
-    from adl.core.registries import plugin_registry
-    from .models import NetworkConnection
-    
-    network_connection = get_object_or_none(NetworkConnection, id=network_connection_id)
-    
-    if not network_connection:
-        logger.error(f"NetworkConnection with id {network_connection_id} does not exist. Skipping...")
-        return
-    
-    network_plugin_type = network_connection.plugin
-    plugin = plugin_registry.get(network_plugin_type)
-    
-    if plugin:
-        plugin_processing_enabled = network_connection.plugin_processing_enabled
-        
-        if not plugin_processing_enabled:
-            logger.info(
-                f"Network plugin processing is disabled for network connection {network_connection.name}.Skipping...")
-            return
-        
-        logger.info(f"Starting unploaded records check for '{plugin}' for network {network_connection.name}...")
-        plugin.check_unploaded_records(network_connection)
 
 
 @app.on_after_finalize.connect
@@ -128,8 +101,16 @@ def perform_daily_aggregation(self):
 
 
 def create_or_update_aggregation_periodic_tasks(settings):
+    if not settings.hourly_aggregation_interval:
+        return
+    
     hourly_aggregation_interval = settings.hourly_aggregation_interval
     daily_aggregation_time = settings.daily_aggregation_time
+    
+    # Parse the daily aggregation time if it is a string
+    # This is used before the settings are updated/saved for the first time
+    if isinstance(daily_aggregation_time, str):
+        daily_aggregation_time = parse_time(daily_aggregation_time)
     
     sig_hourly = perform_hourly_aggregation.s()
     name_hourly = repr(sig_hourly)

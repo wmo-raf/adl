@@ -3,7 +3,6 @@ import json
 from django.contrib.gis.geos import Point
 from django.core.cache import cache
 from django.core.paginator import Paginator, InvalidPage
-from django.http import JsonResponse
 from django.shortcuts import render, redirect
 from django.urls import reverse_lazy, reverse
 from django.urls.exceptions import NoReverseMatch
@@ -18,12 +17,10 @@ from .forms import StationLoaderForm, OSCARStationImportForm
 from .models import (
     Station,
     AdlSettings,
-    PluginExecutionEvent,
     OscarSurfaceStationLocal,
     NetworkConnection,
     DispatchChannel
 )
-from .serializers import PluginExecutionEventSerializer
 from .table import LinkColumnWithIcon
 from .utils import (
     get_stations_for_country_live,
@@ -352,21 +349,8 @@ def import_oscar_station(request, wigos_id):
     return render(request, template_name=template_name, context=context)
 
 
-def plugin_events_data(request):
-    events = PluginExecutionEvent.objects.filter(finished_at__isnull=False)
-    
-    later_than = request.GET.get("later_than")
-    
-    if later_than:
-        events = events.filter(finished_at__gt=later_than)
-    
-    serializer = PluginExecutionEventSerializer(events, many=True)
-    
-    return JsonResponse(serializer.data, safe=False)
-
-
 def connections_list(request):
-    queryset = NetworkConnection.objects.all()
+    queryset = NetworkConnection.objects.all().order_by("name")
     
     breadcrumbs_items = [
         {"url": reverse_lazy("wagtailadmin_home"), "label": _("Home")},

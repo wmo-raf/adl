@@ -45,6 +45,7 @@ INSTALLED_APPS = [
     
     "django_countries",
     "django_celery_beat",
+    "django_celery_results",
     
     "wagtail.contrib.forms",
     "wagtail.contrib.redirects",
@@ -238,6 +239,9 @@ CELERY_SINGLETON_BACKEND_CLASS = (
     "adl.celery_singleton_backend.RedisBackendForSingleton"
 )
 
+CELERY_RESULT_BACKEND = 'django-db'
+CELERY_RESULT_EXTENDED = True
+
 CACHES = {
     "default": {
         "BACKEND": "django_redis.cache.RedisCache",
@@ -247,6 +251,8 @@ CACHES = {
         "VERSION": VERSION,
     },
 }
+
+CELERY_CACHE_BACKEND = "default"
 
 LOGGING = {
     "version": 1,

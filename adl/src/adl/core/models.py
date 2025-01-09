@@ -21,14 +21,13 @@ from wagtail.models import Orderable
 from wagtail.snippets.models import register_snippet
 from wagtailgeowidget.panels import LeafletPanel
 
-from .constants import DATA_PARAMETERS_DICT, PRECIPITAION_PARAMETERS
 from .dispatchers import get_dispatch_channel_data
 from .dispatchers.wis2box import upload_to_wis2box
 from .tasks import create_or_update_aggregation_periodic_tasks
-from .units import TEMPERATURE_UNITS, units
+from .units import units, validate_unit, TEMPERATURE_UNITS
 from .utils import (
-    get_data_parameters_as_choices,
-    validate_as_integer
+    validate_as_integer,
+    get_custom_unit_context_entries
 )
 from .widgets import PluginSelectWidget
 
@@ -185,58 +184,66 @@ class Station(models.Model):
         return f"{self.wsi_series}-{self.wsi_issuer}-{self.wsi_issue_number}-{self.wsi_local}"
 
 
-class DataParameter(models.Model):
-    name = models.CharField(max_length=255, verbose_name=_("Name"), help_text=_("Name of the variable"))
-    parameter = models.CharField(max_length=255, choices=get_data_parameters_as_choices, verbose_name=_("Parameter"),
-                                 unique=True)
-    unit = models.CharField(max_length=255, verbose_name=_("Unit"), help_text=_("Unit of the variable"))
-    description = models.TextField(verbose_name=_("Description"), help_text=_("Description of the variable"))
-    
-    @property
-    def units_pint(self):
-        return DATA_PARAMETERS_DICT.get(self.parameter, {}).get("unit")
-    
-    def convert_value_units(self, value, from_units):
-        if from_units in TEMPERATURE_UNITS:
-            quantity = units.Quantity(value, from_units)
-        else:
-            quantity = value * units(from_units)
-        
-        if self.parameter in PRECIPITAION_PARAMETERS:
-            with units.context("precipitation"):
-                quantity_converted = quantity.to(self.units_pint)
-        else:
-            quantity_converted = quantity.to(self.units_pint)
-        
-        return quantity_converted.magnitude
-    
-    def __str__(self):
-        return f"{self.name} - {self.unit}"
-
-
-class PluginExecutionEvent(models.Model):
-    plugin = models.CharField(max_length=255)
-    started_at = models.DateTimeField(auto_now_add=True)
-    finished_at = models.DateTimeField(blank=True, null=True)
-    success = models.BooleanField(default=False)
-    error_message = models.TextField(blank=True, null=True)
+class Unit(models.Model):
+    name = models.CharField(max_length=255, verbose_name=_("Name"), help_text=_("Name of the unit"), unique=True)
+    symbol = models.CharField(max_length=255, verbose_name=_("Symbol"), help_text=_("Symbol of the unit"),
+                              validators=[validate_unit], unique=True)
+    description = models.TextField(verbose_name=_("Description"), blank=True, null=True,
+                                   help_text=_("Description of the unit"))
     
     class Meta:
-        verbose_name = _("Plugin Execution Event")
-        verbose_name_plural = _("Plugin Execution Events")
-        ordering = ['finished_at']
+        verbose_name = _("Unit")
+        verbose_name_plural = _("Units")
     
     def __str__(self):
-        return f"{self.plugin} - {self.started_at}"
+        return self.name
     
-    def get_data_ingestion_count(self):
-        return self.dataingestionrecord_set.count()
+    @property
+    def pint_unit(self):
+        return units(self.symbol)
     
-    def finished_at_utc_timestamp(self):
-        if self.finished_at is None:
-            return None
+    def get_registry_unit(self):
+        unit = self.pint_unit.u
+        return str(unit)
+    
+    get_registry_unit.short_description = _("Unit Registry")
+
+
+class DataParameter(models.Model):
+    name = models.CharField(max_length=255, verbose_name=_("Name"), help_text=_("Name of the variable"))
+    unit = models.ForeignKey(Unit, on_delete=models.CASCADE, verbose_name=_("Unit"),
+                             help_text=_("Unit of the variable"))
+    description = models.TextField(verbose_name=_("Description"), blank=True, null=True,
+                                   help_text=_("Description of the variable"))
+    custom_unit_context = models.CharField(max_length=255, blank=True, null=True,
+                                           choices=get_custom_unit_context_entries,
+                                           verbose_name=_("Custom Unit Conversion Context"),
+                                           help_text=_("Context of the unit"))
+    panels = [
+        FieldPanel("name"),
+        FieldPanel("unit"),
+        FieldPanel("description"),
+        FieldPanel("custom_unit_context"),
+    ]
+    
+    def __str__(self):
+        return f"{self.name} - {self.unit.symbol}"
+    
+    def convert_value_units(self, value, from_unit):
+        if from_unit.symbol in TEMPERATURE_UNITS:
+            quantity = units.Quantity(value, from_unit.symbol)
+        else:
+            quantity = value * from_unit.pint_unit
+        # use custom unit context if set
+        # Useful for converting units that are not directly convertible  using pint,
+        # like precipitation (from mm -> kg/m²)
+        if self.custom_unit_context:
+            with units.context(self.custom_unit_context):
+                quantity_converted = quantity.to(self.unit.symbol)
+        else:
+            quantity_converted = quantity.to(self.unit.symbol)
         
-        return dj_timezone.localtime(self.finished_at, timezone.utc).timestamp()
+        return quantity_converted.magnitude
 
 
 @register_setting
@@ -299,6 +306,9 @@ class NetworkConnection(PolymorphicModel, ClusterableModel):
     class Meta:
         verbose_name = _("Network Connection")
         verbose_name_plural = _("Network Connections")
+    
+    def __str__(self):
+        return self.name
 
 
 class StationLink(PolymorphicModel):
@@ -440,6 +450,9 @@ class DispatchChannelParameterMapping(Orderable):
     parameter = models.ForeignKey(DataParameter, on_delete=models.CASCADE, verbose_name=_("Parameter"))
     channel_parameter = models.CharField(max_length=255, verbose_name=_("Channel Parameter"),
                                          help_text=_("Parameter name in the channel"))
+    channel_unit = models.ForeignKey(Unit, blank=True, null=True, on_delete=models.CASCADE,
+                                     verbose_name=_("Channel Unit"),
+                                     help_text=_("Unit of the parameter in the channel. Leave empty if the same"))
     
     aggregation_measure = models.CharField(max_length=255, default="avg_value",
                                            choices=AGGREGATION_MEASURE_CHOICES,
@@ -493,8 +506,3 @@ class Wis2BoxUpload(DispatchChannel):
 @receiver(post_save, sender=AdlSettings)
 def update_aggregation_period_tasks(sender, instance, **kwargs):
     create_or_update_aggregation_periodic_tasks(instance)
-
-
-class ChannelDispatchedRecords(models.Model):
-    obs_record_id = models.BigIntegerField(verbose_name=_("Observation Record ID"))
-    dispatch_channel = models.ForeignKey(DispatchChannel, on_delete=models.CASCADE, verbose_name=_("Dispatch Channel"))

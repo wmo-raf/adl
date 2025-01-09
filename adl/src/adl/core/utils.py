@@ -8,36 +8,7 @@ from django.core.exceptions import ValidationError
 from django.core.files.base import ContentFile
 from pyoscar import OSCARClient
 
-from .constants import DATA_PARAMETERS_DICT
-
 logger = logging.getLogger(__name__)
-
-
-def get_data_parameters_as_choices():
-    return [(key, value["name"]) for key, value in DATA_PARAMETERS_DICT.items()]
-
-
-def create_default_data_parameters():
-    from .models import DataParameter
-    
-    logger.info("Creating default data parameters")
-    
-    for key, value in DATA_PARAMETERS_DICT.items():
-        data = {
-            "name": value.get("name"),
-            "parameter": key,
-            "unit": value.get("unit"),
-            "description": value.get("description"),
-        }
-        
-        if DataParameter.objects.filter(parameter=key).exists():
-            logger.info(f"Data parameter with parameter {key} already exists")
-            continue
-        
-        logger.info(f"Creating data parameter with parameter {key} ...")
-        DataParameter.objects.create(**data)
-    
-    logger.info("Default data parameters created successfully")
 
 
 def is_valid_wigos_id(wigos_id):
@@ -217,3 +188,9 @@ def get_model_by_string_label(model_string_label):
         return None
     
     return model
+
+
+def get_custom_unit_context_entries():
+    from adl.core.registries import custom_unit_context_registry
+    
+    return custom_unit_context_registry.get_choices()
