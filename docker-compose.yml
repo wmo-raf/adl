@@ -133,3 +133,8 @@ services:
       - ./deploy/nginx/nginx.conf:/etc/nginx/nginx.conf
     ports:
       - ${ADL_WEB_PROXY_PORT:-80}:80
+
+networks:
+  default:
+    external: true
+    name: ${ADL_NETWORK_NAME:-adl}
