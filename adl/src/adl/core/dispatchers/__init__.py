@@ -45,10 +45,13 @@ def get_dispatch_channel_data(dispatch_channel):
     # get all records for the channel connection
     obs_records = records_model.objects.filter(connection_id=connection.id)
     
-    logger.info(f"Found {obs_records.count()} records for network connection {connection}")
-    
     if last_upload_obs_time:
         obs_records = obs_records.filter(time__gt=last_upload_obs_time)
+    
+    # order by earliest time first
+    obs_records = obs_records.order_by("time")
+    
+    logger.info(f"Found {obs_records.count()} records for network connection {connection}")
     
     # group by station and by time
     by_station_by_time = {}
