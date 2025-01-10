@@ -24,3 +24,4 @@ pandas==2.2.3
 python-dateutil==2.9.0.post0
 wagtailgeowidget==8.1.1
 wagtail-modeladmin==2.0.0
+django-polymorphic==3.1.0
