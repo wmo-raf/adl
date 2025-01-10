@@ -293,6 +293,9 @@ class NetworkConnection(PolymorphicModel, ClusterableModel):
                                                                  MaxValueValidator(30),
                                                                  MinValueValidator(1)
                                                              ])
+    is_daily_data = models.BooleanField(default=False, verbose_name=_("Is Daily Data"),
+                                        help_text=_("Check to mark data from this connection as daily data"))
+    
     panels = [
         FieldPanel("name"),
         FieldPanel("network"),
@@ -301,6 +304,7 @@ class NetworkConnection(PolymorphicModel, ClusterableModel):
             FieldPanel("plugin_processing_enabled"),
             FieldPanel("plugin_processing_interval"),
         ], heading=_("Plugin Configuration")),
+        FieldPanel("is_daily_data"),
     ]
     
     class Meta:

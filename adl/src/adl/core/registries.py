@@ -45,9 +45,6 @@ class Plugin(Instance):
     
     def run_process(self, network_connection):
         self.get_data()
-    
-    def check_unploaded_records(self, network):
-        pass
 
 
 class PluginRegistry(Registry):

@@ -117,7 +117,7 @@ def aggregate_daily(from_date=None):
         
         # Perform aggregation for the current day
         aggregations = (
-            ObservationRecord.objects.filter(time__gte=current_time, time__lt=next_time, is_daily=False)
+            ObservationRecord.objects.filter(time__gte=current_time, time__lt=next_time)
             .values("parameter_id", "station_id", "connection_id")  # group by parameter, station and connection
             .annotate(
                 min_value=Min("value"),
