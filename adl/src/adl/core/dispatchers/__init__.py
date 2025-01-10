@@ -68,13 +68,8 @@ def get_dispatch_channel_data(dispatch_channel):
     records = []
     
     for station_id, time_obs_map in by_station_by_time.items():
-        print(time_obs_map)
         for time, obs_list in time_obs_map.items():
-            
             data_values = {}
-            
-            print(len(obs_list), obs_list)
-            
             for obs in obs_list:
                 key = parameter_channel_mapping[obs.parameter_id]["channel_parameter"]
                 data_value = getattr(obs, parameter_channel_mapping[obs.parameter_id]["value_field"])
