@@ -229,7 +229,7 @@ class DataParameter(models.Model):
     def __str__(self):
         return f"{self.name} - {self.unit.symbol}"
     
-    def convert_value_units(self, value, from_unit):
+    def convert_value_from_units(self, value, from_unit):
         if from_unit.symbol in TEMPERATURE_UNITS:
             quantity = units.Quantity(value, from_unit.symbol)
         else:
@@ -242,6 +242,22 @@ class DataParameter(models.Model):
                 quantity_converted = quantity.to(self.unit.symbol)
         else:
             quantity_converted = quantity.to(self.unit.symbol)
+        
+        return quantity_converted.magnitude
+    
+    def convert_value_to_units(self, value, to_unit):
+        if to_unit.symbol in TEMPERATURE_UNITS:
+            quantity = units.Quantity(value, self.unit.symbol)
+        else:
+            quantity = value * self.unit.pint_unit
+        # use custom unit context if set
+        # Useful for converting units that are not directly convertible  using pint,
+        # like precipitation (from mm -> kg/m²)
+        if self.custom_unit_context:
+            with units.context(self.custom_unit_context):
+                quantity_converted = quantity.to(to_unit.symbol)
+        else:
+            quantity_converted = quantity.to(to_unit.symbol)
         
         return quantity_converted.magnitude
 

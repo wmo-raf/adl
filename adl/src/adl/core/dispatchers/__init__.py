@@ -78,7 +78,7 @@ def get_dispatch_channel_data(dispatch_channel):
                 # convert value to channel unit if necessary
                 if channel_unit != obs.parameter.unit:
                     adl_parameter = parameter_channel_mapping[obs.parameter_id]["adl_parameter"]
-                    data_value = adl_parameter.convert_value_units(data_value, channel_unit)
+                    data_value = adl_parameter.convert_value_to_units(data_value, channel_unit)
                 
                 data_values[key] = data_value
             
