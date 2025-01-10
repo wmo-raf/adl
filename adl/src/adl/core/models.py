@@ -364,7 +364,10 @@ class ObservationRecord(TimescaleModel, ClusterableModel):
         verbose_name_plural = _("Observation Records")
         ordering = ['-time']
         constraints = [
-            models.UniqueConstraint(fields=['time', 'station', 'parameter'], name='unique_station_param_obs_record')
+            models.UniqueConstraint(
+                fields=['time', 'station', 'connection', 'parameter'],
+                name='unique_station_conn_param_obs_record'
+            )
         ]
     
     @property
