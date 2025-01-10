@@ -146,9 +146,62 @@ def hourly_aggregate_data_records(channel, data_records):
     return hourly_data_records
 
 
-def upload_to_wis2box(channel, data_records, overwrite=False):
+def channel_record_to_wis2box_csv(record):
     from adl.core.models import Station
+    station_id = record.get("station_id")
     
+    if not station_id:
+        logger.error("Station ID not found in data record")
+        return None, None
+    
+    timestamp = record.get("timestamp")
+    if not timestamp:
+        logger.error("Timestamp not found in data record")
+        return None, None
+    
+    station = get_object_or_none(Station, id=station_id)
+    
+    if not station:
+        logger.error(f"Station with ID {station_id} not found")
+        return None, None
+    
+    csv_metadata = get_wis2box_csv_station_metadata(station)
+    
+    output = StringIO()
+    writer = csv.writer(output)
+    writer.writerow(WIS2BOX_CSV_HEADER)
+    
+    row_data = []
+    values = record.get("values", {})
+    
+    date_info = {
+        "year": timestamp.year,
+        "month": timestamp.month,
+        "day": timestamp.day,
+        "hour": timestamp.hour,
+        "minute": timestamp.minute,
+    }
+    
+    data = {
+        **csv_metadata,
+        **date_info,
+        **values
+    }
+    
+    for col in WIS2BOX_CSV_HEADER:
+        col_data = data.get(col, "")
+        row_data.append(col_data)
+    
+    writer.writerow(row_data)
+    csv_content = output.getvalue()
+    output.close()
+    
+    filename = f"WIGOS_{station.wigos_id}_{timestamp.strftime('%Y%m%dT%H%M%S')}.csv"
+    
+    return csv_content, filename
+
+
+def upload_to_wis2box(channel, data_records, overwrite=False):
     minio_client = get_minio_client(
         endpoint=channel.storage_endpoint,
         access_key=channel.storage_username,
@@ -157,59 +210,16 @@ def upload_to_wis2box(channel, data_records, overwrite=False):
     )
     
     for record in data_records:
-        station_id = record.get("station_id")
+        csv_content, filename = channel_record_to_wis2box_csv(record)
         
-        if not station_id:
-            logger.error("Station ID not found in data record. Skipping...")
-            continue
-        
-        timestamp = record.get("timestamp")
-        if not timestamp:
-            logger.error("Timestamp not found in data record. Skipping...")
-            continue
-        
-        station = get_object_or_none(Station, id=station_id)
-        
-        if not station:
-            logger.error(f"Station with ID {station_id} not found. Skipping...")
-            continue
-        
-        csv_metadata = get_wis2box_csv_station_metadata(station)
-        
-        output = StringIO()
-        writer = csv.writer(output)
-        writer.writerow(WIS2BOX_CSV_HEADER)
-        
-        row_data = []
-        values = record.get("values", {})
-        
-        date_info = {
-            "year": timestamp.year,
-            "month": timestamp.month,
-            "day": timestamp.day,
-            "hour": timestamp.hour,
-            "minute": timestamp.minute,
-        }
-        
-        data = {
-            **csv_metadata,
-            **date_info,
-            **values
-        }
-        
-        for col in WIS2BOX_CSV_HEADER:
-            col_data = data.get(col, "")
-            row_data.append(col_data)
-        
-        writer.writerow(row_data)
-        csv_content = output.getvalue()
-        output.close()
+        if not csv_content:
+            logger.error("Error converting record to CSV. Skipping...")
         
         # Convert csv_content to bytes for uploading
         csv_bytes = BytesIO(csv_content.encode('utf-8'))
         
         bucket_name = "wis2box-incoming"
-        object_name = f"{channel.dataset_id}/{station_id}_{timestamp.strftime('%Y%m%d%H%M%S')}.csv"
+        object_name = f"{channel.dataset_id}/{filename}"
         
         # Upload the CSV content to MinIO
         try:
@@ -224,7 +234,7 @@ def upload_to_wis2box(channel, data_records, overwrite=False):
             logger.info(f"CSV uploaded successfully as {object_name} in bucket {bucket_name}.")
             
             # Update last upload time
-            channel.last_upload_obs_time = timestamp
+            channel.last_upload_obs_time = record.get("timestamp")
             channel.save()
         
         except S3Error as e:
