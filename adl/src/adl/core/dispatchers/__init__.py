@@ -66,25 +66,31 @@ def get_dispatch_channel_data(dispatch_channel):
             by_station_by_time[obs.station_id][obs.time].append(obs)
     
     records = []
+    
     for station_id, time_obs_map in by_station_by_time.items():
+        print(time_obs_map)
         for time, obs_list in time_obs_map.items():
-            values = {}
+            
+            data_values = {}
+            
+            print(len(obs_list), obs_list)
+            
             for obs in obs_list:
                 key = parameter_channel_mapping[obs.parameter_id]["channel_parameter"]
-                value = getattr(obs, parameter_channel_mapping[obs.parameter_id]["value_field"])
+                data_value = getattr(obs, parameter_channel_mapping[obs.parameter_id]["value_field"])
                 channel_unit = parameter_channel_mapping[obs.parameter_id]["channel_unit"]
                 
                 # convert value to channel unit if necessary
                 if channel_unit != obs.parameter.unit:
                     adl_parameter = parameter_channel_mapping[obs.parameter_id]["adl_parameter"]
-                    value = adl_parameter.convert_value_units(value, channel_unit)
+                    data_value = adl_parameter.convert_value_units(data_value, channel_unit)
                 
-                values[key] = value
+                data_values[key] = data_value
             
             record = {
                 "station_id": station_id,
                 "timestamp": time,
-                "values": values
+                "values": data_values
             }
             
             records.append(record)
