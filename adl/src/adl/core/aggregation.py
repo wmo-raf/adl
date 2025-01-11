@@ -25,18 +25,18 @@ def aggregate_hourly(from_date=None):
         if last_aggregated_record:
             from_date = last_aggregated_record.time
         else:
-            earliest_record = ObservationRecord.objects.earliest("time")
-            
-            if earliest_record:
+            try:
+                earliest_record = ObservationRecord.objects.earliest("time")
                 from_date = earliest_record.time
-            else:
+            except ObservationRecord.DoesNotExist:
                 # no records to aggregate
                 logger.warning("No observation records to aggregate")
                 return
     
-    to_date = dj_timezone.now()
+    # use the current time as the end date
+    to_date = dj_timezone.localtime()
     
-    # discard the minutes and seconds
+    # reset to beginning of the hour
     from_date = from_date.replace(minute=0, second=0)
     to_date = to_date.replace(minute=0, second=0)
     
@@ -65,8 +65,8 @@ def aggregate_hourly(from_date=None):
         )
         
         for aggregation in aggregations:
-            time = current_time
-            aggregation["time"] = time
+            aggregation_time = current_time
+            aggregation["time"] = aggregation_time
             
             logger.info(f"Saving hourly aggregation record for hour: {aggregation['time']}, "
                         f"station: {aggregation['station_id']}, " f"parameter: {aggregation['parameter_id']}, "
@@ -98,7 +98,7 @@ def aggregate_daily(from_date=None):
                 logger.warning("No observation records to aggregate")
                 return
     
-    to_date = dj_timezone.now()
+    to_date = dj_timezone.localtime()
     
     # reset to beginning of the day
     from_date = from_date.replace(hour=0, minute=0, second=0)
@@ -133,8 +133,8 @@ def aggregate_daily(from_date=None):
             logger.info(f"No data to aggregate for day: {current_time}")
         else:
             for aggregation in aggregations:
-                time = current_time
-                aggregation["time"] = time
+                aggregation_time = current_time
+                aggregation["time"] = aggregation_time
                 
                 logger.info(f"Saving daily aggregation record for day: {aggregation['time']}, "
                             f"station: {aggregation['station_id']}, " f"parameter: {aggregation['parameter_id']}, "
