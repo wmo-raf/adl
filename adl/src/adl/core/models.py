@@ -427,7 +427,6 @@ class DispatchChannel(PolymorphicModel, ClusterableModel):
                                                           MaxValueValidator(30),
                                                           MinValueValidator(1)
                                                       ])
-    last_upload_obs_time = models.DateTimeField(blank=True, null=True, verbose_name=_("Last Upload's Observation Time"))
     
     send_aggregated_data = models.BooleanField(default=False, verbose_name=_("Send Aggregated Data"))
     aggregation_period = models.CharField(max_length=255, blank=True, null=True, choices=AGGREGATION_PERIOD_CHOICES,
@@ -524,6 +523,22 @@ class Wis2BoxUpload(DispatchChannel):
             "secure": self.secure,
             "dataset_id": self.dataset_id,
         }
+
+
+@register_snippet
+class StationChannelDispatchStatus(models.Model):
+    created_at = models.DateTimeField(auto_now_add=True)
+    modified_at = models.DateTimeField(auto_now=True)
+    channel = models.ForeignKey(DispatchChannel, on_delete=models.CASCADE, verbose_name=_("Channel"))
+    station = models.ForeignKey(Station, on_delete=models.CASCADE, verbose_name=_("Station"))
+    last_sent_obs_time = models.DateTimeField(blank=True, null=True, verbose_name=_("Last Send Observation Time"))
+    
+    class Meta:
+        verbose_name = _("Station Channel Dispatch Status")
+        verbose_name_plural = _("Station Channel Dispatch Status")
+        constraints = [
+            models.UniqueConstraint(fields=['channel', 'station'], name='unique_channel_station_dispatch_status')
+        ]
 
 
 @receiver(post_save, sender=AdlSettings)

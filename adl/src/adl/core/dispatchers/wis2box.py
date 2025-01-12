@@ -202,6 +202,8 @@ def channel_record_to_wis2box_csv(record):
 
 
 def upload_to_wis2box(channel, data_records, overwrite=False):
+    from adl.core.models import StationChannelDispatchStatus
+    
     minio_client = get_minio_client(
         endpoint=channel.storage_endpoint,
         access_key=channel.storage_username,
@@ -233,9 +235,12 @@ def upload_to_wis2box(channel, data_records, overwrite=False):
             
             logger.info(f"CSV uploaded successfully as {object_name} in bucket {bucket_name}.")
             
-            # Update last upload time
-            channel.last_upload_obs_time = record.get("timestamp")
-            channel.save()
+            # Update the last sent observation time for the station
+            StationChannelDispatchStatus.objects.update_or_create({
+                "channel": channel,
+                "station_id": record.get("station_id"),
+                "last_sent_obs_time": record.get("timestamp"),
+            })
         
         except S3Error as e:
             logger.error(f"Error uploading CSV to MinIO: {e}")
