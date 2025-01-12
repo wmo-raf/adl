@@ -240,12 +240,23 @@ def upload_to_wis2box(channel, data_records, overwrite=False):
             logger.debug(f"Updating last sent observation time for "
                          f"station {record.get('station_id')} and channel {channel.name}")
             
-            # Update the last sent observation time for the station
-            StationChannelDispatchStatus.objects.update_or_create({
-                "channel": channel,
-                "station_id": record.get("station_id"),
-                "last_sent_obs_time": record.get("timestamp"),
-            })
+            station_id = record.get("station_id")
+            
+            station_dispatch_status = get_object_or_none(
+                StationChannelDispatchStatus,
+                channel_id=channel.id,
+                station_id=station_id
+            )
+            
+            if station_dispatch_status:
+                station_dispatch_status.last_sent_obs_time = record.get("timestamp")
+                station_dispatch_status.save()
+            else:
+                StationChannelDispatchStatus.objects.create(
+                    channel_id=channel.id,
+                    station_id=station_id,
+                    last_sent_obs_time=record.get("timestamp")
+                )
             
             uploaded_records_count += 1
         
