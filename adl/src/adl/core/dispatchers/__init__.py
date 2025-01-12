@@ -37,10 +37,10 @@ def get_station_channel_records(dispatch_channel, station_id):
         last_sent_obs_time = station_dispatch_status.last_sent_obs_time
     
     if last_sent_obs_time:
-        logger.info(f"[DISPATCH] Getting dispatch records for station {station_id} after {last_sent_obs_time}")
+        logger.debug(f"[DISPATCH] Getting dispatch records for station {station_id} after {last_sent_obs_time}")
         obs_records = obs_records.filter(time__gt=station_dispatch_status.last_sent_obs_time)
     else:
-        logger.info(f"[DISPATCH] Getting all dispatch records for station {station_id}")
+        logger.debug(f"[DISPATCH] Getting all dispatch records for station {station_id}")
     
     return obs_records.order_by("time")
 
@@ -79,8 +79,8 @@ def get_dispatch_channel_data(dispatch_channel):
         # get all records for the station and channel
         station_channel_records = get_station_channel_records(dispatch_channel, station_link.station_id)
         
-        logger.info(f"[DISPATCH] Found {station_channel_records.count()} records for "
-                    f"station {station_link.station_id} and channel '{dispatch_channel.name}'")
+        logger.debug(f"[DISPATCH] Found {station_channel_records.count()} records for "
+                     f"station {station_link.station_id} and channel '{dispatch_channel.name}'")
         
         for obs in station_channel_records:
             if obs.station_id not in by_station_by_time:
@@ -116,7 +116,7 @@ def get_dispatch_channel_data(dispatch_channel):
             
             records.append(record)
     
-    logger.info(f"[DISPATCH] Found a total of {len(records)} records for dispatch channel '{dispatch_channel.name}'")
+    logger.debug(f"[DISPATCH] Found a total of {len(records)} records for dispatch channel '{dispatch_channel.name}'")
     
     return records
 

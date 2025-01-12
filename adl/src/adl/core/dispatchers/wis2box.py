@@ -211,6 +211,8 @@ def upload_to_wis2box(channel, data_records, overwrite=False):
         secure=channel.secure
     )
     
+    uploaded_records_count = 0
+    
     for record in data_records:
         csv_content, filename = channel_record_to_wis2box_csv(record)
         
@@ -233,7 +235,7 @@ def upload_to_wis2box(channel, data_records, overwrite=False):
                 content_type="text/csv"
             )
             
-            logger.info(f"CSV uploaded successfully as {object_name} in bucket {bucket_name}.")
+            logger.debug(f"CSV uploaded successfully as {object_name} in bucket {bucket_name}.")
             
             logger.debug(f"Updating last sent observation time for "
                          f"station {record.get('station_id')} and channel {channel.name}")
@@ -244,6 +246,10 @@ def upload_to_wis2box(channel, data_records, overwrite=False):
                 "station_id": record.get("station_id"),
                 "last_sent_obs_time": record.get("timestamp"),
             })
+            
+            uploaded_records_count += 1
         
         except S3Error as e:
             logger.error(f"Error uploading CSV to MinIO: {e}")
+    
+    logger.info(f"Uploaded {uploaded_records_count} records to {channel.name}")
