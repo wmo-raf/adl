@@ -539,6 +539,9 @@ class StationChannelDispatchStatus(models.Model):
         constraints = [
             models.UniqueConstraint(fields=['channel', 'station'], name='unique_channel_station_dispatch_status')
         ]
+    
+    def __str__(self):
+        return f"{self.station.name} - {self.channel.name} - {self.last_sent_obs_time}"
 
 
 @receiver(post_save, sender=AdlSettings)
