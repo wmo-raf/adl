@@ -235,6 +235,9 @@ def upload_to_wis2box(channel, data_records, overwrite=False):
             
             logger.info(f"CSV uploaded successfully as {object_name} in bucket {bucket_name}.")
             
+            logger.debug(f"Updating last sent observation time for "
+                         f"station {record.get('station_id')} and channel {channel.name}")
+            
             # Update the last sent observation time for the station
             StationChannelDispatchStatus.objects.update_or_create({
                 "channel": channel,

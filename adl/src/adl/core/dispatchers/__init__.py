@@ -79,6 +79,9 @@ def get_dispatch_channel_data(dispatch_channel):
         # get all records for the station and channel
         station_channel_records = get_station_channel_records(dispatch_channel, station_link.station_id)
         
+        logger.info(f"[DISPATCH] Found {station_channel_records.count()} records for "
+                    f"station {station_link.station_id} and channel '{dispatch_channel.name}'")
+        
         for obs in station_channel_records:
             if obs.station_id not in by_station_by_time:
                 by_station_by_time[obs.station_id] = {}
