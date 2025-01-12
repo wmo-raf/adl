@@ -1,7 +1,6 @@
 import logging
 from datetime import timedelta
 
-from dateutil.parser import parse as parse_date
 from django.db.models import Min, Max, Avg, Sum, Count
 from django.utils import timezone as dj_timezone
 from wagtail.models import Site
@@ -24,8 +23,8 @@ def aggregate_hourly():
     site = Site.objects.get(is_default_site=True)
     adl_settings = AdlSettings.for_site(site)
     
-    if adl_settings and adl_settings.aggregation_from_date:
-        from_date = adl_settings.aggregation_from_date
+    if adl_settings and adl_settings.aggregate_from_date:
+        from_date = adl_settings.aggregate_from_date
     
     if from_date is None:
         # get the last aggregated record
@@ -103,8 +102,8 @@ def aggregate_daily():
     site = Site.objects.get(is_default_site=True)
     adl_settings = AdlSettings.for_site(site)
     
-    if adl_settings and adl_settings.aggregation_from_date:
-        from_date = adl_settings.aggregation_from_date
+    if adl_settings and adl_settings.aggregate_from_date:
+        from_date = adl_settings.aggregate_from_date
     
     if from_date is None:
         # get the last aggregated record
