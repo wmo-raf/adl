@@ -15,6 +15,8 @@ logger = logging.getLogger(__name__)
 
 
 def aggregate_hourly(from_date=None):
+    logger.info("Starting hourly aggregation...")
+    
     if from_date:
         # make sure the dates are timezone aware
         from_date = dj_timezone.make_aware(parse_date(from_date))
@@ -46,10 +48,14 @@ def aggregate_hourly(from_date=None):
     
     current_time = from_date
     
+    aggregation_records_count = 0
+    
+    logger.info(f"Starting hourly aggregation from {from_date} to {to_date}")
+    
     while current_time < to_date:
         next_time = current_time + timedelta(hours=1)
         
-        logger.info(f"Aggregating data from {current_time} to {next_time}")
+        logger.debug(f"Hourly aggregating data from {current_time} to {next_time}")
         
         # Perform aggregation for the current hour
         aggregations = (
@@ -68,17 +74,22 @@ def aggregate_hourly(from_date=None):
             aggregation_time = current_time
             aggregation["time"] = aggregation_time
             
-            logger.info(f"Saving hourly aggregation record for hour: {aggregation['time']}, "
-                        f"station: {aggregation['station_id']}, " f"parameter: {aggregation['parameter_id']}, "
-                        f"connection: {aggregation['connection_id']}")
+            logger.debug(f"Saving hourly aggregation record for hour: {aggregation['time']}, "
+                         f"station: {aggregation['station_id']}, " f"parameter: {aggregation['parameter_id']}, "
+                         f"connection: {aggregation['connection_id']}")
             
             HourlyAggregatedObservationRecord.objects.update_or_create(**aggregation)
         
+        aggregation_records_count += len(aggregations)
+        
         # move to the next hour
         current_time = next_time
+    
+    logger.info(f"Aggregated {aggregation_records_count} hourly records")
 
 
 def aggregate_daily(from_date=None):
+    logger.info("Starting daily aggregation...")
     if from_date:
         # make sure the dates are timezone aware
         from_date = dj_timezone.make_aware(parse_date(from_date))
@@ -109,11 +120,14 @@ def aggregate_daily(from_date=None):
     to_date = to_date - timedelta(days=1)
     
     current_time = from_date
+    aggregation_records_count = 0
+    
+    logger.info(f"Starting daily aggregation from {from_date} to {to_date}")
     
     while current_time < to_date:
         next_time = current_time + timedelta(days=1)
         
-        logger.info(f"Aggregating data from {current_time} to {next_time}")
+        logger.debug(f"Aggregating data from {current_time} to {next_time}")
         
         # Perform aggregation for the current day
         aggregations = (
@@ -130,17 +144,21 @@ def aggregate_daily(from_date=None):
         
         if not aggregations:
             # no data to aggregate
-            logger.info(f"No data to aggregate for day: {current_time}")
+            logger.debug(f"No data to aggregate for day: {current_time}")
         else:
             for aggregation in aggregations:
                 aggregation_time = current_time
                 aggregation["time"] = aggregation_time
                 
-                logger.info(f"Saving daily aggregation record for day: {aggregation['time']}, "
-                            f"station: {aggregation['station_id']}, " f"parameter: {aggregation['parameter_id']}, "
-                            f"connection: {aggregation['connection_id']}")
+                logger.debug(f"Saving daily aggregation record for day: {aggregation['time']}, "
+                             f"station: {aggregation['station_id']}, " f"parameter: {aggregation['parameter_id']}, "
+                             f"connection: {aggregation['connection_id']}")
                 
                 DailyAggregatedObservationRecord.objects.update_or_create(**aggregation)
+            
+            aggregation_records_count += len(aggregations)
         
         # move to the next day
         current_time = next_time
+    
+    logger.info(f"Aggregated {aggregation_records_count} daily records")
