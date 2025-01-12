@@ -271,10 +271,15 @@ class AdlSettings(ClusterableModel, BaseSiteSetting):
     
     daily_aggregation_time = models.TimeField(default="00:00", verbose_name=_("Daily Aggregation Time"))
     
+    aggregate_from_date = models.DateField(blank=True, null=True, verbose_name=_("Aggregate Start Date"),
+                                           help_text=_("Date to start aggregation from. "
+                                                       "Leave empty to use the current date and time"))
+    
     panels = [
         FieldPanel("country", widget=CountrySelectWidget()),
         FieldPanel("hourly_aggregation_interval"),
         FieldPanel("daily_aggregation_time"),
+        FieldPanel("aggregate_from_date"),
     ]
     
     class Meta:

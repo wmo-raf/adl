@@ -4,23 +4,30 @@ from datetime import timedelta
 from dateutil.parser import parse as parse_date
 from django.db.models import Min, Max, Avg, Sum, Count
 from django.utils import timezone as dj_timezone
+from wagtail.models import Site
 
 from .models import (
     ObservationRecord,
     HourlyAggregatedObservationRecord,
-    DailyAggregatedObservationRecord
+    DailyAggregatedObservationRecord,
+    AdlSettings
 )
 
 logger = logging.getLogger(__name__)
 
 
-def aggregate_hourly(from_date=None):
+def aggregate_hourly():
     logger.info("Starting hourly aggregation...")
     
-    if from_date:
-        # make sure the dates are timezone aware
-        from_date = dj_timezone.make_aware(parse_date(from_date))
-    else:
+    from_date = None
+    
+    site = Site.objects.get(is_default_site=True)
+    adl_settings = AdlSettings.for_site(site)
+    
+    if adl_settings and adl_settings.aggregation_from_date:
+        from_date = adl_settings.aggregation_from_date
+    
+    if from_date is None:
         # get the last aggregated record
         last_aggregated_record = HourlyAggregatedObservationRecord.objects.last()
         
@@ -88,12 +95,18 @@ def aggregate_hourly(from_date=None):
     logger.info(f"Aggregated {aggregation_records_count} hourly records")
 
 
-def aggregate_daily(from_date=None):
+def aggregate_daily():
     logger.info("Starting daily aggregation...")
-    if from_date:
-        # make sure the dates are timezone aware
-        from_date = dj_timezone.make_aware(parse_date(from_date))
-    else:
+    
+    from_date = None
+    
+    site = Site.objects.get(is_default_site=True)
+    adl_settings = AdlSettings.for_site(site)
+    
+    if adl_settings and adl_settings.aggregation_from_date:
+        from_date = adl_settings.aggregation_from_date
+    
+    if from_date is None:
         # get the last aggregated record
         last_aggregated_record = DailyAggregatedObservationRecord.objects.last()
         
