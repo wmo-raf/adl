@@ -1,6 +1,7 @@
 from datetime import timezone
 
 from django.contrib.gis.db import models
+from django.core.exceptions import ValidationError
 from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db.models.signals import post_save
 from django.dispatch import receiver
@@ -84,7 +85,7 @@ class Station(models.Model):
     station_id = models.CharField(max_length=255, verbose_name=_("Station ID"),
                                   help_text=_("Unique Station Identifier"))
     name = models.CharField(max_length=255, verbose_name=_("Name"), help_text=_("Name of the station"))
-    network = models.ForeignKey(Network, on_delete=models.CASCADE, verbose_name=_("Network"))
+    network = models.ForeignKey(Network, on_delete=models.CASCADE, verbose_name=_("Network"), related_name="stations")
     wsi_series = models.PositiveIntegerField(verbose_name=_("WSI Series"), help_text=_("WIGOS identifier series"))
     wsi_issuer = models.PositiveIntegerField(verbose_name=_("WSI Issuer"), help_text=_("WIGOS issuer of identifier"))
     wsi_issue_number = models.PositiveIntegerField(verbose_name=_("WSI Issue Number"),
@@ -229,6 +230,16 @@ class DataParameter(models.Model):
     def __str__(self):
         return f"{self.name} - {self.unit.symbol}"
     
+    def clean(self, *args, **kwargs):
+        # do not change unit if ObservationRecord exist referencing this parameter
+        if self.pk:
+            observation_record = ObservationRecord.objects.filter(parameter=self).first()
+            if observation_record:
+                raise ValidationError(
+                    {"unit": _("Cannot change unit of a parameter that has observation records in the database. "
+                               "Please remove the observation records first.")}
+                )
+    
     def convert_value_from_units(self, value, from_unit):
         if from_unit.symbol in TEMPERATURE_UNITS:
             quantity = units.Quantity(value, from_unit.symbol)
@@ -359,7 +370,8 @@ class ObservationRecord(TimescaleModel, ClusterableModel):
     created_at = models.DateTimeField(auto_now_add=True)
     modified_at = models.DateTimeField(auto_now=True)
     station = models.ForeignKey(Station, on_delete=models.CASCADE, verbose_name=_("Station"))
-    connection = models.ForeignKey(NetworkConnection, on_delete=models.CASCADE, verbose_name=_("Network Connection"))
+    connection = models.ForeignKey(NetworkConnection, on_delete=models.CASCADE, verbose_name=_("Network Connection"),
+                                   related_name="observation_records")
     parameter = models.ForeignKey(DataParameter, on_delete=models.CASCADE, verbose_name=_("Parameter"))
     value = models.FloatField(verbose_name=_("Value"))
     is_daily = models.BooleanField(default=False, verbose_name=_("Is Daily"))
@@ -388,7 +400,6 @@ class AggregatedObservationRecord(TimescaleModel, ClusterableModel):
     created_at = models.DateTimeField(auto_now_add=True)
     modified_at = models.DateTimeField(auto_now=True)
     station = models.ForeignKey(Station, on_delete=models.CASCADE, verbose_name=_("Station"))
-    connection = models.ForeignKey(NetworkConnection, on_delete=models.CASCADE, verbose_name=_("Network Connection"))
     parameter = models.ForeignKey(DataParameter, on_delete=models.CASCADE, verbose_name=_("Parameter"))
     min_value = models.FloatField(verbose_name=_("Min Value"))
     max_value = models.FloatField(verbose_name=_("Max Value"))
@@ -405,12 +416,14 @@ class AggregatedObservationRecord(TimescaleModel, ClusterableModel):
 
 @register_snippet
 class HourlyAggregatedObservationRecord(AggregatedObservationRecord):
-    pass
+    connection = models.ForeignKey(NetworkConnection, on_delete=models.CASCADE, verbose_name=_("Network Connection"),
+                                   related_name="hourly_aggregated_observation_records")
 
 
 @register_snippet
 class DailyAggregatedObservationRecord(AggregatedObservationRecord):
-    pass
+    connection = models.ForeignKey(NetworkConnection, on_delete=models.CASCADE, verbose_name=_("Network Connection"),
+                                   related_name="daily_aggregated_observation_records")
 
 
 class DispatchChannel(PolymorphicModel, ClusterableModel):

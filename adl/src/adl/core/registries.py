@@ -44,7 +44,7 @@ class Plugin(Instance):
         raise NotImplementedError
     
     def run_process(self, network_connection):
-        self.get_data()
+        return self.get_data()
 
 
 class PluginRegistry(Registry):

@@ -4,9 +4,12 @@ from django.urls import include, path
 from wagtail.admin import urls as wagtailadmin_urls
 from wagtail.documents import urls as wagtaildocs_urls
 
+from adl.api import urls as api_urls
+
 urlpatterns = [
     # path("django-admin/", admin.site.urls),
     path("plugins/", include("adl.core.urls", namespace="plugins")),
+    path("api/", include(api_urls)),
     path("", include(wagtailadmin_urls)),
     # path("documents/", include(wagtaildocs_urls)),
 ]
@@ -14,11 +17,11 @@ urlpatterns = [
 if settings.DEBUG:
     from django.conf.urls.static import static
     from django.contrib.staticfiles.urls import staticfiles_urlpatterns
-
+    
     # Serve static and media files from development server
     urlpatterns += staticfiles_urlpatterns()
     urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
-
+    
     urlpatterns = [path("django-admin/", admin.site.urls)] + urlpatterns
 
 # urlpatterns = urlpatterns + [

@@ -41,11 +41,12 @@ if os.path.isfile(dev_env_path):
 INSTALLED_APPS = [
     "adl.home",
     "adl.core",
-    'polymorphic',
+    "adl.api",
     
     "django_countries",
     "django_celery_beat",
     "django_celery_results",
+    'polymorphic',
     
     "wagtail.contrib.forms",
     "wagtail.contrib.redirects",
@@ -66,6 +67,7 @@ INSTALLED_APPS = [
     "wagtailfontawesomesvg",
     "wagtailgeowidget",
     "wagtail_modeladmin",
+    "rest_framework",
     
     "django.contrib.admin",
     "django.contrib.auth",

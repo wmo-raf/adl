@@ -32,13 +32,22 @@ def run_network_plugin(self, network_id):
     
     if plugin:
         plugin_processing_enabled = network_connection.plugin_processing_enabled
+        plugin_label = plugin.label or plugin.type
         
         if not plugin_processing_enabled:
-            logger.info(f"Network plugin processing is disabled for network {network_connection.name}.Skipping...")
+            logger.info(f"Network plugin processing is disabled for network {network_connection.name}. Skipping...")
             return
         
-        logger.info(f"Starting plugin processing '{plugin}' for network {network_connection.name}...")
-        plugin.run_process(network_connection)
+        logger.info(f"Starting plugin processing '{plugin_label}' for network {network_connection.name}...")
+        
+        saved_records_count = plugin.run_process(network_connection)
+        if saved_records_count is None:
+            saved_records_count = 0
+        
+        logger.info(f"Plugin processing '{plugin_label}' for network {network_connection.name} finished. "
+                    f"Saved {saved_records_count} records.")
+        
+        return {"saved_records_count": saved_records_count}
 
 
 @app.on_after_finalize.connect
