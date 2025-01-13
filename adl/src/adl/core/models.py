@@ -475,7 +475,8 @@ class DispatchChannel(PolymorphicModel, ClusterableModel):
     
     def dispatch(self):
         data_records = self.get_data_records()
-        self.send_data(data_records)
+        
+        return self.send_data(data_records)
 
 
 class DispatchChannelParameterMapping(Orderable):

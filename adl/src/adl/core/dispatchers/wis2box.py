@@ -264,3 +264,5 @@ def upload_to_wis2box(channel, data_records, overwrite=False):
             logger.error(f"Error uploading CSV to MinIO: {e}")
     
     logger.info(f"Uploaded {uploaded_records_count} records to {channel.name}")
+    
+    return uploaded_records_count

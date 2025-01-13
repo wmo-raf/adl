@@ -131,4 +131,11 @@ def run_dispatch_channel(dispatcher_id):
     
     data = get_dispatch_channel_data(dispatch_channel)
     
-    dispatch_channel.send_data(data)
+    num_of_sent_records = dispatch_channel.send_data(data)
+    
+    if num_of_sent_records is not None:
+        logger.info(f"[DISPATCH] Successfully sent {num_of_sent_records} records for channel '{dispatch_channel.name}'")
+        
+        return {"num_of_sent_records": num_of_sent_records}
+    
+    return {"num_of_sent_records": 0}
