@@ -17,7 +17,7 @@ class PanelMonitor {
     async fetchData() {
         const today = new Date();
         const date = dateFns.format(today, 'yyyy-MM-dd');
-        
+
         const urlWithDate = `${this.apiBaseUrl}/${this.connectionId}/${date}/`;
 
         const response = await fetch(urlWithDate);
@@ -27,8 +27,11 @@ class PanelMonitor {
 
     renderChart() {
         this.chart = Highcharts.chart(this.chartContainerId, {
+            chart: {
+                type: 'spline',
+            },
             title: {
-                text: 'Number of processed records',
+                text: 'Data Processing',
                 align: 'left'
             },
             yAxis: {
@@ -38,12 +41,35 @@ class PanelMonitor {
             },
             xAxis: {
                 type: 'datetime',
+                title: {
+                    text: 'Date'
+                }
             },
             plotOptions: {
                 series: {
-                    label: {
-                        connectorAllowed: false
-                    },
+                    marker: {
+                        symbol: 'circle',
+                        fillColor: '#FFFFFF',
+                        enabled: true,
+                        radius: 2.5,
+                        lineWidth: 1,
+                        lineColor: null
+                    }
+                }
+            },
+            tooltip: {
+                formatter: function () {
+                    // Format the date using Intl.DateTimeFormat
+                    const options = {
+                        year: 'numeric',
+                        month: 'short',
+                        day: 'numeric',
+                        hour: 'numeric',
+                        minute: 'numeric',
+                        hour12: true
+                    };
+                    const date = new Intl.DateTimeFormat('en-US', options).format(this.x);
+                    return `<b>${date}</b><br>Number of Records: ${this.y}`;
                 }
             },
             series: [{
