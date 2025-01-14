@@ -112,7 +112,7 @@ if [[ -n "$git" ]]; then
     dirs=("$temp_work_dir"/plugins/*/)
     num_dirs=${#dirs[@]}
     if [[ "$num_dirs" -ne 1 ]]; then
-        error "$git does not look like a WIS2Box ADL plugin. The plugins/ subdirectory in the repo must contain exactly one sub-directory."
+        error "$git does not look like an ADL plugin. The plugins/ subdirectory in the repo must contain exactly one sub-directory."
         exit 1;
     fi
     folder=${dirs[0]}
@@ -128,7 +128,7 @@ if [[ -n "$url" ]]; then
     dirs=("$temp_work_dir"/*/plugins/*/)
     num_dirs=${#dirs[@]}
     if [[ "$num_dirs" -ne 1 ]]; then
-        error "$url does not look like a WIS2Box ADL plugin. The plugin archive must contain a plugins/ sub-directory itself containing exactly one sub-directory for the plugin."
+        error "$url does not look like an ADL plugin. The plugin archive must contain a plugins/ sub-directory itself containing exactly one sub-directory for the plugin."
         exit 1;
     fi
     folder=${dirs[0]}

@@ -200,7 +200,7 @@ STORAGES = {
 
 # Wagtail settings
 
-WAGTAIL_SITE_NAME = "WIS2Box ADL"
+WAGTAIL_SITE_NAME = env.str("WAGTAIL_SITE_NAME", "ADL")
 
 # Search
 # https://docs.wagtail.org/en/stable/topics/search/backends.html

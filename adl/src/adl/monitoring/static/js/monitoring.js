@@ -13,7 +13,6 @@ class PanelMonitor {
         });
     }
 
-
     async fetchData() {
         const today = new Date();
         const date = dateFns.format(today, 'yyyy-MM-dd');
@@ -95,7 +94,6 @@ class PanelMonitor {
             return acc;
 
         }, []);
-
 
         this.chart.series[0].setData(data);
     }

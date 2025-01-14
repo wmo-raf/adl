@@ -294,8 +294,8 @@ class AdlSettings(ClusterableModel, BaseSiteSetting):
     ]
     
     class Meta:
-        verbose_name = _("WIS2Box ADL Settings")
-        verbose_name_plural = _("WIS2Box ADL Settings")
+        verbose_name = _("ADL Settings")
+        verbose_name_plural = _("ADL Settings")
 
 
 class OscarSurfaceStationLocal(models.Model):
