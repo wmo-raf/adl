@@ -42,6 +42,7 @@ INSTALLED_APPS = [
     "adl.home",
     "adl.core",
     "adl.api",
+    "adl.monitoring",
     
     "django_countries",
     "django_celery_beat",

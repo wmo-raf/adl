@@ -1,8 +1,4 @@
-from django.forms import Media
-from django.urls import reverse
 from wagtail.admin.site_summary import SummaryItem
-from wagtail.admin.ui.components import Component
-from wagtail.api.v2.utils import get_full_url
 
 from adl.core.models import Network, Station
 from adl.core.registries import plugin_registry
@@ -57,30 +53,3 @@ class PluginsSummaryItem(SummaryItem):
     
     def is_shown(self):
         return True
-
-
-class PluginMonitoringPanel(Component):
-    name = "plugin_monitoring"
-    template_name = "adl/home/plugin_monitoring_panel.html"
-    order = 100
-    
-    def get_context_data(self, parent_context):
-        context = super().get_context_data(parent_context)
-        data_url = reverse("plugin_events_data")
-        
-        context["data_url"] = get_full_url(None, data_url)
-        
-        return context
-    
-    @property
-    def media(self):
-        media = Media(
-            js=[
-                "vendor/js/date-fns.min.js",
-                "vendor/js/highstock.js",
-                "vendor/js/highcharts-exporting.js",
-                "vendor/js/highcharts-accessibility.js",
-            ]
-        )
-        
-        return media

@@ -1,0 +1,149 @@
+{% load i18n wagtailadmin_tags %}
+
+<style>
+
+    .m-panels-container {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 16px; /* Spacing between columns */
+        padding: 16px;
+    }
+
+    .m-panel {
+        flex: 1 1 calc(50% - 16px); /* Take 50% width minus gap for 2 columns */
+        padding: 16px;
+        border-radius: 8px;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1), 0 1px 3px rgba(0, 0, 0, 0.06);
+        min-height: 400px;
+    }
+
+    @media (max-width: 1024px) {
+        .m-panel {
+            flex: 1 1 100%; /* Full width for mobile screens */
+        }
+    }
+
+    .m-panel-header {
+        display: flex;
+        align-items: center;
+        border-bottom: 1px solid #e2e8f0;
+        gap: 8px;
+    }
+
+    .m-panel-icon-large svg {
+        height: 30px;
+        width: 30px;
+    }
+
+    .m-panel-icon-small svg {
+        height: 16px;
+        width: 16px;
+    }
+
+    .m-panel-meta {
+        padding: 20px 0;
+        display: flex;
+        align-items: center;
+        gap: 4px;
+    }
+
+    .m-panel-meta-item {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+        padding: 0 8px;
+    }
+
+    .meta-parts {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+    }
+
+    .meta-part {
+        margin-right: 4px;
+    }
+
+</style>
+
+<div class="m-panels-container">
+    {% for network_connection in network_connections %}
+        <div class="m-panel" id="m-panel-{{ network_connection.id }}">
+            <div class="m-panel-header">
+                <div class="m-panel-icon-large">
+                    {% icon name="plug" classname="..." title="..." %}
+                </div>
+                <h2>{{ network_connection.name }}</h2>
+            </div>
+
+            <div class="m-panel-meta">
+                {% if network_connection.plugin_processing_enabled %}
+                    <div class="m-panel-meta-item">
+                        <div class="m-panel-icon-small" style="color: var(--w-color-positive-100)">
+                            {% icon name="circle-check" %}
+                        </div>
+                        <div>
+                            {% translate "Enabled" %}
+                        </div>
+                    </div>
+
+                {% else %}
+                    <div class="m-panel-meta-item">
+                        <div class="m-panel-icon-small" style="color: var(--w-color-critical-200)">
+                            {% icon name="error" %}
+                        </div>
+                        <div>
+                            {% translate "Disabled" %}
+                        </div>
+                    </div>
+                {% endif %}
+
+                <div class="m-panel-meta-item">
+                    <div class="m-panel-icon-small">
+                        {% icon name="time" %}
+                    </div>
+                    <div class="meta-parts">
+                        <span class="meta-part">
+                            {% translate "Processing interval: " %}
+                        </span>
+                        <span class="meta-part">
+                            {{ network_connection.plugin_processing_interval }}
+                        </span>
+                        <span class="meta-part">
+                            {% translate "minutes" %}
+                        </span>
+                    </div>
+                </div>
+
+                <div class="m-panel-meta-item">
+                    <div class="m-panel-icon-small">
+                        {% icon name="map-pin" %}
+                    </div>
+                    <div class="meta-parts">
+                        <span class="meta-part">
+                            {% translate "Linked Stations: " %}
+                        </span>
+                        <span class="meta-part">
+                            {{ network_connection.station_links.count }}
+                        </span>
+                    </div>
+                </div>
+            </div>
+            <div id="m-chart-container-{{ network_connection.id }}"></div>
+        </div>
+
+        <script>
+            new PanelMonitor({
+                connectionId: "{{ network_connection.id }}",
+                panelId: "m-panel-{{ network_connection.id }}",
+                chartContainerId: "m-chart-container-{{ network_connection.id }}",
+                apiBaseUrl: "{{ data_api_base_url }}",
+            });
+        </script>
+
+
+    {% endfor %}
+</div>
+
+
+
