@@ -69,6 +69,7 @@ INSTALLED_APPS = [
     "wagtailgeowidget",
     "wagtail_modeladmin",
     "rest_framework",
+    "rest_framework_api_key",
     
     "django.contrib.admin",
     "django.contrib.auth",
