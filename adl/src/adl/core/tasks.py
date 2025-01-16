@@ -4,14 +4,13 @@ import logging
 from celery.signals import worker_ready
 from celery_singleton import Singleton, clear_locks
 from django.utils import timezone as dj_timezone
+from django.utils.dateparse import parse_time
 from django_celery_beat.models import IntervalSchedule, PeriodicTask, CrontabSchedule
 
 from adl.config.celery import app
 from .utils import get_object_or_none
 
 logger = logging.getLogger(__name__)
-
-from django.utils.dateparse import parse_time
 
 
 @app.task(
@@ -95,25 +94,25 @@ def update_network_plugin_periodic_task(sender, instance, **kwargs):
     base=Singleton,
     bind=True
 )
-def perform_hourly_aggregation(self):
-    from .aggregation import aggregate_hourly
-    aggregate_hourly()
+def perform_daily_aggregation(self):
+    from .aggregation import aggregate_daily
+    aggregate_daily()
 
 
 @app.task(
     base=Singleton,
     bind=True
 )
-def perform_daily_aggregation(self):
-    from .aggregation import aggregate_daily
-    aggregate_daily()
+def perform_hourly_aggregation(self, network_connection_id):
+    from .aggregation import aggregate_hourly_network_connection
+    aggregate_hourly_network_connection(network_connection_id)
 
 
 def create_or_update_aggregation_periodic_tasks(settings):
-    if not settings.hourly_aggregation_interval:
+    if not settings.daily_aggregation_time:
+        logger.error("Daily aggregation time is not set. Skipping...")
         return
     
-    hourly_aggregation_interval = settings.hourly_aggregation_interval
     daily_aggregation_time = settings.daily_aggregation_time
     
     # Parse the daily aggregation time if it is a string
@@ -121,25 +120,10 @@ def create_or_update_aggregation_periodic_tasks(settings):
     if isinstance(daily_aggregation_time, str):
         daily_aggregation_time = parse_time(daily_aggregation_time)
     
-    sig_hourly = perform_hourly_aggregation.s()
-    name_hourly = repr(sig_hourly)
-    
     sig_daily = perform_daily_aggregation.s()
     name_daily = repr(sig_daily)
     
     # Create or update the periodic task
-    hourly_schedule, _ = IntervalSchedule.objects.get_or_create(
-        every=hourly_aggregation_interval,
-        period=IntervalSchedule.MINUTES,
-    )
-    PeriodicTask.objects.update_or_create(
-        name=name_hourly,
-        defaults={
-            'interval': hourly_schedule,
-            'task': sig_hourly.name,
-            'enabled': True,
-        }
-    )
     
     daily_schedule, _ = CrontabSchedule.objects.get_or_create(
         minute=daily_aggregation_time.minute,

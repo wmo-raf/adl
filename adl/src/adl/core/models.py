@@ -277,20 +277,11 @@ class DataParameter(models.Model):
 class AdlSettings(ClusterableModel, BaseSiteSetting):
     country = CountryField(blank_label=_("Select Country"), verbose_name=_("Country"))
     
-    hourly_aggregation_interval = models.PositiveIntegerField(default=10, verbose_name=_("Hourly Aggregation Interval "
-                                                                                         "in Minutes"), )
-    
     daily_aggregation_time = models.TimeField(default="00:00", verbose_name=_("Daily Aggregation Time"))
-    
-    aggregate_from_date = models.DateTimeField(blank=True, null=True, verbose_name=_("Aggregate Start Date"),
-                                               help_text=_("Date to start aggregation from. "
-                                                           "Leave empty to use the current date and time"))
     
     panels = [
         FieldPanel("country", widget=CountrySelectWidget()),
-        FieldPanel("hourly_aggregation_interval"),
         FieldPanel("daily_aggregation_time"),
-        FieldPanel("aggregate_from_date"),
     ]
     
     class Meta:
@@ -347,17 +338,25 @@ class NetworkConnection(PolymorphicModel, ClusterableModel):
         return self.name
 
 
-class StationLink(PolymorphicModel):
+class StationLink(PolymorphicModel, ClusterableModel):
     network_connection = models.ForeignKey(NetworkConnection, on_delete=models.CASCADE,
                                            verbose_name=_("Network Connection"),
                                            related_name="station_links")
     station = models.ForeignKey(Station, on_delete=models.CASCADE, verbose_name=_("Station"))
+    
+    aggregate_from_date = models.DateTimeField(blank=True, null=True, verbose_name=_("Aggregate Start Date"),
+                                               help_text=_("Date to start aggregation from. "
+                                                           "Leave empty to use the current date and time"))
     
     panels = [
         MultiFieldPanel([
             FieldPanel("network_connection"),
             FieldPanel("station"),
         ], heading=_("Base"))
+    ]
+    
+    aggregation_panels = [
+        FieldPanel("aggregate_from_date"),
     ]
     
     class Meta:

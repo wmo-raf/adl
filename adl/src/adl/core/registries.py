@@ -44,7 +44,14 @@ class Plugin(Instance):
         raise NotImplementedError
     
     def run_process(self, network_connection):
-        return self.get_data()
+        from .tasks import perform_hourly_aggregation
+        records_count = self.get_data()
+        
+        # if we have some data, run aggregate hourly task asynchronously
+        if records_count is not None:
+            perform_hourly_aggregation.delay(network_connection.id)
+        
+        return records_count
 
 
 class PluginRegistry(Registry):
