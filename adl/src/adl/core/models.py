@@ -344,6 +344,9 @@ class StationLink(PolymorphicModel, ClusterableModel):
                                            related_name="station_links")
     station = models.ForeignKey(Station, on_delete=models.CASCADE, verbose_name=_("Station"))
     
+    enabled = models.BooleanField(default=True, verbose_name=_("Enabled"),
+                                  help_text=_("If unchecked, this station  will not be processed"))
+    
     aggregate_from_date = models.DateTimeField(blank=True, null=True, verbose_name=_("Aggregation Start Date"),
                                                help_text=_("Date to start aggregation from. "
                                                            "Leave empty to use the current date and time"))
@@ -352,6 +355,7 @@ class StationLink(PolymorphicModel, ClusterableModel):
         MultiFieldPanel([
             FieldPanel("network_connection"),
             FieldPanel("station"),
+            FieldPanel("enabled"),
         ], heading=_("Base"))
     ]
     
