@@ -344,7 +344,7 @@ class StationLink(PolymorphicModel, ClusterableModel):
                                            related_name="station_links")
     station = models.ForeignKey(Station, on_delete=models.CASCADE, verbose_name=_("Station"))
     
-    aggregate_from_date = models.DateTimeField(blank=True, null=True, verbose_name=_("Aggregate Start Date"),
+    aggregate_from_date = models.DateTimeField(blank=True, null=True, verbose_name=_("Aggregation Start Date"),
                                                help_text=_("Date to start aggregation from. "
                                                            "Leave empty to use the current date and time"))
     
