@@ -69,7 +69,7 @@ RUN /adl/venv/bin/pip install --no-cache-dir -e /adl/app/
 
 COPY --chown=$UID:$GID ./docker-entrypoint.sh /adl/docker-entrypoint.sh
 
-ENV DJANGO_SETTINGS_MODULE='adl.config.settings.dev'
+ENV DJANGO_SETTINGS_MODULE='adl.config.settings.production'
 
 # Add the venv to the path
 ENV PATH="/adl/venv/bin:$PATH"
