@@ -28,7 +28,7 @@ class PluginMonitoringPanel(Component):
                 "js/vendor/highcharts.js",
                 "js/vendor/highcharts-exporting.js",
                 "js/vendor/highcharts-accessibility.js",
-                "js//monitoring.js",
+                "js/monitoring.js",
             ]
         )
         
