@@ -86,6 +86,10 @@ class PanelMonitor {
 
 
         const data = this.data.reduce((acc, record) => {
+
+
+
+
             acc.push([
                 Date.parse(record.date_done),
                 record.result?.saved_records_count
