@@ -27,7 +27,7 @@ def get_network_conn_plugin_task_results_since(request, network_conn_id, from_da
     queryset = TaskResult.objects.filter(
         periodic_task_name=network_conn_task_name,
         date_done__gte=from_date
-    )
+    ).order_by("date_done")
     
     latest_record = queryset.last()
     

@@ -86,6 +86,9 @@ class PanelMonitor {
 
     renderChart(data) {
         this.chart = Highcharts.chart(this.chartContainerId, {
+            time: {
+                timezone: Intl.DateTimeFormat().resolvedOptions().timeZone // Detects the user's timezone
+            },
             title: {
                 text: 'Data Processing',
                 align: 'left'
@@ -101,10 +104,13 @@ class PanelMonitor {
                     text: 'Date'
                 }
             },
+            tooltip: {
+                xDateFormat: '%b %e, %Y %I:%M %p' // Jan 31, 2025 10:10 AM
+            },
             series: [
                 {
                     name: 'Processed Records',
-                    "type": "spline",
+                    type: "spline",
                     data: [],
                     plotOptions: {
                         series: {
@@ -116,21 +122,6 @@ class PanelMonitor {
                                 lineWidth: 1,
                                 lineColor: null
                             }
-                        }
-                    },
-                    tooltip: {
-                        formatter: function () {
-                            // Format the date using Intl.DateTimeFormat
-                            const options = {
-                                year: 'numeric',
-                                month: 'short',
-                                day: 'numeric',
-                                hour: 'numeric',
-                                minute: 'numeric',
-                                hour12: true
-                            };
-                            const date = new Intl.DateTimeFormat('en-US', options).format(this.x);
-                            return `<b>${date}</b><br>Number of Records: ${this.y}`;
                         }
                     },
                 },
