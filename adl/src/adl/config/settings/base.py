@@ -48,6 +48,7 @@ INSTALLED_APPS = [
     "django_celery_beat",
     "django_celery_results",
     'polymorphic',
+    "wagtailiconchooser",
     
     "wagtail.contrib.forms",
     "wagtail.contrib.redirects",

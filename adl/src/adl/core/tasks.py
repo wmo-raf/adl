@@ -39,14 +39,27 @@ def run_network_plugin(self, network_id):
         
         logger.info(f"Starting plugin processing '{plugin_label}' for network {network_connection.name}...")
         
-        saved_records_count = plugin.run_process(network_connection)
-        if saved_records_count is None:
-            saved_records_count = 0
+        saved_stations_records_count = plugin.run_process(network_connection)
         
-        logger.info(f"Plugin processing '{plugin_label}' for network {network_connection.name} finished. "
-                    f"Saved {saved_records_count} records.")
+        if saved_stations_records_count:
+            total_stations_count = len(saved_stations_records_count.keys())
+            saved_records_count = sum(saved_stations_records_count.values())
+            
+            logger.info(
+                f"Plugin processing '{plugin_label}' for network {network_connection.name} finished."
+                f"Processed {saved_records_count} records from {total_stations_count} stations.")
+            
+            return {
+                "saved_records_count": saved_records_count,
+                "total_stations_count": total_stations_count,
+                "station_records": saved_stations_records_count
+            }
         
-        return {"saved_records_count": saved_records_count}
+        else:
+            logger.info(f"Plugin processing '{plugin_label}' for network {network_connection.name} finished. "
+                        f"No records processed.")
+        
+        return {"saved_records_count": 0, "total_stations_count": 0, "station_records": {}}
 
 
 @app.on_after_finalize.connect

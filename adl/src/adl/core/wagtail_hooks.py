@@ -233,6 +233,9 @@ def register_icons(icons):
         'wagtailfontawesomesvg/solid/location-pin.svg',
         'wagtailfontawesomesvg/solid/location-dot.svg',
         'wagtailfontawesomesvg/solid/plug.svg',
+        'wagtailfontawesomesvg/solid/hourglass-start.svg',
+        'wagtailfontawesomesvg/solid/hourglass-end.svg',
+        'wagtailfontawesomesvg/solid/hourglass-half.svg',
     ]
 
 

@@ -4,9 +4,8 @@ from django_celery_results.models import TaskResult
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
 
+from .constants import NETWORK_PLUGIN_TASK_NAME
 from .serializers import TaskResultSerializer
-
-NETWORK_PLUGIN_TASK_NAME = "adl.core.tasks.run_network_plugin"
 
 
 @api_view()
@@ -30,6 +29,13 @@ def get_network_conn_plugin_task_results_since(request, network_conn_id, from_da
         date_done__gte=from_date
     )
     
+    latest_record = queryset.last()
+    
     serialized_data = TaskResultSerializer(queryset, many=True).data
     
-    return Response(serialized_data)
+    response = {
+        "latest_record": TaskResultSerializer(latest_record).data if latest_record else None,
+        "data": serialized_data
+    }
+    
+    return Response(response)

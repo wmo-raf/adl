@@ -1,5 +1,4 @@
 from django.forms import Media
-from django.urls import reverse
 from wagtail.admin.ui.components import Component
 
 from adl.core.models import NetworkConnection
