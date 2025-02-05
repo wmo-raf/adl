@@ -1,0 +1,95 @@
+{% load i18n wagtailiconchooser_tags %}
+
+{% if network_dispatch_channels_task_results %}
+
+    <style>
+        .channel-status {
+        }
+
+        .channel-status-header {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 16px;
+            border-bottom: 1px solid #e0e0e0;
+        }
+
+        .channel-status-header .icon {
+            height: 20px;
+            width: 20px;
+        }
+
+        .channel-status-title {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 16px 0;
+            font-size: 20px;
+            font-weight: 700;
+        }
+
+        .channel-status-table tr th {
+            background-color: #f5f5f5;
+            border-bottom: 1px solid #e0e0e0;
+            text-align: left;
+        }
+
+    </style>
+
+
+    <div class="channel-status">
+        <div class="channel-status-header">
+            <div class="icon">
+                {% svg_icon name="paper-plane" %}
+            </div>
+            <div class="channel-status-title">
+                {% translate "Dispatch Status" %}
+            </div>
+        </div>
+
+        <table class="listing channel-status-table">
+            <thead>
+            <tr>
+                <th>
+                    {% translate "Channel" %}
+                </th>
+                <th>
+                    {% translate "Data Check Interval" %}
+                </th>
+                <th>
+                    {% translate "Last Processed" %}
+                </th>
+                <th>
+                    {% translate "Records Count" %}
+                </th>
+            </tr>
+            </thead>
+            <tbody>
+
+            {% for network_dispatch_channel in network_dispatch_channels_task_results %}
+                <tr>
+                    <td>
+                        {{ network_dispatch_channel.channel.name }}
+                    </td>
+                    <td>
+                        {{ network_dispatch_channel.channel.data_check_interval }}
+                        {% translate "Minutes" %}
+                    </td>
+                    <td>{{ network_dispatch_channel.latest_task_result.date_done }}</td>
+
+                    <td>
+                        {% if latest_task_result.latest_task_result.result.records_count %}
+                            {{ latest_task_result.latest_task_result.result.records_count }}
+                        {% else %}
+                            -
+                        {% endif %}
+                    </td>
+                </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+{% endif %}
+
+

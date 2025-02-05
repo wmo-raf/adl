@@ -1,7 +1,7 @@
 from django.urls import include, path
 from wagtail import hooks
+
 from .panels import PluginMonitoringPanel
-from adl.core.models import NetworkConnection
 
 
 @hooks.register('register_admin_urls')

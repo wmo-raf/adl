@@ -535,7 +535,7 @@ class Wis2BoxUpload(DispatchChannel):
         return self.name
     
     def send_data(self, data_records):
-        upload_to_wis2box(self, data_records)
+        return upload_to_wis2box(self, data_records)
     
     def connection_details(self):
         return {

@@ -1,7 +1,6 @@
-{% load i18n wagtailadmin_tags wagtailiconchooser_tags %}
+{% load i18n wagtailadmin_tags wagtailiconchooser_tags monitoring_tags %}
 
 <style>
-
     .m-panels-container {
         display: flex;
         flex-direction: column;
@@ -151,7 +150,6 @@
                         </div>
                     </div>
                 {% endif %}
-
                 <div class="m-panel-meta-item">
                     <div class="m-panel-icon-small">
                         {% icon name="time" %}
@@ -190,13 +188,17 @@
                         {% svg_icon name="hourglass-half" %}
                     </div>
                     <div>
-                        {% translate "Latest" %}
+                        {% translate "Latest Pull" %}
                     </div>
                 </div>
                 <div class="m-panel-latest-cards">
                 </div>
             </div>
             <div id="m-chart-container-{{ network_connection.id }}"></div>
+
+            <div>
+                {% render_network_dispatch_channel_status network_connection.id %}
+            </div>
         </div>
 
         <script>

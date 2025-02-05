@@ -236,6 +236,7 @@ def register_icons(icons):
         'wagtailfontawesomesvg/solid/hourglass-start.svg',
         'wagtailfontawesomesvg/solid/hourglass-end.svg',
         'wagtailfontawesomesvg/solid/hourglass-half.svg',
+        'wagtailfontawesomesvg/solid/paper-plane.svg',
     ]
 
 

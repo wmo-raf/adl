@@ -165,8 +165,14 @@ def perform_channel_dispatch(self, channel_id):
     from .models import DispatchChannel
     channel = get_object_or_none(DispatchChannel, id=channel_id)
     
-    if channel:
-        channel.dispatch()
+    if not channel:
+        message = f"Dispatch channel with id {channel_id} does not exist"
+        logger.error(message)
+        raise ValueError(message)
+    
+    num_of_sent_records = channel.dispatch()
+    
+    return {"records_count": num_of_sent_records}
 
 
 def create_or_update_dispatch_channel_periodic_tasks(dispatch_channel):

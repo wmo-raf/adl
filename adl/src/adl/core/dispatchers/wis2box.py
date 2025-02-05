@@ -261,7 +261,8 @@ def upload_to_wis2box(channel, data_records, overwrite=False):
             uploaded_records_count += 1
         
         except S3Error as e:
-            logger.error(f"Error uploading CSV to MinIO: {e}")
+            logger.error(f"Error uploading CSV to MinIO: {str(e)}")
+            raise e
     
     logger.info(f"Uploaded {uploaded_records_count} records to {channel.name}")
     

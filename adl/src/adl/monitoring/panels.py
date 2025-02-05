@@ -12,7 +12,8 @@ class PluginMonitoringPanel(Component):
     def get_context_data(self, parent_context):
         context = super().get_context_data(parent_context)
         
-        network_connections = NetworkConnection.objects.all()
+        network_connections = NetworkConnection.objects.all().order_by("-plugin_processing_enabled", "network_id",
+                                                                       "name")
         context["network_connections"] = network_connections
         data_api_base_url = "/monitoring/plugin-processing-results"
         context["data_api_base_url"] = data_api_base_url
