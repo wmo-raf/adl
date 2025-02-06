@@ -4,6 +4,7 @@ from django_celery_results.models import TaskResult
 
 from adl.core.models import DispatchChannel
 from adl.monitoring.constants import NETWORK_DISPATCH_TASK_NAME
+from adl.monitoring.serializers import TaskResultSerializer
 
 register = template.Library()
 
@@ -23,7 +24,8 @@ def render_network_dispatch_channel_status(network_connection_id):
         
         network_dispatch_channels_task_results.append({
             "channel": channel,
-            "latest_task_result": latest_task_result
+            "latest_task_result": latest_task_result,
+            "latest_task_result_dict": TaskResultSerializer(latest_task_result).data if latest_task_result else None
         })
     
     return render_to_string("monitoring/dispatch_channel_status.html", {

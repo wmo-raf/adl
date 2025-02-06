@@ -1,4 +1,4 @@
-{% load i18n wagtailiconchooser_tags %}
+{% load i18n humanize wagtailiconchooser_tags %}
 
 {% if network_dispatch_channels_task_results %}
 
@@ -60,7 +60,9 @@
                     {% translate "Last Processed" %}
                 </th>
                 <th>
-                    {% translate "Records Count" %}
+                    {% translate "Status" %}
+                <th>
+                    {% translate "Files Dispatched" %}
                 </th>
             </tr>
             </thead>
@@ -75,11 +77,15 @@
                         {{ network_dispatch_channel.channel.data_check_interval }}
                         {% translate "Minutes" %}
                     </td>
-                    <td>{{ network_dispatch_channel.latest_task_result.date_done }}</td>
-
                     <td>
-                        {% if latest_task_result.latest_task_result.result.records_count %}
-                            {{ latest_task_result.latest_task_result.result.records_count }}
+                        {{ network_dispatch_channel.latest_task_result.date_done|naturaltime }}
+                    </td>
+                    <td>
+                        {{ network_dispatch_channel.latest_task_result.status }}
+                    </td>
+                    <td>
+                        {% if network_dispatch_channel.latest_task_result_dict.result.records_count %}
+                            {{ network_dispatch_channel.latest_task_result_dict.result.records_count }}
                         {% else %}
                             -
                         {% endif %}

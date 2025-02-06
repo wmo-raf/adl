@@ -79,6 +79,7 @@ INSTALLED_APPS = [
     "django.contrib.sessions",
     "django.contrib.messages",
     "django.contrib.staticfiles",
+    "django.contrib.humanize",
 ]
 
 ADL_PLUGIN_DIR = Path(env.str("ADL_PLUGIN_DIR", "/adl/plugins"))
