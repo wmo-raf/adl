@@ -57,12 +57,17 @@
                     {% translate "Data Check Interval" %}
                 </th>
                 <th>
+                    {% translate "Aggregation Period" %}
+                </th>
+                <th>
                     {% translate "Last Processed" %}
                 </th>
                 <th>
-                    {% translate "Status" %}
-                <th>
                     {% translate "Files Dispatched" %}
+                </th>
+
+                <th>
+                    {% translate "Last Dispatched Observation" %}
                 </th>
             </tr>
             </thead>
@@ -78,10 +83,14 @@
                         {% translate "Minutes" %}
                     </td>
                     <td>
-                        {{ network_dispatch_channel.latest_task_result.date_done|naturaltime }}
+                        {% if network_dispatch_channel.channel.send_aggregated_data %}
+                            {{ network_dispatch_channel.channel.aggregation_period }}
+                        {% else %}
+                            -
+                        {% endif %}
                     </td>
                     <td>
-                        {{ network_dispatch_channel.latest_task_result.status }}
+                        {{ network_dispatch_channel.latest_task_result.date_done|naturaltime }}
                     </td>
                     <td>
                         {% if network_dispatch_channel.latest_task_result_dict.result.records_count %}
@@ -90,12 +99,14 @@
                             -
                         {% endif %}
                     </td>
+                    <td>
+                        {{ network_dispatch_channel.latest_station_dispatch_obs.last_sent_obs_time|date:"Y-m-d H:i:s T" }}
+                    </td>
                 </tr>
             {% endfor %}
             </tbody>
         </table>
     </div>
-
 {% endif %}
 
 

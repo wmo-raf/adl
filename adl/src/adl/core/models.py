@@ -551,7 +551,7 @@ class Wis2BoxUpload(DispatchChannel):
 class StationChannelDispatchStatus(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     modified_at = models.DateTimeField(auto_now=True)
-    channel = models.ForeignKey(DispatchChannel, on_delete=models.CASCADE, verbose_name=_("Channel"))
+    channel = models.ForeignKey(DispatchChannel, on_delete=models.CASCADE, verbose_name=_("Channel"),related_name="dispatch_statuses")
     station = models.ForeignKey(Station, on_delete=models.CASCADE, verbose_name=_("Station"))
     last_sent_obs_time = models.DateTimeField(blank=True, null=True, verbose_name=_("Last Send Observation Time"))
     
@@ -561,6 +561,8 @@ class StationChannelDispatchStatus(models.Model):
         constraints = [
             models.UniqueConstraint(fields=['channel', 'station'], name='unique_channel_station_dispatch_status')
         ]
+        # order by latest first
+        ordering = ['-last_sent_obs_time']
     
     def __str__(self):
         return f"{self.station.name} - {self.channel.name} - {self.last_sent_obs_time}"

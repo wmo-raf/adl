@@ -22,10 +22,13 @@ def render_network_dispatch_channel_status(network_connection_id):
             periodic_task_name=periodic_task_name
         ).order_by("-date_done").first()
         
+        latest_station_dispatch_obs = channel.dispatch_statuses.order_by("-last_sent_obs_time").first()
+        
         network_dispatch_channels_task_results.append({
             "channel": channel,
             "latest_task_result": latest_task_result,
-            "latest_task_result_dict": TaskResultSerializer(latest_task_result).data if latest_task_result else None
+            "latest_task_result_dict": TaskResultSerializer(latest_task_result).data if latest_task_result else None,
+            "latest_station_dispatch_obs": latest_station_dispatch_obs,
         })
     
     return render_to_string("monitoring/dispatch_channel_status.html", {
