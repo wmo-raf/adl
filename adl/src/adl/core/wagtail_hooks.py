@@ -79,6 +79,10 @@ def register_network_connections_models():
                     add_to_admin_menu = False
                     list_filter = ["network_connection"]
                     
+                    # add extra list display fields if defined in the model
+                    list_display = (["__str__", "enabled"] +
+                                    list(getattr(station_link_model, "extra_list_display", [])))
+                    
                     def get_queryset(self, request):
                         qs = super().get_queryset(request)
                         
