@@ -16,6 +16,7 @@ def get_station_channel_records(dispatch_channel, station_id):
     connection = dispatch_channel.network_connection
     send_agg_data = dispatch_channel.send_aggregated_data
     aggregation_period = dispatch_channel.aggregation_period
+    start_date = dispatch_channel.start_date
     
     records_model = ObservationRecord
     
@@ -27,6 +28,9 @@ def get_station_channel_records(dispatch_channel, station_id):
     
     # get all records for the channel connection and station
     obs_records = records_model.objects.filter(connection_id=connection.id, station_id=station_id)
+    
+    if start_date:
+        obs_records = obs_records.filter(time__gte=start_date)
     
     # filter by last upload time
     station_dispatch_status = get_object_or_none(StationChannelDispatchStatus, station_id=station_id,

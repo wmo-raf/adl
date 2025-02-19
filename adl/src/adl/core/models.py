@@ -448,6 +448,8 @@ class DispatchChannel(PolymorphicModel, ClusterableModel):
                                                           MaxValueValidator(30),
                                                           MinValueValidator(1)
                                                       ])
+    start_date = models.DateTimeField(blank=True, null=True, verbose_name=_("Starting date for the data to dispatch"),
+                                      help_text=_("Leave blank to use the whole data period"))
     
     send_aggregated_data = models.BooleanField(default=False, verbose_name=_("Send Aggregated Data"))
     aggregation_period = models.CharField(max_length=255, blank=True, null=True, choices=AGGREGATION_PERIOD_CHOICES,
@@ -461,6 +463,7 @@ class DispatchChannel(PolymorphicModel, ClusterableModel):
             FieldPanel("data_check_interval"),
             FieldPanel("send_aggregated_data"),
             FieldPanel("aggregation_period"),
+            FieldPanel("start_date"),
         ], heading=_("Base")),
     ]
     
@@ -551,7 +554,8 @@ class Wis2BoxUpload(DispatchChannel):
 class StationChannelDispatchStatus(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     modified_at = models.DateTimeField(auto_now=True)
-    channel = models.ForeignKey(DispatchChannel, on_delete=models.CASCADE, verbose_name=_("Channel"),related_name="dispatch_statuses")
+    channel = models.ForeignKey(DispatchChannel, on_delete=models.CASCADE, verbose_name=_("Channel"),
+                                related_name="dispatch_statuses")
     station = models.ForeignKey(Station, on_delete=models.CASCADE, verbose_name=_("Station"))
     last_sent_obs_time = models.DateTimeField(blank=True, null=True, verbose_name=_("Last Send Observation Time"))
     
