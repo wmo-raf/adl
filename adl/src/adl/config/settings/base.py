@@ -82,12 +82,14 @@ INSTALLED_APPS = [
     "django.contrib.humanize",
 ]
 
-ADL_PLUGIN_DIR = Path(env.str("ADL_PLUGIN_DIR", "/adl/plugins"))
+ADL_PLUGIN_DIRS = env.list("ADL_PLUGIN_DIRS", default=["/adl/plugins", ])
 
-if ADL_PLUGIN_DIR.exists():
-    ADL_PLUGIN_FOLDERS = [file for file in ADL_PLUGIN_DIR.iterdir() if file.is_dir()]
-else:
-    ADL_PLUGIN_FOLDERS = []
+ADL_PLUGIN_FOLDERS = []
+for plugin_dir in ADL_PLUGIN_DIRS:
+    plugin_dir = Path(plugin_dir)
+    if plugin_dir.exists():
+        plugin_folders = [file for file in plugin_dir.iterdir() if file.is_dir()]
+        ADL_PLUGIN_FOLDERS.extend(plugin_folders)
 
 ADL_PLUGIN_NAMES = [d.name for d in ADL_PLUGIN_FOLDERS]
 
