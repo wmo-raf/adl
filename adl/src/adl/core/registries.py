@@ -10,6 +10,8 @@ logger = logging.getLogger(__name__)
 class Plugin(Instance):
     label = ""
     
+    network_connection = None
+    
     def __init__(self):
         if not self.label:
             raise ImproperlyConfigured("The label of a plugin must be set.")
@@ -45,6 +47,9 @@ class Plugin(Instance):
     
     def run_process(self, network_connection):
         from .tasks import perform_hourly_aggregation
+        
+        self.network_connection = network_connection
+        
         records_count = self.get_data()
         
         # if we have some data, run aggregate hourly task asynchronously
