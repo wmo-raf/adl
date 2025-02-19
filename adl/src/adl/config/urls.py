@@ -10,8 +10,8 @@ urlpatterns = [
     # path("django-admin/", admin.site.urls),
     path("plugins/", include("adl.core.urls", namespace="plugins")),
     path("api/", include(api_urls)),
+    path("debug/django-admin/", admin.site.urls),
     path("", include(wagtailadmin_urls)),
-    path("debug/django-admin/", admin.site.urls)
     # path("documents/", include(wagtaildocs_urls)),
 ]
 
