@@ -454,6 +454,8 @@ class DispatchChannel(PolymorphicModel, ClusterableModel):
     send_aggregated_data = models.BooleanField(default=False, verbose_name=_("Send Aggregated Data"))
     aggregation_period = models.CharField(max_length=255, blank=True, null=True, choices=AGGREGATION_PERIOD_CHOICES,
                                           default="hourly", verbose_name=_("Aggregation Period"))
+    public_url = models.URLField(blank=True, null=True, verbose_name=_("Public URL"),
+                                 help_text=_("Public URL of the channel,if available"))
     
     base_panels = [
         MultiFieldPanel([
@@ -464,6 +466,7 @@ class DispatchChannel(PolymorphicModel, ClusterableModel):
             FieldPanel("send_aggregated_data"),
             FieldPanel("aggregation_period"),
             FieldPanel("start_date"),
+            FieldPanel("public_url"),
         ], heading=_("Base")),
     ]
     

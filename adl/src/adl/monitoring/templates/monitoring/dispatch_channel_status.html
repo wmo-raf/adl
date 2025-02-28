@@ -34,6 +34,21 @@
             text-align: left;
         }
 
+        .link-external {
+            display: flex;
+            align-items: center;
+        }
+
+        .link-external .link-icon {
+            margin-right: 8px;
+        }
+
+        .link-external .link-icon svg {
+            height: 14px;
+            width: 14px;
+            fill: currentColor;
+        }
+
     </style>
 
 
@@ -76,7 +91,17 @@
             {% for network_dispatch_channel in network_dispatch_channels_task_results %}
                 <tr>
                     <td>
-                        {{ network_dispatch_channel.channel.name }}
+                        {% if network_dispatch_channel.channel.public_url %}
+                            <a class="link-external" href="{{ network_dispatch_channel.channel.public_url }}"
+                               target="_blank">
+                                    <span class="link-icon">
+                                        {% svg_icon name="link-external" %}
+                                    </span>
+                                {{ network_dispatch_channel.channel.name }}
+                            </a>
+                        {% else %}
+                            {{ network_dispatch_channel.channel.name }}
+                        {% endif %}
                     </td>
                     <td>
                         {{ network_dispatch_channel.channel.data_check_interval }}
