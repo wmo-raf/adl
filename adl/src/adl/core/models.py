@@ -306,8 +306,8 @@ class NetworkConnection(PolymorphicModel, ClusterableModel):
     network = models.ForeignKey(Network, on_delete=models.CASCADE, verbose_name=_("Network"))
     plugin = models.CharField(max_length=255, verbose_name=_("Plugin"),
                               help_text=_("Plugin to use for this network"))
-    plugin_processing_enabled = models.BooleanField(default=True, verbose_name=_("Plugin Auto Processing Enabled"),
-                                                    help_text=_("If unchecked, the plugin will not run automatically"))
+    plugin_processing_enabled = models.BooleanField(default=True, verbose_name=_("Active"),
+                                                    help_text=_("If unchecked, the plugin will NOT run automatically"))
     plugin_processing_interval = models.PositiveIntegerField(default=15,
                                                              verbose_name=_("Plugin Auto Processing Interval "
                                                                             "in Minutes"),
@@ -365,6 +365,9 @@ class StationLink(PolymorphicModel, ClusterableModel):
     
     class Meta:
         unique_together = ['network_connection', 'station']
+    
+    def get_extra_model_admin_buttons(self, classname=None):
+        return []
 
 
 @register_snippet

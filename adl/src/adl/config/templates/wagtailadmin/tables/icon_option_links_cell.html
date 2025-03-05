@@ -1,0 +1,22 @@
+{% load wagtailadmin_tags i18n %}
+
+<td class="{% if column.classname %}{{ column.classname }} {% endif %}title">
+    <div class="title-wrapper">
+        {% fragment as title %}
+            {% if title_id %}<span id="{{ title_id }}">{{ value }}</span>
+                {% else %}{{ value }}
+            {% endif %}
+        {% endfragment %}
+        {% block title %}
+            {{ title }}
+        {% endblock %}
+    </div>
+    {% if buttons %}
+        <ul class="actions">
+            {% block buttons %}
+                {% include "wagtailadmin/shared/buttons.html" %}
+            {% endblock %}
+        </ul>
+    {% endif %}
+    {% endfor %}
+</td>

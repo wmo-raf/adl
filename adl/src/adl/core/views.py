@@ -8,8 +8,8 @@ from django.urls import reverse_lazy, reverse
 from django.urls.exceptions import NoReverseMatch
 from django.utils.translation import gettext as _
 from wagtail.admin import messages
-from wagtail.admin.ui.tables import Table, TitleColumn
-from wagtail.admin.widgets import HeaderButton
+from wagtail.admin.ui.tables import Column, Table, TitleColumn, ButtonsColumnMixin
+from wagtail.admin.widgets import HeaderButton, ListingButton
 from wagtail_modeladmin.helpers import AdminURLHelper
 
 from .constants import OSCAR_SURFACE_REQUIRED_CSV_COLUMNS
@@ -383,26 +383,47 @@ def connections_list(request):
     
     def get_stations_link_url(instance):
         model_cls = instance.__class__
+        station_link_url = None
         
-        index_url = None
+        if hasattr(instance, "get_station_link_url"):
+            station_link_url = instance.get_station_link_url()
+        else:
+            if hasattr(model_cls, "station_link_model_string_label"):
+                station_link_model = get_model_by_string_label(model_cls.station_link_model_string_label)
+                
+                if station_link_model:
+                    url_helper = AdminURLHelper(station_link_model)
+                    try:
+                        station_link_url = url_helper.index_url
+                        station_link_url += f"?network_connection={instance.id}"
+                    except NoReverseMatch:
+                        pass
         
-        if hasattr(model_cls, "station_link_model_string_label"):
-            station_link_model = get_model_by_string_label(model_cls.station_link_model_string_label)
-            
-            if station_link_model:
-                url_helper = AdminURLHelper(station_link_model)
-                try:
-                    index_url = url_helper.index_url
-                    index_url += f"?network_connection={instance.id}"
-                except NoReverseMatch:
-                    pass
+        return station_link_url
+    
+    class ExtraColumnButtons(ButtonsColumnMixin, Column):
+        cell_template_name = "adl/tables/column_cell.html"
         
-        return index_url
+        def get_buttons(self, instance, parent_context):
+            extra_links = []
+            if hasattr(instance, "get_extra_model_admin_links"):
+                links = instance.get_extra_model_admin_links()
+                for link in links:
+                    extra_links.append(
+                        ListingButton(
+                            link.get("label"),
+                            url=link.get("url"),
+                            icon_name=link.get("icon_name", ""),
+                            **link.get("kwargs", {})
+                        )
+                    )
+            return extra_links
     
     columns = [
         TitleColumn("name", label=_("Name"), get_url=get_edit_url),
         LinkColumnWithIcon("stations_link", label=_("Stations Link"), icon_name="map-pin",
                            get_url=get_stations_link_url),
+        ExtraColumnButtons("options", label=_("Options"))
     ]
     
     add_url = reverse("connections_add_select")
@@ -437,7 +458,7 @@ def connection_add_select(request):
     ]
     
     connection_types = get_all_child_models(NetworkConnection)
-    items = [{"name": cls.__name__} for cls in connection_types]
+    items = [{"name": cls.__name__, "verbose_name": cls._meta.verbose_name} for cls in connection_types]
     count = len(items)
     
     # Get search parameters from the query string.
@@ -464,7 +485,7 @@ def connection_add_select(request):
         return None
     
     columns = [
-        TitleColumn("name", label=_("Name"), get_url=get_url),
+        TitleColumn("verbose_name", label=_("Name"), get_url=get_url),
     ]
     
     context = {

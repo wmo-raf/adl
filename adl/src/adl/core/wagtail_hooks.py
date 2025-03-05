@@ -8,7 +8,7 @@ from wagtail.admin.menu import MenuItem
 from wagtail.admin.widgets import HeaderButton
 from wagtail.snippets.models import register_snippet
 from wagtail.snippets.views.snippets import SnippetViewSet, IndexView
-from wagtail_modeladmin.helpers import AdminURLHelper
+from wagtail_modeladmin.helpers import AdminURLHelper, ButtonHelper
 from wagtail_modeladmin.options import ModelAdmin, modeladmin_register
 
 from .home import (
@@ -24,7 +24,10 @@ from .models import (
     DispatchChannel,
     Unit
 )
-from .utils import get_all_child_models, get_model_by_string_label
+from .utils import (
+    get_all_child_models,
+    get_model_by_string_label
+)
 from .views import (
     load_stations_csv,
     load_stations_oscar,
@@ -62,6 +65,19 @@ class NetworkAdmin(ModelAdmin):
 modeladmin_register(NetworkAdmin)
 
 
+class StationLinkButtonHelper(ButtonHelper):
+    def get_buttons_for_obj(self, obj, exclude=None, classnames_add=None, classnames_exclude=None):
+        buttons = super().get_buttons_for_obj(obj, exclude, classnames_add, classnames_exclude)
+        
+        classnames = self.edit_button_classnames + classnames_add
+        cn = self.finalise_classname(classnames, classnames_exclude)
+        
+        if hasattr(obj, "get_extra_model_admin_buttons"):
+            buttons.extend(obj.get_extra_model_admin_buttons(classname=cn))
+        
+        return buttons
+
+
 # Register all NetworkConnection models
 def register_network_connections_models():
     connection_model_cls = get_all_child_models(NetworkConnection)
@@ -78,6 +94,7 @@ def register_network_connections_models():
                     model = station_link_model
                     add_to_admin_menu = False
                     list_filter = ["network_connection"]
+                    button_helper_class = StationLinkButtonHelper
                     
                     # add extra list display fields if defined in the model
                     list_display = (["__str__", "enabled"] +
@@ -99,37 +116,45 @@ def register_network_connections_models():
             model = model_cls
             add_to_admin_menu = False
             
+            # add extra list display fields if defined in the model
+            list_display = (["__str__", "plugin_processing_enabled"] +
+                            list(getattr(model_cls, "extra_list_display", [])))
+            
             def __init__(self, parent=None):
                 super().__init__(parent)
                 
-                if station_link_admin:
-                    self.list_display = (list(self.list_display) or []) + ['get_station_link']
-                    self.get_station_link.__func__.short_description = _('Station Link')
+                self.list_display = (list(self.list_display) or []) + ['get_station_link']
+                self.get_station_link.__func__.short_description = _('Station Link')
             
             def get_station_link(self, obj):
-                if station_link_admin and station_link_model:
-                    url_helper = AdminURLHelper(station_link_model)
-                    try:
-                        index_url = url_helper.index_url
-                        index_url += f"?network_connection={obj.id}"
-                        
-                        label = _("Stations Link")
-                        
-                        button_html = f"""
-                                <a href="{index_url}" class="button button-small button--icon button-secondary">
-                                    <span class="icon-wrapper">
-                                        <svg class="icon icon-map-pin icon" aria-hidden="true">
-                                            <use href="#icon-map-pin"></use>
-                                        </svg>
-                                    </span>
-                                    {label}
-                                </a>
-                            """
-                        return mark_safe(button_html)
-                    except NoReverseMatch:
-                        pass
+                station_link_url = None
                 
-                return None
+                if hasattr(obj, "get_station_link_url"):
+                    station_link_url = obj.get_station_link_url()
+                else:
+                    if station_link_admin and station_link_model:
+                        url_helper = AdminURLHelper(station_link_model)
+                        try:
+                            station_link_url = url_helper.index_url
+                            station_link_url += f"?network_connection={obj.id}"
+                        except NoReverseMatch:
+                            pass
+                
+                if station_link_url is None:
+                    return None
+                
+                label = _("Stations Link")
+                button_html = f"""
+                        <a href="{station_link_url}" class="button button-small button--icon button-secondary">
+                            <span class="icon-wrapper">
+                                <svg class="icon icon-map-pin icon" aria-hidden="true">
+                                    <use href="#icon-map-pin"></use>
+                                </svg>
+                            </span>
+                            {label}
+                        </a>
+                    """
+                return mark_safe(button_html)
         
         # register connection admin
         modeladmin_register(ConnectionAdmin)

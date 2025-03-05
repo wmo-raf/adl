@@ -1,3 +1,4 @@
+import importlib
 import logging
 import re
 
@@ -194,3 +195,14 @@ def get_custom_unit_context_entries():
     from adl.core.registries import custom_unit_context_registry
     
     return custom_unit_context_registry.get_choices()
+
+
+def import_class_by_string_label(class_path):
+    # Split the string into module and class name
+    module_path, class_name = class_path.rsplit('.', 1)
+    
+    # Import the module
+    module = importlib.import_module(module_path)
+    
+    # Get the class from the module
+    return getattr(module, class_name)

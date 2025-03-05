@@ -1,0 +1,13 @@
+{% load wagtailadmin_tags %}
+
+<td class="{% if column.classname %}{{ column.classname }} {% endif %}title">
+    {% block extra %}
+        {% if buttons %}
+            <ul class="actions" style="float: initial">
+                {% block buttons %}
+                    {% include "wagtailadmin/shared/buttons.html" %}
+                {% endblock %}
+            </ul>
+        {% endif %}
+    {% endblock %}
+</td>
