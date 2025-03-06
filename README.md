@@ -6,8 +6,8 @@ different receiving systems.
 ## 📚 Background
 
 One of the challenges confronting NMHSs in Africa in observation data management is the disparities between the
-different station types provided by different donors. This has given rise to barriers in using the data collected by
-Automated Weather Stations in a harmonized way.
+different station types managed by the institutions or provided through projects. This has given rise to barriers in
+using the data collected by Automated Weather Stations in a harmonized way.
 
 These disparities include major differences in the way the data from various AWS vendors are formatted and stored, which
 result in poorly coordinated, fragmented, and un-harmonized datasets coming from different AWS networks.
