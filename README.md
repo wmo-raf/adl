@@ -1,7 +1,7 @@
 # ⚙ Automated Data Loader
 
-Tool for automating periodic Observation data pulling from different Automatic Weather Station Networks,
-and pushing to different receiving systems.
+Automate periodic observation data collection from different Automatic Weather Station (AWS) networks, and pushing to
+different receiving systems.
 
 ## 📚 Background
 
