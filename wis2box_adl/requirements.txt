@@ -18,6 +18,6 @@ minio==7.2.7
 gunicorn==22.0.0
 uvicorn[standard]==0.30.3
 wagtail-font-awesome-svg==1.0.1
-pint== 0.24.3
+pint==0.24.4
 pandas==2.2.3
 wagtailgeowidget==8.1.1

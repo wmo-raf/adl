@@ -31,6 +31,10 @@ gunicorn            : Start WIS2Box ADL django using a prod ready gunicorn serve
                          * Binds to 0.0.0.0
 celery-worker       : Start the celery worker queue which runs important async tasks
 celery-beat         : Start the celery beat service used to schedule periodic jobs
+
+DEV COMMANDS:
+django-dev      : Start a normal Baserow backend django development server, performs
+                  the same checks and setup as the gunicorn command above.
 """
 }
 
