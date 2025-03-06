@@ -1,6 +1,7 @@
-# ⚙️ WIS2Box Automated Data Loader
+# ⚙ Automated Data Loader
 
-Wagtail based tool for automating periodic Observation data ingestion into WIS2Box node, from Automatic and or Manual
+Wagtail based tool for automating periodic Observation data ingestion into different systems, from Automatic and or
+Manual
 Weather Stations.
 
 ## 📚 Background
@@ -127,8 +128,8 @@ Before following the steps below, make sure you have the following set up:
 #### 1. Clone the repository
 
 ```sh
-git clone https://github.com/wmo-raf/wis2box-adl.git
-cd wis2box-adl
+git clone https://github.com/wmo-raf/adl.git
+cd adl
 ```
 
 #### 2. Setup Environment Variables
@@ -149,8 +150,8 @@ See [environmental variables' section](#environmental-variables) below for more 
 
 #### 3. Create Wagtail static and media directories on the host machine and set correct permissions
 
-Ensure you are using the correct paths as set in the `.env` file for the `WIS2BOX_ADL_STATIC_VOLUME`
-and `WIS2BOX_ADL_MEDIA_VOLUME` variables.
+Ensure you are using the correct paths as set in the `.env` file for the `ADL_STATIC_VOLUME`
+and `ADL_MEDIA_VOLUME` variables.
 
 ```sh
 mkdir -p ./docker/static
@@ -191,8 +192,8 @@ docker-compose up -d
 #### 5. Create Superuser
 
 ```sh
-docker-compose exec wis2box_adl /bin/bash
-source /wis2box_adl/venv/bin/activate
+docker-compose exec adl /bin/bash
+source /adl/venv/bin/activate
 
 manage createsuperuser
 ```
@@ -203,33 +204,29 @@ manage createsuperuser
 
 The following environmental variables are required to be set in the `.env` file:
 
-| Variable Name                       | Description                                                                                                                                                                                                                                                                                                       | Required | Default Value    | Details                                                                                                            |
-|-------------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|----------|------------------|--------------------------------------------------------------------------------------------------------------------|
-| SECRET_KEY                          | A secret key for a particular Django installation. This is used to provide cryptographic signing, and should be set to a unique, unpredictable value. Django will refuse to start if SECRET_KEY is not set.You can use this online tool [https://djecrety.ir](https://djecrety.ir/) to generate the key and paste | YES      |                  |                                                                                                                    |
-| ALLOWED_HOSTS                       | A list of strings representing the host/domain names that this Django site can serve. This is a security measure to prevent HTTP Host header attacks, which are possible even under many seemingly-safe web server.                                                                                               | YES      |                  | [Django Allowed Hosts](https://docs.djangoproject.com/en/4.2/ref/settings/#std-setting-ALLOWED_HOSTS)              |
-| CSRF_TRUSTED_ORIGINS                | A list of trusted origins for unsafe requests                                                                                                                                                                                                                                                                     | NO       |                  | [Django CSRF Trusted Origins](https://docs.djangoproject.com/en/5.1/ref/settings/#csrf-trusted-origins)            |
-| WIS2BOX_ADL_DEBUG                   | A boolean that turns on/off debug mode. Never deploy a site into production with DEBUG turned on                                                                                                                                                                                                                  | NO       | False            |                                                                                                                    |
-| WAGTAIL_SITE_NAME                   | The human-readable name of your Wagtail installation which welcomes users upon login to the Wagtail admin.                                                                                                                                                                                                        | NO       | WIS2BOX ADL      |                                                                                                                    |
-| LANGUAGE_CODE                       | The language code for the CMS. Available codes are `en` for English. Default is en if not set. More translations to be added                                                                                                                                                                                      | NO       | en               |                                                                                                                    |
-| WIS2BOX_ADL_LOG_LEVEL               | The severity of the messages that the wis2box_adl service logger will handle. Allowed values are: `DEBUG`, `INFO`, `WARNING`, `ERROR` and `CRITICAL`                                                                                                                                                              | NO       | WARN             |                                                                                                                    |
-| WIS2BOX_ADL_GUNICORN_NUM_OF_WORKERS | Number of Gunicorn workers                                                                                                                                                                                                                                                                                        | YES      | 4                |                                                                                                                    |
-| WIS2BOX_ADL_GUNICORN_TIMEOUT        | Gunicorn timeout in seconds                                                                                                                                                                                                                                                                                       | YES      | 300              |                                                                                                                    |
-| WIS2BOX_ADL_CELERY_BEAT_DEBUG_LEVEL | The severity of the messages that the wis2box_adl_celery_beat service logger will handle. Allowed values are: `DEBUG`, `INFO`, `WARNING`, `ERROR` and `CRITICAL`                                                                                                                                                  | NO       | INFO             |                                                                                                                    |
-| WIS2BOX_ADL_DB_USER                 | ADL Database user                                                                                                                                                                                                                                                                                                 | YES      |                  |                                                                                                                    |
-| WIS2BOX_ADL_DB_PASSWORD             | ADL Database password                                                                                                                                                                                                                                                                                             | YES      |                  |                                                                                                                    |
-| WIS2BOX_ADL_DB_NAME                 | ADL Database name                                                                                                                                                                                                                                                                                                 | YES      |                  |                                                                                                                    |
-| WIS2BOX_ADL_DB_VOLUME               | Mounted docker volume path for persisting database data                                                                                                                                                                                                                                                           | YES      | ./docker/db_data |                                                                                                                    |
-| WIS2BOX_ADL_STATIC_VOLUME           | Mounted docker volume path for persisting django static files                                                                                                                                                                                                                                                     | YES      | ./docker/static  |                                                                                                                    |
-| WIS2BOX_ADL_MEDIA_VOLUME            | Mounted docker volume path for persisting django media files                                                                                                                                                                                                                                                      | YES      | ./docker/media   |                                                                                                                    |
-| WIS2BOX_ADL_BACKUP_VOLUME           | Mounted docker volume path for persisting db backups and media files                                                                                                                                                                                                                                              | YES      | ./docker/backup  |                                                                                                                    |
-| WIS2BOX_ADL_WEB_PROXY_PORT          | Port Nginx will be available on the host                                                                                                                                                                                                                                                                          | YES      | 80               |                                                                                                                    |
-| WIS2BOX_CENTRE_ID                   | wis2box centre id                                                                                                                                                                                                                                                                                                 | YES      |                  |                                                                                                                    |
-| WIS2BOX_STORAGE_ENDPOINT            | wis2box storage endpoint                                                                                                                                                                                                                                                                                          | YES      |                  |                                                                                                                    |
-| WIS2BOX_STORAGE_USERNAME            | wis2box storage username                                                                                                                                                                                                                                                                                          | YES      |                  |                                                                                                                    |
-| WIS2BOX_STORAGE_PASSWORD            | wis2box storage password                                                                                                                                                                                                                                                                                          | YES      |                  |                                                                                                                    |
-| UID                                 | The id of the user to run adl docker services                                                                                                                                                                                                                                                                     |          |                  |                                                                                                                    |
-| GID                                 | The id of the group to run adl docker services                                                                                                                                                                                                                                                                    |          |                  |                                                                                                                    |
-| WIS2BOX_ADL_PLUGIN_GIT_REPOS        | A comma separated list of github repos, where adl plugins to install are located                                                                                                                                                                                                                                  | NO       |                  | If no repo is added, no plugin is installed. A plugin must follow a given structure as described in sections below |
+| Variable Name               | Description                                                                                                                                                                                                                                                                                                       | Required | Default Value    | Details                                                                                                            |
+|-----------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|----------|------------------|--------------------------------------------------------------------------------------------------------------------|
+| SECRET_KEY                  | A secret key for a particular Django installation. This is used to provide cryptographic signing, and should be set to a unique, unpredictable value. Django will refuse to start if SECRET_KEY is not set.You can use this online tool [https://djecrety.ir](https://djecrety.ir/) to generate the key and paste | YES      |                  |                                                                                                                    |
+| ALLOWED_HOSTS               | A list of strings representing the host/domain names that this Django site can serve. This is a security measure to prevent HTTP Host header attacks, which are possible even under many seemingly-safe web server.                                                                                               | YES      |                  | [Django Allowed Hosts](https://docs.djangoproject.com/en/4.2/ref/settings/#std-setting-ALLOWED_HOSTS)              |
+| CSRF_TRUSTED_ORIGINS        | A list of trusted origins for unsafe requests                                                                                                                                                                                                                                                                     | NO       |                  | [Django CSRF Trusted Origins](https://docs.djangoproject.com/en/5.1/ref/settings/#csrf-trusted-origins)            |
+| ADL_DEBUG                   | A boolean that turns on/off debug mode. Never deploy a site into production with DEBUG turned on                                                                                                                                                                                                                  | NO       | False            |                                                                                                                    |
+| WAGTAIL_SITE_NAME           | The human-readable name of your Wagtail installation which welcomes users upon login to the Wagtail admin.                                                                                                                                                                                                        | NO       | WIS2BOX ADL      |                                                                                                                    |
+| LANGUAGE_CODE               | The language code for the CMS. Available codes are `en` for English. Default is en if not set. More translations to be added                                                                                                                                                                                      | NO       | en               |                                                                                                                    |
+| ADL_LOG_LEVEL               | The severity of the messages that the adl service logger will handle. Allowed values are: `DEBUG`, `INFO`, `WARNING`, `ERROR` and `CRITICAL`                                                                                                                                                                      | NO       | WARN             |                                                                                                                    |
+| ADL_GUNICORN_NUM_OF_WORKERS | Number of Gunicorn workers                                                                                                                                                                                                                                                                                        | YES      | 4                |                                                                                                                    |
+| ADL_GUNICORN_TIMEOUT        | Gunicorn timeout in seconds                                                                                                                                                                                                                                                                                       | YES      | 300              |                                                                                                                    |
+| ADL_CELERY_BEAT_DEBUG_LEVEL | The severity of the messages that the adl_celery_beat service logger will handle. Allowed values are: `DEBUG`, `INFO`, `WARNING`, `ERROR` and `CRITICAL`                                                                                                                                                          | NO       | INFO             |                                                                                                                    |
+| ADL_DB_USER                 | ADL Database user                                                                                                                                                                                                                                                                                                 | YES      |                  |                                                                                                                    |
+| ADL_DB_PASSWORD             | ADL Database password                                                                                                                                                                                                                                                                                             | YES      |                  |                                                                                                                    |
+| ADL_DB_NAME                 | ADL Database name                                                                                                                                                                                                                                                                                                 | YES      |                  |                                                                                                                    |
+| ADL_DB_VOLUME               | Mounted docker volume path for persisting database data                                                                                                                                                                                                                                                           | YES      | ./docker/db_data |                                                                                                                    |
+| ADL_STATIC_VOLUME           | Mounted docker volume path for persisting django static files                                                                                                                                                                                                                                                     | YES      | ./docker/static  |                                                                                                                    |
+| ADL_MEDIA_VOLUME            | Mounted docker volume path for persisting django media files                                                                                                                                                                                                                                                      | YES      | ./docker/media   |                                                                                                                    |
+| ADL_BACKUP_VOLUME           | Mounted docker volume path for persisting db backups and media files                                                                                                                                                                                                                                              | YES      | ./docker/backup  |                                                                                                                    |
+| ADL_WEB_PROXY_PORT          | Port Nginx will be available on the host                                                                                                                                                                                                                                                                          | YES      | 80               |                                                                                                                    |
+| UID                         | The id of the user to run adl docker services                                                                                                                                                                                                                                                                     |          |                  |                                                                                                                    |
+| GID                         | The id of the group to run adl docker services                                                                                                                                                                                                                                                                    |          |                  |                                                                                                                    |
+| ADL_PLUGIN_GIT_REPOS        | A comma separated list of github repos, where adl plugins to install are located                                                                                                                                                                                                                                  | NO       |                  | If no repo is added, no plugin is installed. A plugin must follow a given structure as described in sections below |
 
 `Note`: On linux, you can type `id` in the terminal to get the `UID` and `GID` of the current user.
 
@@ -239,14 +236,14 @@ To make this tool useful, you need to add plugins that will be used to load data
 
 Currently, you can only install plugins that are hosted on a publicly accessible git repository.
 
-To add a plugin, you need to set the `WIS2BOX_ADL_PLUGIN_GIT_REPOS` variable in the `.env` file to a comma-separated
+To add a plugin, you need to set the `ADL_PLUGIN_GIT_REPOS` variable in the `.env` file to a comma-separated
 list of git repositories where the plugins are located.
 
 For example, to add the Adcon Telemetry Plugin, you will need the link to its Github repository and add it to
-the `WIS2BOX_ADL_PLUGIN_GIT_REPOS` variable in the `.env` file.
+the `ADL_PLUGIN_GIT_REPOS` variable in the `.env` file.
 
 ```
-WIS2BOX_ADL_PLUGIN_GIT_REPOS=https://github.com/wmo-raf/wis2box-adl-adcon-plugin.git
+ADL_PLUGIN_GIT_REPOS=https://github.com/wmo-raf/adl-adcon-plugin.git
 ```
 
 To add multiple plugins, separate the links with a comma.
@@ -255,7 +252,7 @@ For example to add both the Adcon Telemetry Plugin and the Davis Instruments Wea
 variable as follows:
 
 ```
-WIS2BOX_ADL_PLUGIN_GIT_REPOS=https://github.com/wmo-raf/wis2box-adl-adcon-plugin.git,https://github.com/wmo-raf/wis2box-adl-weatherlink-v2-plugin.git
+ADL_PLUGIN_GIT_REPOS=https://github.com/wmo-raf/adl-adcon-plugin.git,https://github.com/wmo-raf/adl-weatherlink-v2-plugin.git
 ```
 
 Then restart the docker containers
@@ -269,10 +266,10 @@ docker-compose up -d --force-recreate
 
 ### 1. Access the Admin Interface
 
-The admin interface can be accessed at `http://<ip_or_domain>:<WIS2BOX_ADL_WEB_PROXY_PORT>`.
+The admin interface can be accessed at `http://<ip_or_domain>:<ADL_WEB_PROXY_PORT>`.
 
 Replace `<ip_or_domain>` with the IP address or domain name of the machine where the application is running and
-`<WIS2BOX_ADL_WEB_PROXY_PORT>` with the port number as set in the `.env` file.
+`<ADL_WEB_PROXY_PORT>` with the port number as set in the `.env` file.
 
 For example, if the IP address of the machine is set as `127.0.0.1` and the port as `8000`, you can access the admin
 through `http://127.0.0.1:8000`. If the port is set as `80`, you can access the admin directly
@@ -405,12 +402,12 @@ Below we continue to describe the process of developing new plugins.
 
 ## Developing Plugins
 
-In this guide we dive into how to create a wis2box-adl plugin, discuss the plugin architecture and give you sample
+In this guide we dive into how to create an adl plugin, discuss the plugin architecture and give you sample
 plugins to get inspiration from.
 
 ### Plugin Architecture
 
-A Wis2box ADL Plugin is fundamentally a folder named after the plugin. The folder should be
+An ADL Plugin is fundamentally a folder named after the plugin. The folder should be
 a [Django/Wagtail App](https://docs.djangoproject.com/en/5.1/ref/applications/)
 
 #### Initialize your plugin from the plugin template
@@ -423,7 +420,7 @@ To instantiate the template, execute the following commands from the directory w
 
 ```sh
 pip install cookiecutter
-cookiecutter gh:wmo-raf/wis2box-adl --directory plugin-boilerplate
+cookiecutter gh:wmo-raf/adl --directory plugin-boilerplate
 ```
 
 For more details on using the plugin boilerplate, you can follow the [step-by-step guide](#plugin-boilerplate) on
@@ -437,7 +434,7 @@ plugin from an url, a git repo or a local folder on the filesystem.
 
 You can find these scripts in the following locations in the built images:
 
-1. `/wis2box_adl/plugins/install_plugin.sh`
+1. `/adl/plugins/install_plugin.sh`
 
 On this repo, you can find the scripts in the `deploy/plugins` folder.
 
@@ -449,7 +446,7 @@ The `install_plugin.sh` script expect your plugin to have a specific structure a
 
 ```
 ├── plugin_name
-│  ├── wis2box_adl_plugin_info.json (A simple json file containing info about your plugin)
+│  ├── adl_plugin_info.json (A simple json file containing info about your plugin)
 |  ├── setup.py
 |  ├── build.sh (Called when installing the plugin in a Dockerfile/container)
 |  ├── runtime_setup.sh (Called on first runtime startup of the plugin)
@@ -469,7 +466,7 @@ packages and other docker container build steps required by your plugin.
 
 #### The plugin info file
 
-The `wis2box_adl_plugin_info.json` file is a json file, in your root plugin folder, containing metadata about your
+The `adl_plugin_info.json` file is a json file, in your root plugin folder, containing metadata about your
 plugin. It should have the following JSON structure:
 
 ```json
@@ -498,7 +495,7 @@ For example a conforming git repo should contain something like:
 ├─ * (an outermost wrapper directory named anything is allowed but not required) 
 │  ├── plugins/ 
 │  │  ├── plugin_name
-│  |  |  ├── wis2box_adl_plugin_info.json
+│  |  |  ├── adl_plugin_info.json
 |  |  |  ├── setup.py
 |  |  |  ├── build.sh
 |  |  |  ├── runtime_setup.sh
@@ -521,13 +518,13 @@ template. In this guide we will name our plugin “My WIS2Box ADL Plugin”, how
 when prompted to by Cookiecutter.
 
 > The python module depends on your chosen plugin name. If we for example go with “My WIS2Box ADL Plugin” the Django app
-> name should be my_wis2box_adl_plugin
+> name should be my_adl_plugin
 
 ```sh
-cookiecutter gh:wmo-raf/wis2box-adl --directory plugin-boilerplate
+cookiecutter gh:wmo-raf/adl --directory plugin-boilerplate
 project_name [My WIS2Box ADL Plugin]: 
-project_slug [my-wis2box-adl-plugin]: 
-project_module [my_wis2box_adl_plugin]:
+project_slug [my-adl-plugin]: 
+project_module [my_adl_plugin]:
 ```
 
 If you do not see any errors it means that your plugin has been created.

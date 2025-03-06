@@ -1,0 +1,35 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "adl"
+authors = [{ name = "Erick Otenyo", email = "otenyo.erick@gmail.com" }]
+description = """Wagtail based tool for automating periodic Observation \
+                    data ingestion into WIS2Box node, \
+                    from Automatic and or Manual Weather Stations."""
+
+license = { file = "LICENSE" }
+requires-python = ">=3.10"
+dynamic = ["version", "dependencies"]
+classifiers = []
+
+
+[project.scripts]
+adl = "adl.manage:main"
+
+
+[tool.setuptools]
+include-package-data = true
+# https://setuptools.pypa.io/en/latest/userguide/pyproject_config.html
+platforms = ["Linux"]
+
+[tool.setuptools.packages.find]
+namespaces = true
+where = ["src/"]
+include = ["adl", "adl.*"]
+
+[tool.setuptools.dynamic]
+# version always from the code
+version = { attr = "adl.version.VERSION" }
+dependencies = { file = ["requirements.txt"] }

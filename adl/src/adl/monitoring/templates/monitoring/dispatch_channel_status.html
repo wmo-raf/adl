@@ -1,0 +1,137 @@
+{% load i18n humanize wagtailiconchooser_tags %}
+
+{% if network_dispatch_channels_task_results %}
+
+    <style>
+        .channel-status {
+        }
+
+        .channel-status-header {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 16px;
+            border-bottom: 1px solid #e0e0e0;
+        }
+
+        .channel-status-header .icon {
+            height: 20px;
+            width: 20px;
+        }
+
+        .channel-status-title {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 16px 0;
+            font-size: 20px;
+            font-weight: 700;
+        }
+
+        .channel-status-table tr th {
+            background-color: #f5f5f5;
+            border-bottom: 1px solid #e0e0e0;
+            text-align: left;
+        }
+
+        .link-external {
+            display: flex;
+            align-items: center;
+        }
+
+        .link-external .link-icon {
+            margin-right: 8px;
+        }
+
+        .link-external .link-icon svg {
+            height: 14px;
+            width: 14px;
+            fill: currentColor;
+        }
+
+    </style>
+
+
+    <div class="channel-status">
+        <div class="channel-status-header">
+            <div class="icon">
+                {% svg_icon name="paper-plane" %}
+            </div>
+            <div class="channel-status-title">
+                {% translate "Dispatch Status" %}
+            </div>
+        </div>
+
+        <table class="listing channel-status-table">
+            <thead>
+            <tr>
+                <th>
+                    {% translate "Channel" %}
+                </th>
+                <th>
+                    {% translate "Data Check Interval" %}
+                </th>
+                <th>
+                    {% translate "Aggregation Period" %}
+                </th>
+                <th>
+                    {% translate "Last Processed" %}
+                </th>
+                <th>
+                    {% translate "Files Dispatched" %}
+                </th>
+
+                <th>
+                    {% translate "Last Dispatched Observation" %}
+                </th>
+            </tr>
+            </thead>
+            <tbody>
+
+            {% for network_dispatch_channel in network_dispatch_channels_task_results %}
+                <tr>
+                    <td>
+                        {% if network_dispatch_channel.channel.public_url %}
+                            <a class="link-external" href="{{ network_dispatch_channel.channel.public_url }}"
+                               target="_blank">
+                                    <span class="link-icon">
+                                        {% svg_icon name="link-external" %}
+                                    </span>
+                                {{ network_dispatch_channel.channel.name }}
+                            </a>
+                        {% else %}
+                            {{ network_dispatch_channel.channel.name }}
+                        {% endif %}
+                    </td>
+                    <td>
+                        {{ network_dispatch_channel.channel.data_check_interval }}
+                        {% translate "Minutes" %}
+                    </td>
+                    <td>
+                        {% if network_dispatch_channel.channel.send_aggregated_data %}
+                            {{ network_dispatch_channel.channel.aggregation_period }}
+                        {% else %}
+                            -
+                        {% endif %}
+                    </td>
+                    <td>
+                        {{ network_dispatch_channel.latest_task_result.date_done|naturaltime }}
+                    </td>
+                    <td>
+                        {% if network_dispatch_channel.latest_task_result_dict.result.records_count %}
+                            {{ network_dispatch_channel.latest_task_result_dict.result.records_count }}
+                        {% else %}
+                            -
+                        {% endif %}
+                    </td>
+                    <td>
+                        {{ network_dispatch_channel.latest_station_dispatch_obs.last_sent_obs_time|date:"Y-m-d H:i:s T" }}
+                    </td>
+                </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+{% endif %}
+
+

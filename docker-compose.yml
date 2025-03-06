@@ -1,62 +1,59 @@
 # backend environment variables, their defaults if left blank etc.
 x-backend-variables: &backend-variables
-  WAIT_HOSTS: wis2box_adl_db:5432,wis2box_adl_redis:6379
+  WAIT_HOSTS: adl_db:5432,adl_redis:6379
   WAIT_TIMEOUT: 120
-  WIS2BOX_ADL_GUNICORN_NUM_OF_WORKERS: ${WIS2BOX_ADL_GUNICORN_NUM_OF_WORKERS:-4}
-  WIS2BOX_ADL_GUNICORN_TIMEOUT: ${WIS2BOX_ADL_GUNICORN_TIMEOUT:-300}
-  DEBUG: ${WIS2BOX_ADL_DEBUG:-False}
-  WAGTAIL_SITE_NAME: ${WIS2BOX_ADL_SITE_NAME:-"WIS2BOX ADL"}
-  ADMIN_URL_PATH: ${WIS2BOX_ADL_ADMIN_URL_PATH:-adl-admin}
+  ADL_GUNICORN_NUM_OF_WORKERS: ${ADL_GUNICORN_NUM_OF_WORKERS:-4}
+  ADL_GUNICORN_TIMEOUT: ${ADL_GUNICORN_TIMEOUT:-300}
+  DEBUG: ${ADL_DEBUG:-False}
+  WAGTAIL_SITE_NAME: ${ADL_SITE_NAME:-ADL}
+  ADMIN_URL_PATH: ${ADL_ADMIN_URL_PATH:-adl-admin}
   TIME_ZONE: ${TIME_ZONE:-UTC}
   SECRET_KEY: ${SECRET_KEY:?}
   ALLOWED_HOSTS: ${ALLOWED_HOSTS}
   CSRF_TRUSTED_ORIGINS: ${CSRF_TRUSTED_ORIGINS}
-  DATABASE_URL: postgis://${WIS2BOX_ADL_DB_USER}:${WIS2BOX_ADL_DB_PASSWORD}@wis2box_adl_db:5432/${WIS2BOX_ADL_DB_NAME}
-  EMAIL_HOST: ${WIS2BOX_ADL_SMTP_EMAIL_HOST:-}
-  EMAIL_PORT: ${WIS2BOX_ADL_SMTP_EMAIL_PORT:-}
-  EMAIL_USE_TLS: ${WIS2BOX_ADL_SMTP_EMAIL_USE_TLS:-}
-  EMAIL_HOST_USER: ${WIS2BOX_ADL_SMTP_EMAIL_HOST_USER:-}
-  EMAIL_HOST_PASSWORD: ${WIS2BOX_ADL_SMTP_EMAIL_HOST_PASSWORD:-}
-  DJANGO_ADMINS: ${WIS2BOX_ADL_ADMINS:-}
+  DATABASE_URL: postgis://${ADL_DB_USER}:${ADL_DB_PASSWORD}@adl_db:5432/${ADL_DB_NAME}
+  EMAIL_HOST: ${ADL_SMTP_EMAIL_HOST:-}
+  EMAIL_PORT: ${ADL_SMTP_EMAIL_PORT:-}
+  EMAIL_USE_TLS: ${ADL_SMTP_EMAIL_USE_TLS:-}
+  EMAIL_HOST_USER: ${ADL_SMTP_EMAIL_HOST_USER:-}
+  EMAIL_HOST_PASSWORD: ${ADL_SMTP_EMAIL_HOST_PASSWORD:-}
+  DJANGO_ADMINS: ${ADL_ADMINS:-}
   WAGTAILADMIN_BASE_URL: ${CMS_BASE_URL:-}
-  LANGUAGE_CODE: ${WIS2BOX_ADL_DEFAULT_LANGUAGE_CODE:-en}
-  WIS2BOX_ADL_LOG_LEVEL: ${WIS2BOX_ADL_LOG_LEVEL:-WARN}
-  WIS2BOX_ADL_CELERY_BEAT_DEBUG_LEVEL: ${WIS2BOX_ADL_CELERY_BEAT_DEBUG_LEVEL:-INFO}
-  WIS2BOX_CENTRE_ID: ${WIS2BOX_CENTRE_ID:-?}
-  WIS2BOX_STORAGE_ENDPOINT: ${WIS2BOX_STORAGE_ENDPOINT:-?}
-  WIS2BOX_STORAGE_USERNAME: ${WIS2BOX_STORAGE_USERNAME:-?}
-  WIS2BOX_STORAGE_PASSWORD: ${WIS2BOX_STORAGE_PASSWORD:-?}
+  LANGUAGE_CODE: ${ADL_DEFAULT_LANGUAGE_CODE:-en}
+  ADL_LOG_LEVEL: ${ADL_LOG_LEVEL:-WARN}
+  ADL_DATABASE_LOG_LEVEL: ${ADL_DATABASE_LOG_LEVEL:-ERROR}
+  ADL_CELERY_BEAT_DEBUG_LEVEL: ${ADL_CELERY_BEAT_DEBUG_LEVEL:-INFO}
   MIGRATE_ON_STARTUP: ${MIGRATE_ON_STARTUP:-true}
   COLLECT_STATICFILES_ON_STARTUP: ${COLLECT_STATICFILES_ON_STARTUP:-true}
-  REDIS_URL: redis://wis2box_adl_redis:6379/0
-  WIS2BOX_ADL_PLUGIN_DIR: ${WIS2BOX_ADL_PLUGIN_DIR:-/wis2box_adl/plugins}
-  WIS2BOX_ADL_PLUGIN_URLS: ${WIS2BOX_ADL_PLUGIN_URLS:-}
-  WIS2BOX_ADL_PLUGIN_GIT_REPOS: ${WIS2BOX_ADL_PLUGIN_GIT_REPOS:-}
-  WIS2BOX_ADL_PLUGIN_SETUP_ALREADY_RUN: ${WIS2BOX_ADL_PLUGIN_SETUP_ALREADY_RUN:-}
-  WIS2BOX_ADL_DISABLE_PLUGIN_INSTALL_ON_STARTUP: ${WIS2BOX_ADL_DISABLE_PLUGIN_INSTALL_ON_STARTUP:-}
+  REDIS_URL: redis://adl_redis:6379/0
+  ADL_PLUGIN_DIR: ${ADL_PLUGIN_DIR:-/adl/plugins}
+  ADL_PLUGIN_URLS: ${ADL_PLUGIN_URLS:-}
+  ADL_PLUGIN_GIT_REPOS: ${ADL_PLUGIN_GIT_REPOS:-}
+  ADL_PLUGIN_SETUP_ALREADY_RUN: ${ADL_PLUGIN_SETUP_ALREADY_RUN:-}
+  ADL_DISABLE_PLUGIN_INSTALL_ON_STARTUP: ${ADL_DISABLE_PLUGIN_INSTALL_ON_STARTUP:-}
 
 services:
-  wis2box_adl_db:
-    container_name: wis2box_adl_db
+  adl_db:
+    container_name: adl_db
     image: timescale/timescaledb-ha:pg15
     restart: unless-stopped
     environment:
-      - POSTGRES_USER=${WIS2BOX_ADL_DB_USER:-?}
-      - POSTGRES_DB=${WIS2BOX_ADL_DB_NAME:-?}
-      - POSTGRES_PASSWORD=${WIS2BOX_ADL_DB_PASSWORD:-?}
+      - POSTGRES_USER=${ADL_DB_USER:-?}
+      - POSTGRES_DB=${ADL_DB_NAME:-?}
+      - POSTGRES_PASSWORD=${ADL_DB_PASSWORD:-?}
     ports:
       - "5432"
     volumes:
-      - ${WIS2BOX_ADL_DB_VOLUME:-./docker/db_data/}:/home/postgres/pgdata/data
+      - ${ADL_DB_VOLUME:-./docker/db_data/}:/home/postgres/pgdata/data
 
-  wis2box_adl_redis:
+  adl_redis:
     image: redis:alpine
-    container_name: wis2box_adl_redis
+    container_name: adl_redis
     restart: unless-stopped
 
-  wis2box_adl:
-    container_name: wis2box_adl
-    image: wis2box_adl
+  adl:
+    container_name: adl
+    image: adl
     build:
       context: .
       dockerfile: Dockerfile
@@ -70,17 +67,18 @@ services:
     expose:
       - "8000"
     depends_on:
-      - wis2box_adl_db
-      - wis2box_adl_redis
+      - adl_db
+      - adl_redis
     ports:
       - "8000"
     volumes:
-      - ${WIS2BOX_ADL_STATIC_VOLUME:-./docker/static}:/wis2box_adl/app/src/wis2box_adl/static
-      - ${WIS2BOX_ADL_MEDIA_VOLUME:-./docker/media}:/wis2box_adl/app/src/wis2box_adl/media
-      - ${WIS2BOX_ADL_BACKUP_VOLUME:-./docker/backup}:/wis2box_adl/app/src/wis2box_adl/backup
+      - ${ADL_STATIC_VOLUME:-./docker/static}:/adl/app/src/adl/static
+      - ${ADL_MEDIA_VOLUME:-./docker/media}:/adl/app/src/adl/media
+      - ${ADL_BACKUP_VOLUME:-./docker/backup}:/adl/app/src/adl/backup
 
-  wis2box_adl_celery_worker:
-    container_name: wis2box_adl_celery_worker
+  adl_celery_worker:
+    container_name: adl_celery_worker
+    image: adl
     build:
       context: .
       dockerfile: Dockerfile
@@ -92,17 +90,18 @@ services:
     command: celery-worker
     environment:
       <<: *backend-variables
-      WAIT_HOSTS: wis2box_adl_db:5432,wis2box_adl_redis:6379,wis2box_adl:8000
+      WAIT_HOSTS: adl_db:5432,adl_redis:6379,adl:8000
     depends_on:
-      - wis2box_adl_db
-      - wis2box_adl_redis
+      - adl_db
+      - adl_redis
     volumes:
-      - ${WIS2BOX_ADL_STATIC_VOLUME:-./docker/static}:/wis2box_adl/app/src/wis2box_adl/static
-      - ${WIS2BOX_ADL_MEDIA_VOLUME:-./docker/media}:/wis2box_adl/app/src/wis2box_adl/media
-      - ${WIS2BOX_ADL_BACKUP_VOLUME:-./docker/backup}:/wis2box_adl/app/src/wis2box_adl/backup
+      - ${ADL_STATIC_VOLUME:-./docker/static}:/adl/app/src/adl/static
+      - ${ADL_MEDIA_VOLUME:-./docker/media}:/adl/app/src/adl/media
+      - ${ADL_BACKUP_VOLUME:-./docker/backup}:/adl/app/src/adl/backup
 
-  wis2box_adl_celery_beat:
-    container_name: wis2box_adl_celery_beat
+  adl_celery_beat:
+    container_name: adl_celery_beat
+    image: adl
     build:
       context: .
       dockerfile: Dockerfile
@@ -114,22 +113,27 @@ services:
     command: celery-beat
     environment:
       <<: *backend-variables
-      WAIT_HOSTS: wis2box_adl_db:5432,wis2box_adl_redis:6379,wis2box_adl:8000
+      WAIT_HOSTS: adl_db:5432,adl_redis:6379,adl:8000
     depends_on:
-      - wis2box_adl_db
-      - wis2box_adl_redis
+      - adl_db
+      - adl_redis
     volumes:
-      - ${WIS2BOX_ADL_STATIC_VOLUME:-./docker/static}:/wis2box_adl/app/src/wis2box_adl/static
-      - ${WIS2BOX_ADL_MEDIA_VOLUME:-./docker/media}:/wis2box_adl/app/src/wis2box_adl/media
-      - ${WIS2BOX_ADL_BACKUP_VOLUME:-./docker/backup}:/wis2box_adl/app/src/wis2box_adl/backup
+      - ${ADL_STATIC_VOLUME:-./docker/static}:/adl/app/src/adl/static
+      - ${ADL_MEDIA_VOLUME:-./docker/media}:/adl/app/src/adl/media
+      - ${ADL_BACKUP_VOLUME:-./docker/backup}:/adl/app/src/adl/backup
 
-  wis2box_adl_web_proxy:
-    container_name: wis2box_adl_web_proxy
+  adl_web_proxy:
+    container_name: adl_web_proxy
     image: nginx:1.20.2-alpine
     restart: unless-stopped
     volumes:
-      - ${WIS2BOX_ADL_STATIC_VOLUME:-./docker/static}:/wagtail_static
-      - ${WIS2BOX_ADL_MEDIA_VOLUME:-./docker/media}:/wagtail_media
+      - ${ADL_STATIC_VOLUME:-./docker/static}:/wagtail_static
+      - ${ADL_MEDIA_VOLUME:-./docker/media}:/wagtail_media
       - ./deploy/nginx/nginx.conf:/etc/nginx/nginx.conf
     ports:
-      - ${WIS2BOX_ADL_WEB_PROXY_PORT:-80}:80
+      - ${ADL_WEB_PROXY_PORT:-80}:80
+
+networks:
+  default:
+    external: true
+    name: ${ADL_NETWORK_NAME:-adl}

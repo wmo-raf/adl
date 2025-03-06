@@ -18,7 +18,7 @@ A WIS2Box plugin is a folder named after the plugin. This must be a valid Python
 """
 }
 
-source /wis2box_adl/plugins/utils.sh
+source /adl/plugins/utils.sh
 
 # First parse the args using getopt
 VALID_ARGS=$(getopt -o u:dhf:rg:o --long hash:,url:,git:,help,dev,folder:,runtime,overwrite -- "$@")
@@ -112,7 +112,7 @@ if [[ -n "$git" ]]; then
     dirs=("$temp_work_dir"/plugins/*/)
     num_dirs=${#dirs[@]}
     if [[ "$num_dirs" -ne 1 ]]; then
-        error "$git does not look like a WIS2Box ADL plugin. The plugins/ subdirectory in the repo must contain exactly one sub-directory."
+        error "$git does not look like an ADL plugin. The plugins/ subdirectory in the repo must contain exactly one sub-directory."
         exit 1;
     fi
     folder=${dirs[0]}
@@ -128,7 +128,7 @@ if [[ -n "$url" ]]; then
     dirs=("$temp_work_dir"/*/plugins/*/)
     num_dirs=${#dirs[@]}
     if [[ "$num_dirs" -ne 1 ]]; then
-        error "$url does not look like a WIS2Box ADL plugin. The plugin archive must contain a plugins/ sub-directory itself containing exactly one sub-directory for the plugin."
+        error "$url does not look like an ADL plugin. The plugin archive must contain a plugins/ sub-directory itself containing exactly one sub-directory for the plugin."
         exit 1;
     fi
     folder=${dirs[0]}
@@ -136,18 +136,18 @@ fi
 
 # copy the plugin at the folder location into the plugin dir if it has not been already.
 plugin_name="$(basename -- "$folder")"
-plugin_install_dir="$WIS2BOX_ADL_PLUGIN_DIR/$plugin_name"
+plugin_install_dir="$ADL_PLUGIN_DIR/$plugin_name"
 if [[ ! "$folder" -ef "$plugin_install_dir" ]]; then
   if [[ ! -d "$plugin_install_dir" || "$overwrite" == "true" ]]; then
     log "Copying plugin $plugin_name into plugins folder at $plugin_install_dir."
-    mkdir -p "$WIS2BOX_ADL_PLUGIN_DIR"
+    mkdir -p "$ADL_PLUGIN_DIR"
     rm -rf "$plugin_install_dir"
     cp -Tr "$folder" "$plugin_install_dir"
   else
     log "Found an existing plugin installed at $plugin_install_dir, not overwriting it
         as the --overwrite flag was not provided to this script."
   fi
-  folder="$WIS2BOX_ADL_PLUGIN_DIR/$plugin_name"
+  folder="$ADL_PLUGIN_DIR/$plugin_name"
 fi
 chown -R "$DOCKER_USER": "$folder"
 
@@ -188,15 +188,15 @@ run_as_docker_user(){
 
 # Make sure we create the container markers folder which we will use to check if a
 # plugin has been installed or not already inside this container.
-mkdir -p /wis2box_adl/container_markers
+mkdir -p /adl/container_markers
 
 # Install plugin
 if [[ -d "$folder" ]]; then
-    BUILT_MARKER=/wis2box_adl/container_markers/$plugin_name.built
+    BUILT_MARKER=/adl/container_markers/$plugin_name.built
     if [[ ! -f "$BUILT_MARKER" || "$overwrite" == "true" ]]; then
       log "Building ${plugin_name}."
 
-      cd /wis2box_adl
+      cd /adl
 
       if [[ "$dev" == true ]]; then
           run_as_docker_user pip3 install -e "$folder"
@@ -210,7 +210,7 @@ if [[ -d "$folder" ]]; then
       log "Skipping install of ${plugin_name} as it is already installed."
     fi
 
-    PLUGIN_RUNTIME_SETUP_MARKER=/wis2box_adl/container_markers/$plugin_name.runtime-setup
+    PLUGIN_RUNTIME_SETUP_MARKER=/adl/container_markers/$plugin_name.runtime-setup
     if [[ ( ! -f "$PLUGIN_RUNTIME_SETUP_MARKER" || "$overwrite" == "true" ) && $runtime == "true" ]]; then
       check_and_run_script "$folder" runtime_setup.sh
       touch "$PLUGIN_RUNTIME_SETUP_MARKER"
@@ -219,7 +219,7 @@ if [[ -d "$folder" ]]; then
     fi
 fi
 
-log "Fixing ownership of plugins from $(id -u) to $DOCKER_USER in $WIS2BOX_ADL_PLUGIN_DIR"
-chown -R "$DOCKER_USER": "$WIS2BOX_ADL_PLUGIN_DIR"
-chown -R "$DOCKER_USER": /wis2box_adl/container_markers/
+log "Fixing ownership of plugins from $(id -u) to $DOCKER_USER in $ADL_PLUGIN_DIR"
+chown -R "$DOCKER_USER": "$ADL_PLUGIN_DIR"
+chown -R "$DOCKER_USER": /adl/container_markers/
 log_success "Finished setting up ${plugin_name} successfully."
