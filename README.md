@@ -1,10 +1,34 @@
 # ⚙ Automated Data Loader
 
-Wagtail based tool for automating periodic Observation data ingestion into different systems, from Automatic and or
-Manual
-Weather Stations.
+Automate periodic observation data collection from different Automatic Weather Station (AWS) networks, and pushing to
+different receiving systems.
+
+![ADL Dashboard](docs/_static/images/adl-dashboard.png)
 
 ## 📚 Background
+
+One of the challenges confronting NMHSs in Africa in observation data management is the disparities between the
+different station types managed by the institutions or provided through projects. This has given rise to barriers in
+using the data collected by Automated Weather Stations in a harmonized way.
+
+These disparities include major differences in the way the data from various AWS vendors are formatted and stored, which
+result in poorly coordinated, fragmented, and un-harmonized datasets coming from different AWS networks.
+
+Given the broad category of AWS vendors and types that share similar purpose of collecting weather observation data,
+with different storage structure, having a monolithic application would be too large and complex to accommodate all the
+possible AWS vendor types in Africa NMHSs.
+
+A solution for unifying this data collection would be to have a core application that only knows about the high-level
+information of the AWS network, and then develop small units (plugins) on demand, to handle the complexities of each AWS
+vendor type. Similar case for pushing data to different receiving systems. For each receiving channel (could be an FTP,
+Database, API, Webhook, S3 Storage etc), a plugin can be developed to handle the complexities of periodically pushing
+data to these systems.
+
+This project is an implementation of such a solution.
+
+The initial idea for this project was to create a tool that would automate the collection of data from different AWS and
+ingest into a [WIS2Box node](https://github.com/wmo-im/wis2box). However, this has been expanded to include the ability
+to develop plugins to send to other receiving storages and systems
 
 [WIS2 in a box](https://github.com/wmo-im/wis2box) (wis2box) is a Free and Open Source (FOSS) Reference Implementation
 of a WMO WIS2 Node. The project provides a plug and play toolset to ingest, process, and publish weather/climate/water
@@ -17,28 +41,12 @@ stations is periodically ingested into the node in a timely way is another. Coun
 scripts to automate this process, but this can be time-consuming and costly especially for developing countries that
 have a 'cocktail' of different AWS vendors.
 
-One of the challenges confronting NMHSs in Africa in observation data management is the disparities between the
-different station types provided by different donors. This has given rise to barriers in using the data collected by
-Automated Weather Stations in a harmonized way.
-
-These disparities include major differences in the way the data from various AWS vendors are formatted and stored, which
-result in poorly coordinated, fragmented, and unharmonized datasets coming from different AWS networks.
-
-Given the broad category of AWS vendors and types that share similar purpose of collecting weather observation data,
-with different storage structure, having a monolithic application would be too large and complex to accommodate all the
-possible AWS vendor types in Africa NMHSs.
-
-One solution would be to create a core application that only knows about the high-level information of the AWS network,
-and then develop small units (plugins) to handle the complexities of each AWS vendor type.
-
-This project is an implementation of such a solution.
-
 ![WIS2Box ADL Data Flow](docs/_static/images/wis2box-data-flow-adl.png)
 
 ## 📜 Introduction
 
-WIS2Box Automated Data Loader (ADL) is a plugin based system that defines an architecture for implementing wis2box data
-loaders for different AWS vendors.
+The Automated Data Loader (ADL) is a plugin based system that defines an architecture for implementing data loaders for
+different AWS vendors.
 
 The core application, which is under this repository, defines a form of contract that vendor specific plugins can extend
 and provides an abstraction layer for integration of the plugins.
@@ -46,9 +54,8 @@ and provides an abstraction layer for integration of the plugins.
 At a high level, this core application is made up of the following components:
 
 - **Network component**– Table and logic with details about the AWS/Manual Stations Network. A network is a
-  representation of
-  a given AWS vendor type and its stations, or a collection of manual stations. When creating a network, an installed
-  plugin must be associated with it to make it useful.
+  representation of a given AWS vendor type and its stations, or a collection of manual stations. When creating a
+  network, an installed plugin must be associated with it to make it useful.
 
 - **Station component** – Table and logic with details for each station, linking to different networks, including
   defining the data parameters to be used when preparing data for ingestion into WIS2Box, and a way to load stations for
@@ -78,17 +85,18 @@ On the other hand, a plugin will have the following components and features:
   the core application database if it requires to store information needed to link its stations with the stations
   defined in the core application.
 
-![WIS2Box ADL Components](docs/_static/images/wis2box-adl-components.png)
+![ADL Components](docs/_static/images/adl-components.png)
 
 ### 📋 Objectives
 
-- To provide a tool for automating ingestion of data from different AWS vendors into a WIS2Box node.
+- To provide a tool for automating collection of data from different AWS vendors into a central unified database.
 - To provide a plugin architecture that allows for the development of plugins for different AWS vendors.
 - To take advantage of the Wagtail CMS Admin interface to provide a user-friendly interface that facilitates easy setup
   and management of the data loaders for different AWS vendors.
 - With minimal training, users at the NMHSs should be able to set up and configure an AWS vendor plugin for their
-  observation data network and start ingesting data into WIS2Box node
-- Provide a repository of plugins for different AWS vendors that can be shared and reused by NMHSs in Africa.
+  observation data network and start to automatically ingesting data into different platforms, like wis2box or Climate
+  Database Management Systems (CDMS).
+- Provide a repository of plugins for different AWS vendors that can be shared and reused by NMHSs across Africa.
 
 ### ⚗️ Technology Stack
 
@@ -110,8 +118,10 @@ On the other hand, a plugin will have the following components and features:
 
 The following are the plugins that have been developed and are available for integration with the WIS2Box ADL core:
 
-- [Adcon Telemetry Plugin](https://github.com/wmo-raf/wis2box-adl-adcon-plugin)
+- [Adcon Telemetry Database Plugin](https://github.com/wmo-raf/adl-adcon-db-plugin)
 - [Davis Instruments Weatherlink Plugin](https://github.com/wmo-raf/wis2box-adl-weatherlink-v2-plugin)
+- [Pulsonic PulsoWeb Plugin](https://github.com/wmo-raf/adl-pulsoweb-plugin)
+- [Generic FTP Plugin](https://github.com/wmo-raf/adl-ftp-plugin)
 
 ## 🏁 Getting Started
 
