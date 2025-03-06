@@ -3,6 +3,8 @@
 Automate periodic observation data collection from different Automatic Weather Station (AWS) networks, and pushing to
 different receiving systems.
 
+![ADL Dashboard](docs/_static/images/adl-dashboard.png)
+
 ## 📚 Background
 
 One of the challenges confronting NMHSs in Africa in observation data management is the disparities between the
@@ -83,7 +85,7 @@ On the other hand, a plugin will have the following components and features:
   the core application database if it requires to store information needed to link its stations with the stations
   defined in the core application.
 
-![ADL Components](docs/_static/images/wis2box-adl-components.png)
+![ADL Components](docs/_static/images/adl-components.png)
 
 ### 📋 Objectives
 
