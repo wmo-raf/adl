@@ -122,7 +122,7 @@ On the other hand, a plugin will have the following components and features:
 - [Celery](https://docs.celeryq.dev/en/stable/index.html) is used for background tasks.
 - [Redis](https://redis.io/) is used as the message broker for Celery.
 - The system is containerized using [Docker](https://www.docker.com/)
-  and [docker-compose](https://docs.docker.com/compose/).
+  and [docker compose](https://docs.docker.com/compose/).
 - Plugins are developed as Django/Wagtail apps and integrated into wagtail
   using [Wagtail hooks](https://docs.wagtail.org/en/stable/reference/hooks.html).
 - [Nginx](https://nginx.org) is used the static and reverse proxy server for the system.
@@ -144,7 +144,7 @@ The following are the plugins that have been developed and are available for int
 Before following the steps below, make sure you have the following set up:
 
 - Docker Engine & Docker Compose Plugin : Ensure that Docker Engine is installed and running on the machine where you
-  plan to execute the docker-compose command https://docs.docker.com/engine/install/. Docker Engine is the runtime
+  plan to execute the docker compose command https://docs.docker.com/engine/install/. Docker Engine is the runtime
   environment for containers.
 
 ### Installation
@@ -200,26 +200,25 @@ Replace `<UID>` and `<GID>` with the values set in the `.env` file for the `UID`
 #### 4. Build and Run the Docker Containers
 
 ```sh
-docker-compose build
+docker compose build
 ```
 
 ```sh
-docker-compose up
+docker compose up
 ```
 
 To run the containers in the background, use the `-d` flag
 
 ```sh
-docker-compose up -d
+docker compose up -d
 ```
 
 #### 5. Create Superuser
 
 ```sh
-docker-compose exec adl /bin/bash
-source /adl/venv/bin/activate
+docker compose exec adl /bin/bash
 
-manage createsuperuser
+adl createsuperuser
 ```
 
 `manage` is a shortcut python script that is available in the container that calls Django's `manage.py`
@@ -282,8 +281,8 @@ ADL_PLUGIN_GIT_REPOS=https://github.com/wmo-raf/adl-adcon-plugin.git,https://git
 Then restart the docker containers
 
 ```sh
-docker-compose stop
-docker-compose up -d --force-recreate
+docker compose stop
+docker compose up -d --force-recreate
 ```
 
 ## User Guide
@@ -569,6 +568,6 @@ export PLUGIN_BUILD_UID=$(id -u)
 export PLUGIN_BUILD_GID=$(id -g)
 # You can optionally `export COMPOSE_FILE=docker-compose.dev.yml` so you don't need to 
 # use the `-f docker-compose.dev.yml` flag each time.
-docker-compose -f docker-compose.dev.yml up -d --build
-docker-compose -f docker-compose.dev.yml logs -f
+docker compose -f docker-compose.dev.yml up -d --build
+docker compose -f docker-compose.dev.yml logs -f
 ```
