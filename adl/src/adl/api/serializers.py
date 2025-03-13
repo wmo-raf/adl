@@ -6,7 +6,7 @@ from adl.core.models import (
     NetworkConnection,
     ObservationRecord,
     HourlyAggregatedObservationRecord,
-    DailyAggregatedObservationRecord
+    DailyAggregatedObservationRecord, StationLink
 )
 
 from collections import defaultdict
@@ -35,6 +35,14 @@ class StationSerializer(ReadOnlyModelSerializer):
     
     def get_location(self, obj):
         return {"latitude": obj.location.y, "longitude": obj.location.x}
+
+
+class StationLinkSerializer(ReadOnlyModelSerializer):
+    station = StationSerializer()
+    
+    class Meta:
+        model = StationLink
+        fields = ("id", "network_connection", "enabled", "station",)
 
 
 class NetworkConnectionSerializer(ReadOnlyModelSerializer):
