@@ -1,6 +1,3 @@
-from collections import defaultdict
-
-from django.db.models import OuterRef, Subquery
 from django.shortcuts import get_object_or_404
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
@@ -8,8 +5,7 @@ from rest_framework_api_key.permissions import HasAPIKey
 
 from adl.core.models import (
     Network,
-    NetworkConnection, StationLink, ObservationRecord, DataParameter,
-)
+    NetworkConnection, StationLink, ObservationRecord, )
 from .serializers import (
     NetworkSerializer,
     NetworkConnectionSerializer,
@@ -64,32 +60,21 @@ def get_station_link_latest_data(request, station_link_id):
     connection_id = station_link.network_connection.id
     station_id = station_link.station_id
     
-    # Subquery to get the latest observation time for each parameter for the given station
-    latest_observation_subquery = ObservationRecord.objects.filter(
-        connection_id=connection_id,
-        station_id=station_id,
-        parameter_id=OuterRef('parameter_id')
-    ).order_by('-time').values('time')[:1]
-    
-    # Get the latest records for each parameter
     latest_records = ObservationRecord.objects.filter(
         connection_id=connection_id,
-        station_id=station_id,
-        time=Subquery(latest_observation_subquery)
-    )
+        station_id=station_id
+    ).distinct('parameter_id').order_by('parameter_id', '-time').select_related('parameter')
     
-    # Handle case where no records are found
     if not latest_records.exists():
-        return Response({"error": "No observation records found for the given station and connection."}, status=404)
+        return Response({
+            "error": "No observation records found for the given station and connection."
+        }, status=404)
     
-    # Initialize the data structure
     data = {
-        "time": latest_records[0].time.isoformat(),  # Assuming all records have the same time
-        "data": {}
+        "station_id": station_id,
+        "connection_id": connection_id,
+        "time": latest_records[0].time.isoformat(),
+        "data": {record.parameter.name: record.value for record in latest_records}
     }
-    
-    for record in latest_records:
-        param_name = record.parameter.name
-        data["data"][param_name] = record.value
     
     return Response(data)
