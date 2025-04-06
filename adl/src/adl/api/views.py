@@ -8,11 +8,17 @@ from rest_framework_api_key.permissions import HasAPIKey
 
 from adl.core.models import (
     Network,
-    NetworkConnection, StationLink, ObservationRecord, )
+    NetworkConnection,
+    StationLink,
+    ObservationRecord,
+    DataParameter
+)
 from .serializers import (
     NetworkSerializer,
     NetworkConnectionSerializer,
-    ObservationRecordSerializer, StationLinkSerializer
+    ObservationRecordSerializer,
+    StationLinkSerializer,
+    DataParameterSerializer
 )
 
 
@@ -29,6 +35,14 @@ def get_networks(request):
 def get_network_connections(request):
     connections = NetworkConnection.objects.all()
     data = NetworkConnectionSerializer(connections, many=True).data
+    return Response(data)
+
+
+@api_view()
+@permission_classes([HasAPIKey])
+def get_data_parameters(request):
+    data_parameters = DataParameter.objects.all()
+    data = DataParameterSerializer(data_parameters, many=True).data
     return Response(data)
 
 

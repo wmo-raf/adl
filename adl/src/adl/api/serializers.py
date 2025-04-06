@@ -5,11 +5,10 @@ from adl.core.models import (
     Station,
     NetworkConnection,
     ObservationRecord,
-    HourlyAggregatedObservationRecord,
-    DailyAggregatedObservationRecord, StationLink
+    StationLink,
+    DataParameter,
+    Unit
 )
-
-from collections import defaultdict
 
 
 class ReadOnlyModelSerializer(serializers.ModelSerializer):
@@ -55,3 +54,17 @@ class ObservationRecordSerializer(ReadOnlyModelSerializer):
     class Meta:
         model = ObservationRecord
         fields = ("parameter_id", "connection_id", "time", "value")
+
+
+class UnitSerializer(ReadOnlyModelSerializer):
+    class Meta:
+        model = Unit
+        fields = ("id", "name", "symbol", "description")
+
+
+class DataParameterSerializer(ReadOnlyModelSerializer):
+    unit = UnitSerializer()
+    
+    class Meta:
+        model = DataParameter
+        fields = ("id", "name", "unit", "description")
