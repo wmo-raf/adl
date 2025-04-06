@@ -66,7 +66,7 @@ def get_station_link_latest_data(request, station_link_id):
     latest_records = ObservationRecord.objects.filter(
         connection_id=connection_id,
         station_id=station_id
-    ).distinct('parameter_id').order_by('parameter_id', '-time').select_related('parameter')
+    ).distinct('parameter_id').order_by('parameter_id', '-time')
     
     if not latest_records.exists():
         return Response({
@@ -77,7 +77,7 @@ def get_station_link_latest_data(request, station_link_id):
         "station_id": station_id,
         "connection_id": connection_id,
         "time": latest_records[0].time.isoformat(),
-        "data": {record.parameter.name: record.value for record in latest_records}
+        "data": {record.parameter_id: record.value for record in latest_records}
     }
     
     return Response(data)
@@ -99,7 +99,7 @@ def get_station_link_timeseries_data(request, station_link_id):
     query = ObservationRecord.objects.filter(
         connection_id=connection_id,
         station_id=station_id
-    ).select_related('parameter')
+    )
     
     # Apply time range filtering if provided
     if start_time and end_time:
@@ -131,7 +131,7 @@ def get_station_link_timeseries_data(request, station_link_id):
                 "time": time_key,
                 "data": {}
             }
-        grouped_data[time_key]["data"][record.parameter.name] = record.value
+        grouped_data[time_key]["data"][record.parameter_id] = record.value
     
     # Convert the dictionary to a list of records
     result = list(grouped_data.values())
