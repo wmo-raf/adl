@@ -1,6 +1,5 @@
 from datetime import timedelta
 
-from django.db.models import OuterRef, Subquery
 from django.shortcuts import get_object_or_404
 from django.utils import timezone as dj_timezone
 from rest_framework.decorators import api_view, permission_classes
@@ -72,49 +71,28 @@ def get_raw_observation_records_for_connection_station(request, connection_id, s
     return Response(data)
 
 
-@api_view(["GET"])
+@api_view()
 @permission_classes([HasAPIKey])
 def get_station_link_latest_data(request, station_link_id):
-    """
-    Fetch the latest observation records for a station link
-    with parameters returned as a list.
-    """
-    # Fetch the StationLink entry or raise HTTP 404 if it doesn't exist
     station_link = get_object_or_404(StationLink, id=station_link_id)
-    
-    # Extract connection_id and station_id
     connection_id = station_link.network_connection.id
     station_id = station_link.station_id
     
-    # Subquery to get the latest time for each parameter
-    latest_time_subquery = ObservationRecord.objects.filter(
-        connection_id=connection_id,
-        station_id=station_id,
-        parameter_id=OuterRef('parameter_id')
-    ).order_by('-time').values('time')[:1]
-    
-    # Fetch the latest records using Subquery
     latest_records = ObservationRecord.objects.filter(
         connection_id=connection_id,
-        station_id=station_id,
-        time=Subquery(latest_time_subquery)
-    )
+        station_id=station_id
+    ).distinct('parameter_id').order_by('parameter_id', '-time')
     
-    if not latest_records.exists():
-        return Response(
-            {"error": "No observation records found for the given station link."},
-            status=404
-        )
+    if not latest_records:
+        return Response({
+            "error": "No observation records found for the given station link."
+        }, status=404)
     
     data = {
         "station_id": station_id,
         "connection_id": connection_id,
         "data": [
-            {
-                "parameter_id": record.parameter.id,
-                "value": record.value,
-                "time": record.time.isoformat(),
-            }
+            {"time": record.time.isoformat(), "parameter_id": record.parameter_id, "value": record.value}
             for record in latest_records
         ]
     }
@@ -167,5 +145,3 @@ def get_station_link_timeseries_data(request, station_link_id):
     grouped_data = _group_records_by_time(records, station_id, connection_id)
     
     return Response(grouped_data)
-
-# U
