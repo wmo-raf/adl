@@ -1,7 +1,5 @@
-from collections import defaultdict
-from datetime import datetime
-
 from django.shortcuts import get_object_or_404
+from django.utils import timezone as dj_timezone
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
 from rest_framework_api_key.permissions import HasAPIKey
@@ -20,6 +18,7 @@ from .serializers import (
     StationLinkSerializer,
     DataParameterSerializer
 )
+from .utils import validate_iso_datetime, _group_records_by_time
 
 
 @api_view()
@@ -106,25 +105,29 @@ def get_station_link_timeseries_data(request, station_link_id):
     station_id = station_link.station_id
     
     # Get query parameters for time range (optional)
-    start_time = request.GET.get('start_time')
-    end_time = request.GET.get('end_time')
+    start_time = request.GET.get('start_time', None)
+    end_time = request.GET.get('end_time', None)
+    
+    if start_time or end_time:
+        try:
+            start_time = validate_iso_datetime('start_time', start_time)
+            end_time = validate_iso_datetime('end_time', end_time)
+        except ValueError as e:
+            return Response({"error": str(e)}, status=400)
+    
+    if not start_time:
+        # use the start of the current day as default
+        start_time = dj_timezone.now().replace(hour=0, minute=0, second=0, microsecond=0)
     
     # Initialize the base query
     query = ObservationRecord.objects.filter(
         connection_id=connection_id,
-        station_id=station_id
+        station_id=station_id,
+        time__gte=start_time,
     )
     
-    # Apply time range filtering if provided
-    if start_time and end_time:
-        try:
-            start_time = datetime.fromisoformat(start_time)
-            end_time = datetime.fromisoformat(end_time)
-            query = query.filter(time__gte=start_time, time__lte=end_time)
-        except ValueError:
-            return Response({
-                "error": "Invalid date format. Use ISO format (e.g., 2023-10-01T00:00:00Z)."
-            }, status=400)
+    if end_time:
+        query = query.filter(time__lte=end_time)
     
     # Fetch the records ordered by time
     records = query.order_by('time')
@@ -135,19 +138,6 @@ def get_station_link_timeseries_data(request, station_link_id):
         }, status=404)
     
     # Group records by time
-    grouped_data = defaultdict(lambda: {"data": {}})
-    for record in records:
-        time_key = record.time.isoformat()
-        if time_key not in grouped_data:
-            grouped_data[time_key] = {
-                "station_id": station_id,
-                "connection_id": connection_id,
-                "time": time_key,
-                "data": {}
-            }
-        grouped_data[time_key]["data"][record.parameter_id] = record.value
+    grouped_data = _group_records_by_time(records, station_id, connection_id)
     
-    # Convert the dictionary to a list of records
-    result = list(grouped_data.values())
-    
-    return Response(result)
+    return Response(grouped_data)
