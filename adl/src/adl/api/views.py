@@ -1,3 +1,5 @@
+from datetime import timedelta
+
 from django.shortcuts import get_object_or_404
 from django.utils import timezone as dj_timezone
 from rest_framework.decorators import api_view, permission_classes
@@ -116,8 +118,8 @@ def get_station_link_timeseries_data(request, station_link_id):
             return Response({"error": str(e)}, status=400)
     
     if not start_time:
-        # use the start of the current day as default
-        start_time = dj_timezone.now().replace(hour=0, minute=0, second=0, microsecond=0)
+        # get the last 24 hours of data if no start_time is provided
+        start_time = (dj_timezone.now() - timedelta(hours=24)).replace(minute=0, second=0, microsecond=0)
     
     # Initialize the base query
     query = ObservationRecord.objects.filter(
