@@ -13,6 +13,7 @@ from adl.core.models import (
     ObservationRecord,
     DataParameter
 )
+from .auth import HasAPIKeyOrIsAuthenticated
 from .serializers import (
     NetworkSerializer,
     NetworkConnectionSerializer,
@@ -32,7 +33,7 @@ def get_networks(request):
 
 
 @api_view()
-@permission_classes([HasAPIKey])
+@permission_classes([HasAPIKeyOrIsAuthenticated])
 def get_network_connections(request):
     connections = NetworkConnection.objects.all()
     data = NetworkConnectionSerializer(connections, many=True).data
@@ -40,7 +41,7 @@ def get_network_connections(request):
 
 
 @api_view()
-@permission_classes([HasAPIKey])
+@permission_classes([HasAPIKeyOrIsAuthenticated])
 def get_data_parameters(request):
     data_parameters = DataParameter.objects.all()
     data = DataParameterSerializer(data_parameters, many=True).data
@@ -48,7 +49,7 @@ def get_data_parameters(request):
 
 
 @api_view()
-@permission_classes([HasAPIKey])
+@permission_classes([HasAPIKeyOrIsAuthenticated])
 def get_network_connection_station_links(request, network_conn_id):
     network = get_object_or_404(NetworkConnection, id=network_conn_id)
     stations = network.station_links.all()
@@ -72,8 +73,10 @@ def get_raw_observation_records_for_connection_station(request, connection_id, s
 
 
 @api_view()
-@permission_classes([HasAPIKey])
+@permission_classes([HasAPIKeyOrIsAuthenticated])
 def get_station_link_latest_data(request, station_link_id):
+    print(station_link_id)
+    
     station_link = get_object_or_404(StationLink, id=station_link_id)
     connection_id = station_link.network_connection.id
     station_id = station_link.station_id

@@ -13,8 +13,6 @@ SECRET_KEY = env.str('SECRET_KEY')
 # SECURITY WARNING: define the correct hosts in production!
 ALLOWED_HOSTS = env.list('ALLOWED_HOSTS', default=[])
 
-DEBUG = env('DEBUG', False)
-
 MANIFEST_LOADER = {
     'cache': True,
     # recommended True for production, requires a server restart to pick up new values from the manifest.

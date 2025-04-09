@@ -395,7 +395,6 @@ def connections_list(request):
                     url_helper = AdminURLHelper(station_link_model)
                     try:
                         station_link_url = url_helper.index_url
-                        station_link_url += f"?network_connection={instance.id}"
                     except NoReverseMatch:
                         pass
         

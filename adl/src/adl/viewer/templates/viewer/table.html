@@ -1,0 +1,14 @@
+{% extends "wagtailadmin/generic/base.html" %}
+{% load wagtailadmin_tags i18n vue_utils %}
+
+{% get_current_language as LANGUAGE_CODE %}
+
+{% block main_content %}
+    <div id="table-view" data-api-url="{{ api_url }}" data-language-code="{{ LANGUAGE_CODE }}">
+    </div>
+{% endblock %}
+
+{% block extra_js %}
+    {{ block.super }}
+    <script type="module" crossorigin src="{% vue_bundle_url 'table' %}"></script>
+{% endblock %}
