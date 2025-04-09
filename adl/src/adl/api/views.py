@@ -135,7 +135,7 @@ def get_station_link_timeseries_data(request, station_link_id):
         query = query.filter(time__lte=end_time)
     
     # Fetch the records ordered by time
-    records = query.order_by('time')
+    records = query.order_by('-time')
     
     if not records.exists():
         return Response({
