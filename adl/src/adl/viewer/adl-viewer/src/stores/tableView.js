@@ -1,11 +1,13 @@
 import {defineStore} from 'pinia'
 import {keyBy} from "lodash";
+import {format as dateFormat} from "date-fns";
 
 import {
     fetchDataParameters,
     fetchNetworkConnections,
     fetchNetworkConnectionStations,
-    fetchStationLinkLatestData
+    fetchStationLinkLatestData,
+    fetchStationLinkTimeseriesData
 } from '@/services/adlService'
 
 export const useTableViewStore = defineStore('tableView', {
@@ -16,6 +18,7 @@ export const useTableViewStore = defineStore('tableView', {
         networkConnectionStations: {},
         selectedStation: null,
         selectedStationLatestData: null,
+        selectedStationTimeseriesData: null,
         loading: false,
         error: null
     }),
@@ -82,15 +85,70 @@ export const useTableViewStore = defineStore('tableView', {
             this.error = null
             try {
                 const response = await fetchStationLinkLatestData(this.axios, stationId)
-                return response.data
+                const {data} = response
+                const dataWithParameters = data.data.reduce((all, item) => {
+                    const parameter = this.dataParameters[item.parameter_id]
+                    if (parameter) {
+                        const unit = parameter.unit.symbol || ''
+                        const paramNameWithUnit = parameter.name + (unit ? ` (${unit})` : '')
+                        all.push({
+                            ...item,
+                            time: dateFormat(item.time, 'dd/MM/yyyy HH:mm'),
+                            parameter:
+                            paramNameWithUnit,
+                            value:
+                                item.value.toFixed(2)
+                        })
+                    }
+                    return all
+                }, []);
+
+                this.selectedStationLatestData = dataWithParameters
             } catch (err) {
                 this.error = err.message || 'Failed to fetch station link latest data'
             } finally {
                 this.loading = false
             }
-        }
+        },
+        clearStationLatestData() {
+            this.selectedStationLatestData = null
+        },
+        async loadStationLinkTimeseriesData(stationId) {
+            this.loading = true
+            this.error = null
+            try {
+                const response = await fetchStationLinkTimeseriesData(this.axios, stationId)
+                const {data} = response
 
+                const uniqueParameters = new Set()
 
+                const normalizedData = data.map(entry => {
+                    const flat = {time: dateFormat(entry.time, 'dd/MM/yyyy HH:mm'),};
+                    for (const [k, v] of Object.entries(entry.data)) {
+                        const parameter = this.dataParameters[k]
+                        const unit = parameter.unit.symbol || ''
+                        const paramNameWithUnit = parameter.name + (unit ? ` (${unit})` : '')
+                        uniqueParameters.add(paramNameWithUnit)
+                        if (parameter) {
+                            flat[paramNameWithUnit] = v.toFixed(2);
+                        }
+                    }
+                    return flat;
+                })
+
+                this.selectedStationTimeseriesData = {
+                    data: normalizedData,
+                    parameters: Array.from(uniqueParameters)
+                }
+            } catch (err) {
+                this.error = err.message || 'Failed to fetch station link timeseries data'
+            } finally {
+                this.loading = false
+            }
+        },
+        clearStationTimeseriesData() {
+            this.selectedStationTimeseriesData = null
+        },
     },
     getters: {
         getNetworkConnectionStations: (state) => (networkConnectionId) => {

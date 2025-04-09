@@ -1,11 +1,14 @@
 <script setup>
 import {onMounted} from "vue";
-import Card from 'primevue/card';
+import Panel from 'primevue/panel';
 
 import NetworkConnectionSelect from "@/components/table-view/NetworkConnectionSelect.vue";
 import StationSelect from "@/components/table-view/StationSelect.vue";
+import SummaryDataTable from "@/components/table-view/SummaryDataTable.vue";
 
 import {useTableViewStore} from '@/stores/tableView'
+import TimeSeriesDataTable from "@/components/table-view/TimeSeriesDataTable.vue";
+
 
 const props = defineProps({
   apiUrl: {
@@ -28,15 +31,20 @@ onMounted(() => {
 </script>
 
 <template>
-  <Card>
-    <template #content>
-      <div class="tv-header">
-        <NetworkConnectionSelect/>
-        <StationSelect/>
-      </div>
-    </template>
-  </Card>
+  <Panel>
+    <div class="tv-header">
+      <NetworkConnectionSelect/>
+      <StationSelect/>
+    </div>
+  </Panel>
 
+  <Panel v-if="tableViewStore.selectedStation" class="tv-summary-table" header="Summary Data" toggleable>
+    <SummaryDataTable/>
+  </Panel>
+
+  <Panel v-if="tableViewStore.selectedStation" class="tv-timeseries-table" header="Station Data" toggleable>
+    <TimeSeriesDataTable/>
+  </Panel>
 </template>
 
 <style scoped>
@@ -44,6 +52,14 @@ onMounted(() => {
 .tv-header {
   display: flex;
   gap: 40px;
+}
+
+.tv-summary-table {
+  margin-top: 20px;
+}
+
+.tv-timeseries-table {
+  margin-top: 20px;
 }
 
 </style>

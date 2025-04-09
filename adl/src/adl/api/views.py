@@ -75,8 +75,6 @@ def get_raw_observation_records_for_connection_station(request, connection_id, s
 @api_view()
 @permission_classes([HasAPIKeyOrIsAuthenticated])
 def get_station_link_latest_data(request, station_link_id):
-    print(station_link_id)
-    
     station_link = get_object_or_404(StationLink, id=station_link_id)
     connection_id = station_link.network_connection.id
     station_id = station_link.station_id
@@ -104,7 +102,7 @@ def get_station_link_latest_data(request, station_link_id):
 
 
 @api_view()
-@permission_classes([HasAPIKey])
+@permission_classes([HasAPIKeyOrIsAuthenticated])
 def get_station_link_timeseries_data(request, station_link_id):
     # Fetch the StationLink object or return 404 if not found
     station_link = get_object_or_404(StationLink, id=station_link_id)

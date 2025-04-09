@@ -13,3 +13,8 @@ export const fetchNetworkConnectionStations = (axios, networkConnectionId) => {
 export const fetchStationLinkLatestData = (axios, stationLinkId) => {
     return axios.get(`/data/latest/${stationLinkId}/`)
 }
+
+export const fetchStationLinkTimeseriesData = (axios, stationLinkId) => {
+    return axios.get(`/data/timeseries/${stationLinkId}/`)
+}
+

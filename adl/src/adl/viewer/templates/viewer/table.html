@@ -3,6 +3,23 @@
 
 {% get_current_language as LANGUAGE_CODE %}
 
+{% block extra_css %}
+    <style>
+        /* Light mode background */
+        main > :first-child {
+            background: #f1f5f8;
+        }
+
+        /* Dark mode background*/
+        @media (prefers-color-scheme: dark) {
+            main > :first-child {
+                background: var(--w-color-surface-page);
+            }
+        }
+    </style>
+
+{% endblock %}
+
 {% block main_content %}
     <div id="table-view" data-api-url="{{ api_url }}" data-language-code="{{ LANGUAGE_CODE }}">
     </div>
@@ -10,5 +27,5 @@
 
 {% block extra_js %}
     {{ block.super }}
-    <script type="module" crossorigin src="{% vue_bundle_url 'table' %}"></script>
+    <script type="module" crossorigin src="{% vue_bundle_url 'table-view' %}"></script>
 {% endblock %}
