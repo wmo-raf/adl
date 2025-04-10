@@ -231,7 +231,7 @@ docker compose exec adl /bin/bash
 adl createsuperuser
 ```
 
-`manage` is a shortcut python script that is available in the container that calls Django's `manage.py`
+`adl` is a shortcut python script that is available in the container that calls Django's `manage.py`
 
 ### Environmental Variables
 
