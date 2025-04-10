@@ -54,6 +54,13 @@ onMounted(() => {
   gap: 40px;
 }
 
+@media (max-width: 768px) {
+  .tv-header {
+    flex-direction: column;
+    gap: 20px;
+  }
+}
+
 .tv-summary-table {
   margin-top: 20px;
 }

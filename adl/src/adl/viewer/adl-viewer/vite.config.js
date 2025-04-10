@@ -8,10 +8,13 @@ import cssInjectedByJsPlugin from "vite-plugin-css-injected-by-js";
 
 // https://vite.dev/config/
 export default defineConfig({
+    base: '/static/vue/',
     plugins: [
         vue(),
         vueDevTools(),
-        cssInjectedByJsPlugin({jsAssetsFilterFunction: () => true}),
+        cssInjectedByJsPlugin({
+            jsAssetsFilterFunction: () => true,
+        },),
     ],
     resolve: {
         alias: {

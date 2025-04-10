@@ -11,8 +11,8 @@ const tableViewStore = useTableViewStore()
 
 <template>
   <DataTable :value="tableViewStore.selectedStationLatestData" :size="'small'" stripedRows
-             :loading="tableViewStore.loading">
-    <Column field="parameter" header="Parameter"></Column>
+             :loading="tableViewStore.loading" scrollable>
+    <Column field="parameter" header="Parameter" style="max-width: 100px"></Column>
     <Column field="time" header="Time"></Column>
     <Column field="value" header="Last Report"></Column>
   </DataTable>
