@@ -1,5 +1,6 @@
 from datetime import timedelta
 
+from django.db.models import Min, Max
 from django.shortcuts import get_object_or_404
 from django.utils import timezone as dj_timezone
 from rest_framework.decorators import api_view, permission_classes
@@ -13,6 +14,7 @@ from adl.core.models import (
     ObservationRecord,
     DataParameter
 )
+from .auth import HasAPIKeyOrIsAuthenticated
 from .serializers import (
     NetworkSerializer,
     NetworkConnectionSerializer,
@@ -32,7 +34,46 @@ def get_networks(request):
 
 
 @api_view()
-@permission_classes([HasAPIKey])
+@permission_classes([HasAPIKeyOrIsAuthenticated])
+def get_station_link_detail(request, station_link_id):
+    station_link = get_object_or_404(StationLink, id=station_link_id)
+    station_link_info = StationLinkSerializer(station_link).data
+    
+    data_dates = ObservationRecord.objects.filter(
+        station_id=station_link.station_id,
+        connection_id=station_link.network_connection_id).aggregate(
+        earliest_time=Min('time'),
+        latest_time=Max('time')
+    )
+    
+    station_link_info.update({
+        "data_dates": {
+            "earliest_time": data_dates['earliest_time'].isoformat() if data_dates['earliest_time'] else None,
+            "latest_time": data_dates['latest_time'].isoformat() if data_dates['latest_time'] else None,
+        }
+    })
+    
+    variable_mappings = None
+    if hasattr(station_link.network_connection, 'variable_mappings'):
+        variable_mappings = station_link.network_connection.variable_mappings.all()
+    elif hasattr(station_link, 'variable_mappings'):
+        variable_mappings = station_link.variable_mappings.all()
+    
+    if variable_mappings:
+        data_parameters = []
+        for mapping in variable_mappings:
+            if hasattr(mapping, 'adl_parameter'):
+                data_parameters.append(mapping.adl_parameter)
+        
+        if data_parameters:
+            data_parameters = DataParameterSerializer(data_parameters, many=True).data
+            station_link_info['data_parameters'] = data_parameters
+    
+    return Response(station_link_info)
+
+
+@api_view()
+@permission_classes([HasAPIKeyOrIsAuthenticated])
 def get_network_connections(request):
     connections = NetworkConnection.objects.all()
     data = NetworkConnectionSerializer(connections, many=True).data
@@ -40,7 +81,7 @@ def get_network_connections(request):
 
 
 @api_view()
-@permission_classes([HasAPIKey])
+@permission_classes([HasAPIKeyOrIsAuthenticated])
 def get_data_parameters(request):
     data_parameters = DataParameter.objects.all()
     data = DataParameterSerializer(data_parameters, many=True).data
@@ -48,7 +89,7 @@ def get_data_parameters(request):
 
 
 @api_view()
-@permission_classes([HasAPIKey])
+@permission_classes([HasAPIKeyOrIsAuthenticated])
 def get_network_connection_station_links(request, network_conn_id):
     network = get_object_or_404(NetworkConnection, id=network_conn_id)
     stations = network.station_links.all()
@@ -72,7 +113,7 @@ def get_raw_observation_records_for_connection_station(request, connection_id, s
 
 
 @api_view()
-@permission_classes([HasAPIKey])
+@permission_classes([HasAPIKeyOrIsAuthenticated])
 def get_station_link_latest_data(request, station_link_id):
     station_link = get_object_or_404(StationLink, id=station_link_id)
     connection_id = station_link.network_connection.id
@@ -101,7 +142,7 @@ def get_station_link_latest_data(request, station_link_id):
 
 
 @api_view()
-@permission_classes([HasAPIKey])
+@permission_classes([HasAPIKeyOrIsAuthenticated])
 def get_station_link_timeseries_data(request, station_link_id):
     # Fetch the StationLink object or return 404 if not found
     station_link = get_object_or_404(StationLink, id=station_link_id)
@@ -134,7 +175,7 @@ def get_station_link_timeseries_data(request, station_link_id):
         query = query.filter(time__lte=end_time)
     
     # Fetch the records ordered by time
-    records = query.order_by('time')
+    records = query.order_by('-time')
     
     if not records.exists():
         return Response({

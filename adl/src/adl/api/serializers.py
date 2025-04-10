@@ -27,6 +27,7 @@ class NetworkSerializer(ReadOnlyModelSerializer):
 
 class StationSerializer(ReadOnlyModelSerializer):
     location = serializers.SerializerMethodField()
+    network = NetworkSerializer()
     
     class Meta:
         model = Station

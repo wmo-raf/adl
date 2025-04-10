@@ -195,6 +195,7 @@ class Unit(models.Model):
     class Meta:
         verbose_name = _("Unit")
         verbose_name_plural = _("Units")
+        ordering = ['name']
     
     def __str__(self):
         return self.name
@@ -226,6 +227,11 @@ class DataParameter(models.Model):
         FieldPanel("description"),
         FieldPanel("custom_unit_context"),
     ]
+    
+    class Meta:
+        verbose_name = _("Data Parameter")
+        verbose_name_plural = _("Data Parameters")
+        ordering = ['name']
     
     def __str__(self):
         return f"{self.name} - {self.unit.symbol}"
@@ -487,7 +493,8 @@ class DispatchChannel(PolymorphicModel, ClusterableModel):
     
     def dispatch(self):
         data_records = self.get_data_records()
-        
+        if not data_records:
+            return
         return self.send_data(data_records)
 
 

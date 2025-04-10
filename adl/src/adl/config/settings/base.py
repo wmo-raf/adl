@@ -37,12 +37,15 @@ if os.path.isfile(dev_env_path):
     # reading .env file
     environ.Env.read_env(dev_env_path)
 
+DEBUG = env('DEBUG', False)
+
 # Application definition
 INSTALLED_APPS = [
     "adl.home",
     "adl.core",
     "adl.api",
     "adl.monitoring",
+    "adl.viewer",
     
     "django_countries",
     "django_celery_beat",
@@ -71,6 +74,7 @@ INSTALLED_APPS = [
     "wagtail_modeladmin",
     "rest_framework",
     "rest_framework_api_key",
+    "django_vue_utilities",
     
     "django.contrib.admin",
     "django.contrib.auth",
@@ -320,3 +324,9 @@ for plugin in [*ADL_PLUGIN_NAMES]:
     except ImportError as e:
         print("Could not import %s", plugin)
         print(e)
+
+VUE_FRONTEND_USE_TYPESCRIPT = False
+VUE_FRONTEND_USE_DEV_SERVER = DEBUG
+VUE_FRONTEND_DEV_SERVER_URL = 'http://localhost:5173'
+VUE_FRONTEND_DEV_SERVER_PATH = '/static/vue/src'
+VUE_FRONTEND_STATIC_PATH = 'vue'

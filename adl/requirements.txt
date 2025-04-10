@@ -26,3 +26,4 @@ wagtailgeowidget==8.1.1
 wagtail-modeladmin==2.0.0
 django-polymorphic==3.1.0
 djangorestframework-api-key==3.0.0
+django-vue-utils==0.1.7

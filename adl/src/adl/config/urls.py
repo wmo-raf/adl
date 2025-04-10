@@ -9,7 +9,7 @@ from adl.api import urls as api_urls
 urlpatterns = [
     # path("django-admin/", admin.site.urls),
     path("plugins/", include("adl.core.urls", namespace="plugins")),
-    path("api/", include(api_urls)),
+    path("api/", include(api_urls), name="adl_api"),
     path("debug/django-admin/", admin.site.urls),
     path("", include(wagtailadmin_urls)),
     # path("documents/", include(wagtaildocs_urls)),

@@ -1,0 +1,37 @@
+{% extends "wagtailadmin/generic/base.html" %}
+{% load wagtailadmin_tags i18n vue_utils %}
+
+{% get_current_language as LANGUAGE_CODE %}
+
+{% block extra_css %}
+    <style>
+        /* Light theme override: both manual and system-based */
+        .w-theme-light main > :first-child,
+        .w-theme-system main > :first-child {
+            background: #f1f5f8;
+        }
+
+        /* Dark theme: keep default using CSS variable */
+        .w-theme-dark main > :first-child {
+            background: var(--w-color-surface-page);
+        }
+
+        /* Optional: Handle system preference if no theme class is added */
+        @media (prefers-color-scheme: dark) {
+            .w-theme-system main > :first-child {
+                background: var(--w-color-surface-page);
+            }
+        }
+    </style>
+
+{% endblock %}
+
+{% block main_content %}
+    <div id="table-view" data-api-url="{{ api_url }}" data-language-code="{{ LANGUAGE_CODE }}">
+    </div>
+{% endblock %}
+
+{% block extra_js %}
+    {{ block.super }}
+    <script type="module" crossorigin src="{% vue_bundle_url 'table-view' %}"></script>
+{% endblock %}
