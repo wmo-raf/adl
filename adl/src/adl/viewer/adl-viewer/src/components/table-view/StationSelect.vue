@@ -18,8 +18,9 @@ const selectedNetworkConnectionStations = computed(() => {
 
 watch(() => tableViewStore.selectedStation, (newValue) => {
   if (newValue) {
-    tableViewStore.clearStationLatestData()
+    tableViewStore.clearStationData()
 
+    tableViewStore.loadStationLinkDetail(newValue)
     tableViewStore.loadStationLinkLatestData(newValue)
 
     tableViewStore.loadStationLinkTimeseriesData(newValue)

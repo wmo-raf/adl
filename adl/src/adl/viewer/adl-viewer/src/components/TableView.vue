@@ -2,11 +2,13 @@
 import {onMounted} from "vue";
 import Panel from 'primevue/panel';
 
+import {useTableViewStore} from '@/stores/tableView'
+
 import NetworkConnectionSelect from "@/components/table-view/NetworkConnectionSelect.vue";
 import StationSelect from "@/components/table-view/StationSelect.vue";
-import SummaryDataTable from "@/components/table-view/SummaryDataTable.vue";
 
-import {useTableViewStore} from '@/stores/tableView'
+import StationLinkDetail from "@/components/table-view/StationLinkDetail.vue";
+import SummaryDataTable from "@/components/table-view/SummaryDataTable.vue";
 import TimeSeriesDataTable from "@/components/table-view/TimeSeriesDataTable.vue";
 
 
@@ -38,6 +40,10 @@ onMounted(() => {
     </div>
   </Panel>
 
+  <Panel v-if="tableViewStore.selectedStation" class="tv-station-detail" header="Station Detail" toggleable>
+    <StationLinkDetail/>
+  </Panel>
+
   <Panel v-if="tableViewStore.selectedStation" class="tv-summary-table" header="Summary Data" toggleable>
     <SummaryDataTable/>
   </Panel>
@@ -59,6 +65,10 @@ onMounted(() => {
     flex-direction: column;
     gap: 20px;
   }
+}
+
+.tv-station-detail {
+  margin-top: 20px;
 }
 
 .tv-summary-table {

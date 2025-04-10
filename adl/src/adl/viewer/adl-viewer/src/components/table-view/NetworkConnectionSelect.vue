@@ -13,8 +13,7 @@ onMounted(() => {
 
 watch(() => tableViewStore.selectedNetworkConnection, (newValue) => {
   if (newValue) {
-    tableViewStore.selectStation(null)
-    tableViewStore.clearStationLatestData()
+    tableViewStore.clearStationState()
 
     tableViewStore.loadNetworkConnectionStations(newValue)
   }

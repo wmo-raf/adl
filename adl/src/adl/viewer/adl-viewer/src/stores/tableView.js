@@ -6,6 +6,7 @@ import {
     fetchDataParameters,
     fetchNetworkConnections,
     fetchNetworkConnectionStations,
+    fetchStationLinkDetail,
     fetchStationLinkLatestData,
     fetchStationLinkTimeseriesData
 } from '@/services/adlService'
@@ -17,6 +18,7 @@ export const useTableViewStore = defineStore('tableView', {
         selectedNetworkConnection: null,
         networkConnectionStations: {},
         selectedStation: null,
+        selectedStationLinkDetail: null,
         selectedStationLatestData: null,
         selectedStationTimeseriesData: null,
         loading: false,
@@ -79,7 +81,29 @@ export const useTableViewStore = defineStore('tableView', {
                 this.selectedStation = null
             }
         },
-
+        async loadStationLinkDetail(stationId) {
+            this.loading = true
+            this.error = null
+            try {
+                const response = await fetchStationLinkDetail(this.axios, stationId)
+                this.selectedStationLinkDetail = response.data
+            } catch (err) {
+                this.error = err.message || 'Failed to fetch station link detail'
+            } finally {
+                this.loading = false
+            }
+        },
+        clearStationState() {
+            this.selectedStation = null
+            this.selectedStationLinkDetail = null
+            this.selectedStationLatestData = null
+            this.selectedStationTimeseriesData = null
+        },
+        clearStationData() {
+            this.selectedStationLinkDetail = null
+            this.selectedStationLatestData = null
+            this.selectedStationTimeseriesData = null
+        },
         async loadStationLinkLatestData(stationId) {
             this.loading = true
             this.error = null
@@ -109,9 +133,6 @@ export const useTableViewStore = defineStore('tableView', {
             } finally {
                 this.loading = false
             }
-        },
-        clearStationLatestData() {
-            this.selectedStationLatestData = null
         },
         async loadStationLinkTimeseriesData(stationId) {
             this.loading = true
@@ -145,9 +166,6 @@ export const useTableViewStore = defineStore('tableView', {
             } finally {
                 this.loading = false
             }
-        },
-        clearStationTimeseriesData() {
-            this.selectedStationTimeseriesData = null
         },
     },
     getters: {
