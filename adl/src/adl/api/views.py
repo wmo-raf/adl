@@ -15,6 +15,7 @@ from adl.core.models import (
     DataParameter
 )
 from .auth import HasAPIKeyOrIsAuthenticated
+from .pagination import StandardResultsSetPagination
 from .serializers import (
     NetworkSerializer,
     NetworkConnectionSerializer,
@@ -171,6 +172,14 @@ def get_station_link_timeseries_data(request, station_link_id):
         time__gte=start_time,
     )
     
+    if not end_time:
+        # set end_time to 30 days from start_time if not provided
+        end_time = start_time + timedelta(days=30)
+    
+    # Ensure end_time is not in the future
+    if end_time > dj_timezone.now():
+        end_time = None
+    
     if end_time:
         query = query.filter(time__lte=end_time)
     
@@ -185,4 +194,7 @@ def get_station_link_timeseries_data(request, station_link_id):
     # Group records by time
     grouped_data = _group_records_by_time(records, station_id, connection_id)
     
-    return Response(grouped_data)
+    paginator = StandardResultsSetPagination()
+    paginated = paginator.paginate_queryset(grouped_data, request)
+    
+    return paginator.get_paginated_response(paginated)

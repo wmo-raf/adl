@@ -23,7 +23,7 @@ watch(() => tableViewStore.selectedStation, (newValue) => {
     tableViewStore.loadStationLinkDetail(newValue)
     tableViewStore.loadStationLinkLatestData(newValue)
 
-    tableViewStore.loadStationLinkTimeseriesData(newValue)
+    tableViewStore.loadStationLinkTimeseriesData(newValue, {page: 1})
   }
 }, {immediate: true})
 
@@ -38,7 +38,10 @@ watch(() => tableViewStore.selectedStation, (newValue) => {
             :options="selectedNetworkConnectionStations"
             :disabled="!tableViewStore.selectedNetworkConnection"
             :loading="tableViewStore.loading"
-            optionLabel="station.name" optionValue="id" placeholder="Select a station"/>
+            optionLabel="station.name"
+            optionValue="id"
+            placeholder="Select a station"
+    />
   </div>
 </template>
 
