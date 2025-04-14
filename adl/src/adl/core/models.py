@@ -483,6 +483,9 @@ class DispatchChannel(PolymorphicModel, ClusterableModel):
         InlinePanel("parameter_mappings", label=_("Parameter Mappings"), heading=_("Parameter Mappings")),
     ]
     
+    def __str__(self):
+        return f"{self.name} - {self.network_connection.name}"
+    
     def send_data(self, data_records):
         raise NotImplementedError("Method send_data must be implemented in the subclass")
     
@@ -546,9 +549,6 @@ class Wis2BoxUpload(DispatchChannel):
     class Meta:
         verbose_name = _("WIS2BOX Upload")
         verbose_name_plural = _("WIS2BOX Uploads")
-    
-    def __str__(self):
-        return self.name
     
     def send_data(self, data_records):
         return upload_to_wis2box(self, data_records)
