@@ -49,37 +49,37 @@ const onPage = (event) => {
   >
     <template #header>
       <div class="ts-header">
-        <div class="ts-header-left">
-          <div class="c-selector">
-            <div class="c-selector-title">
-              Select Date
-            </div>
-            <DatePicker
-                v-model="date"
-                showTime
-                showButtonBar
-                stepMinute="5"
-                hourFormat="24"
-                size="small"
-                showIcon
-                iconDisplay="input"
-                class="start-date-picker"
-                placeholder="Select time"
-            />
-          </div>
-          <div class="c-selector">
-            <div class="c-selector-title">
-              Select No. of Days back
-            </div>
-            <Select
-                v-model="selectedNoOfDaysBack"
-                :options="noOfDaysBack"
-                optionLabel="label"
-                optionValue="value"
-                placeholder="Select days"
-            />
-          </div>
-        </div>
+        <!--        <div class="ts-header-left">-->
+        <!--          <div class="c-selector">-->
+        <!--            <div class="c-selector-title">-->
+        <!--              Select Date-->
+        <!--            </div>-->
+        <!--            <DatePicker-->
+        <!--                v-model="date"-->
+        <!--                showTime-->
+        <!--                showButtonBar-->
+        <!--                stepMinute="5"-->
+        <!--                hourFormat="24"-->
+        <!--                size="small"-->
+        <!--                showIcon-->
+        <!--                iconDisplay="input"-->
+        <!--                class="start-date-picker"-->
+        <!--                placeholder="Select time"-->
+        <!--            />-->
+        <!--          </div>-->
+        <!--          <div class="c-selector">-->
+        <!--            <div class="c-selector-title">-->
+        <!--              Select No. of Days back-->
+        <!--            </div>-->
+        <!--            <Select-->
+        <!--                v-model="selectedNoOfDaysBack"-->
+        <!--                :options="noOfDaysBack"-->
+        <!--                optionLabel="label"-->
+        <!--                optionValue="value"-->
+        <!--                placeholder="Select days"-->
+        <!--            />-->
+        <!--          </div>-->
+        <!--        </div>-->
         <Button icon="pi pi-external-link" label="Export" @click="exportCSV($event)"/>
       </div>
     </template>
@@ -98,7 +98,7 @@ const onPage = (event) => {
 
 .ts-header {
   display: flex;
-  justify-content: space-between;
+  justify-content: flex-end;
   margin-bottom: 10px;
 }
 
