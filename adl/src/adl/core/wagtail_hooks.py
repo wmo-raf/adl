@@ -11,6 +11,7 @@ from wagtail.snippets.views.snippets import SnippetViewSet, IndexView
 from wagtail_modeladmin.helpers import AdminURLHelper, ButtonHelper
 from wagtail_modeladmin.options import ModelAdmin, modeladmin_register
 
+from .constants import PREDEFINED_DATA_PARAMETERS
 from .home import (
     NetworksSummaryItem,
     StationsSummaryItem,
@@ -35,7 +36,8 @@ from .views import (
     connections_list,
     connection_add_select,
     dispatch_channels_list,
-    dispatch_channel_add_select
+    dispatch_channel_add_select,
+    create_predefined_data_parameters
 )
 
 adl_register_plugin_menu_items_hook_name = "register_adl_plugin_menu_items"
@@ -47,6 +49,8 @@ def urlconf_adl():
         path('adl/load-stations-oscar-csv/', load_stations_csv, name='load_stations_oscar_csv'),
         path('adl/load-stations-oscar/', load_stations_oscar, name='load_stations_oscar'),
         path('adl/import-oscar-station/<str:wigos_id>', import_oscar_station, name='import_oscar_station'),
+        path('adl/create-predefined-data-parameters', create_predefined_data_parameters,
+             name='create_predefined_data_parameters'),
         path('adl/connections/', connections_list, name="connections_list"),
         path('adl/connections/select', connection_add_select, name="connections_add_select"),
         path('adl/dispatch-channels', dispatch_channels_list, name="dispatch_channels_list"),
@@ -224,8 +228,40 @@ class UnitViewSet(SnippetViewSet):
 register_snippet(UnitViewSet)
 
 
+class DataParameterIndexView(IndexView):
+    @cached_property
+    def header_buttons(self):
+        buttons = super().header_buttons
+        
+        has_existing_objects = self.get_queryset().exists()
+        
+        if not has_existing_objects:
+            buttons.extend([
+                HeaderButton(
+                    label=_('Create from Predefined Data Parameters'),
+                    url=reverse("create_predefined_data_parameters"),
+                    icon_name="plus",
+                ),
+            ])
+        
+        return buttons
+    
+    def get_context_data(self):
+        context = super().get_context_data()
+        context["create_predefined_data_parameters_url"] = reverse("create_predefined_data_parameters")
+        
+        items_count = context.get("items_count")
+        
+        if items_count == 0:
+            context["predefined_data_parameters"] = PREDEFINED_DATA_PARAMETERS
+        
+        return context
+
+
 class DataParameterViewSet(SnippetViewSet):
+    index_results_template_name = "core/data_parameter_index_results.html"
     model = DataParameter
+    index_view_class = DataParameterIndexView
     add_to_settings_menu = True
     menu_order = 800
     menu_icon = "form"

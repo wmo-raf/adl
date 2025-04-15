@@ -78,3 +78,9 @@ class OSCARStationImportForm(forms.Form):
     station_type = forms.ChoiceField(choices=STATION_TYPE_CHOICES, label=_("Assign Station Type"), required=True,
                                      initial=0)
     oscar_data = forms.JSONField(widget=forms.HiddenInput)
+
+
+class CreatePredefinedDataParametersForm(forms.Form):
+    create_conversion_units = forms.BooleanField(label=_("Create optional conversion Units"),
+                                                 required=False,
+                                                 initial=True)

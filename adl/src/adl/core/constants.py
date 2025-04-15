@@ -138,3 +138,64 @@ OSCAR_SURFACE_REQUIRED_CSV_COLUMNS = [
     {"name": "Longitude", "type": "numeric"},
     {"name": "Elevation", "type": "numeric"},
 ]
+
+PREDEFINED_DATA_PARAMETERS = [
+    {
+        "name": _("Temperature"),
+        "unit": {
+            "name": _("Degree Celsius"),
+            "symbol": "°C",
+        },
+        "wis2box_aws_csv_template_unit": {
+            "name": _("Kelvin"),
+            "description": _("For converting Temperature from Celsius to Kelvin"),
+            "symbol": "K",
+        },
+    },
+    {
+        "name": _("Relative Humidity"),
+        "unit": {
+            "name": _("Percent"),
+            "symbol": "%",
+        },
+    },
+    {
+        "name": _("Atmospheric Pressure"),
+        "unit": {
+            "name": _("Hectopascal"),
+            "symbol": "hPa",
+        },
+        "wis2box_aws_csv_template_unit": {
+            "name": _("Pascal"),
+            "description": _("For converting Pressure from hectopascal to pascal"),
+            "symbol": "Pa",
+        },
+    },
+    {
+        "name": _("Wind Speed"),
+        "unit": {
+            "name": _("Meters per Second"),
+            "symbol": "m/s",
+        },
+    },
+    {
+        "name": _("Wind Direction"),
+        "unit": {
+            "name": _("Degrees"),
+            "symbol": "degree",
+        },
+    },
+    {
+        "name": _("Precipitation"),
+        "unit": {
+            "name": _("Millimeters"),
+            "symbol": "mm",
+        },
+        "conversion_context": "precipitation",
+        "wis2box_aws_csv_template_unit": {
+            "name": _("Kilogram per Square Meter"),
+            "description": _("For converting Precipitation from millimeters to kilograms per square meter"),
+            "symbol": "kg m-2",
+        },
+    }
+]

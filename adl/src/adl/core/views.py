@@ -3,6 +3,7 @@ import json
 from django.contrib.gis.geos import Point
 from django.core.cache import cache
 from django.core.paginator import Paginator, InvalidPage
+from django.db import transaction
 from django.shortcuts import render, redirect
 from django.urls import reverse_lazy, reverse
 from django.urls.exceptions import NoReverseMatch
@@ -12,14 +13,14 @@ from wagtail.admin.ui.tables import Column, Table, TitleColumn, ButtonsColumnMix
 from wagtail.admin.widgets import HeaderButton, ListingButton
 from wagtail_modeladmin.helpers import AdminURLHelper
 
-from .constants import OSCAR_SURFACE_REQUIRED_CSV_COLUMNS
-from .forms import StationLoaderForm, OSCARStationImportForm
+from .constants import OSCAR_SURFACE_REQUIRED_CSV_COLUMNS, PREDEFINED_DATA_PARAMETERS
+from .forms import StationLoaderForm, OSCARStationImportForm, CreatePredefinedDataParametersForm
 from .models import (
     Station,
     AdlSettings,
     OscarSurfaceStationLocal,
     NetworkConnection,
-    DispatchChannel
+    DispatchChannel, DataParameter, Unit
 )
 from .table import LinkColumnWithIcon
 from .utils import (
@@ -570,7 +571,7 @@ def dispatch_channel_add_select(request):
     
     channel_types = get_all_child_models(DispatchChannel)
     
-    items = [{"name": cls.__name__} for cls in channel_types]
+    items = [{"name": cls._meta.verbose_name} for cls in channel_types]
     count = len(items)
     
     # Get search parameters from the query string.
@@ -611,3 +612,68 @@ def dispatch_channel_add_select(request):
     }
     
     return render(request, "core/dispatch_channel_add_select.html", context)
+
+
+def create_predefined_data_parameters(request):
+    from .wagtail_hooks import DataParameterViewSet
+    
+    form = CreatePredefinedDataParametersForm()
+    
+    if request.method == "POST":
+        form = CreatePredefinedDataParametersForm(request.POST)
+        if form.is_valid():
+            data_parameter_index_url = DataParameterViewSet().get_url_name("list")
+            create_conversion_units = form.cleaned_data.get("create_conversion_units")
+            
+            try:
+                with transaction.atomic():
+                    for parameter in PREDEFINED_DATA_PARAMETERS:
+                        unit = parameter.get("unit")
+                        unit_symbol = unit.get("symbol")
+                        conversion_context = unit.get("conversion_context")
+                        wis2box_aws_csv_template_unit = parameter.get("wis2box_aws_csv_template_unit")
+                        
+                        # get or create unit
+                        unit, _created = Unit.objects.get_or_create(symbol=unit_symbol, defaults={
+                            "name": unit.get("name"),
+                            "symbol": unit_symbol,
+                        })
+                        
+                        data_parameter_dict = {
+                            "name": parameter.get("name"),
+                            "unit": unit,
+                        }
+                        
+                        if conversion_context:
+                            data_parameter_dict.update({
+                                "custom_unit_context": conversion_context,
+                            })
+                        
+                        DataParameter.objects.create(**data_parameter_dict)
+                        
+                        if create_conversion_units and wis2box_aws_csv_template_unit:
+                            unit_symbol = wis2box_aws_csv_template_unit.get("symbol")
+                            unit_name = wis2box_aws_csv_template_unit.get("name")
+                            
+                            # get or create unit
+                            Unit.objects.get_or_create(symbol=unit_symbol, defaults={
+                                "name": unit_name,
+                                "symbol": unit_symbol,
+                            })
+                
+                messages.success(request, _("Predefined parameters created successfully."))
+                return redirect(data_parameter_index_url)
+            except Exception as e:
+                form.add_error(None, e)
+                messages.error(request, _("Error creating predefined parameters: ") + str(e))
+    
+    data_parameters_exist = DataParameter.objects.exists()
+    
+    context = {
+        "page_title": _("Predefined Data Parameters"),
+        "data_parameters_exist": data_parameters_exist,
+        "predefined_data_parameters": PREDEFINED_DATA_PARAMETERS,
+        "form": form,
+    }
+    
+    return render(request, "core/create_predefined_data_parameters.html", context=context)

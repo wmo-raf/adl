@@ -1,0 +1,119 @@
+{% extends "wagtailadmin/generic/base.html" %}
+
+{% load i18n wagtailadmin_tags static %}
+
+{% block main_content %}
+    {% if data_parameters_exist %}
+        <div class="help-block help-warning">
+            <svg class="icon icon-warning icon" aria-hidden="true">
+                <use href="#icon-warning"></use>
+            </svg>
+            {% translate "One or more parameters already exist in the database" %}
+        </div>
+    {% else %}
+
+        <div class="help-block help-info" style="margin-bottom: 20px">
+            <svg class="icon icon-help icon" aria-hidden="true">
+                <use href="#icon-help"></use>
+            </svg>
+            <p>
+                {% blocktrans trimmed %}
+                    Please note that this section helps you to create some default parameters to use in the system.
+                    This is not a required step, but it is available to help you get started with some parameters.
+                {% endblocktrans %}
+                <br>
+                {% blocktrans trimmed with gbon_link='<a href="https://community.wmo.int/en/activity-areas/wigos/gbon" target="_blank">GBON</a>'|safe %}
+                    Here we are using the {{ gbon_link }} parameters as a starting point. You will still be able to add or modify Data Parameters as needed for your data.
+                {% endblocktrans %}
+            </p>
+        </div>
+
+        <h2>
+            {% translate "The following Data parameters and corresponding Units will be created" %}
+        </h2>
+
+        <table class="listing">
+            <thead>
+            <tr>
+                <th>
+                    {% translate "Parameter" %}
+                </th>
+                <th>
+                    {% translate "Unit" %}
+                </th>
+            </tr>
+            </thead>
+            <tbody>
+            {% for parameter in predefined_data_parameters %}
+                <tr>
+                    <td>
+                        {{ parameter.name }}
+                    </td>
+                    <td>{{ parameter.unit.name }} ({{ parameter.unit.symbol }})</td>
+                </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+
+        <h2>
+            {% translate "The following optional conversion units will also be created if checked, and not already existing in the system" %}
+        </h2>
+
+        <table class="listing">
+            <thead>
+            <tr>
+                <th>
+                    {% translate "Unit" %}
+                </th>
+                <th>
+                    {% translate "Description" %}
+                </th>
+            </tr>
+            </thead>
+            <tbody>
+            {% for parameter in predefined_data_parameters %}
+                {% if parameter.wis2box_aws_csv_template_unit %}
+                    <tr>
+                        <td>
+                            {{ parameter.wis2box_aws_csv_template_unit.name }}
+                            ({{ parameter.wis2box_aws_csv_template_unit.symbol }})
+                        </td>
+                        <td>
+                            {{ parameter.wis2box_aws_csv_template_unit.description }}
+                        </td>
+                    </tr>
+                {% endif %}
+            {% endfor %}
+            </tbody>
+        </table>
+        <div style="margin-top: 20px">
+            <form action="{{ create_default_gbon_parameters_url }}" method="POST">
+                {% if form.non_field_errors %}
+                    <div class="non-field_errors" style="margin-bottom: 20px">
+                        {% include "wagtailadmin/shared/non_field_errors.html" with form=form %}
+                    </div>
+                {% endif %}
+                <ul class="fields">
+                    {% csrf_token %}
+                    {% for field in form %}
+                        {% if field.is_hidden %}
+                            {{ field }}
+                        {% else %}
+                            {% include "wagtailadmin/shared/field.html" %}
+                        {% endif %}
+                    {% endfor %}
+                    <li>
+                        <button class="button bicolor button--icon" type="submit">
+                        <span class="icon-wrapper">
+                            <svg class="icon icon-plus icon" aria-hidden="true">
+                                <use href="#icon-plus"></use>
+                            </svg>
+                        </span>
+                            {% translate "Create" %}
+                        </button>
+                    </li>
+                </ul>
+            </form>
+        </div>
+    {% endif %}
+{% endblock %}

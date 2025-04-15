@@ -1,0 +1,22 @@
+{% extends "wagtailadmin/generic/index_results.html" %}
+{% load i18n wagtailadmin_tags %}
+
+{% block no_results_message %}
+    {% if create_predefined_data_parameters_url %}
+        {% blocktrans trimmed with model_name=verbose_name_plural %}
+            There are no {{ model_name }} to display.
+        {% endblocktrans %}
+        <div style="margin-top: 20px">
+            <a href="{{ create_predefined_data_parameters_url }}" class="button bicolor button--icon">
+                <span class="icon-wrapper">
+                    <svg class="icon icon-plus icon" aria-hidden="true">
+                        <use href="#icon-plus"></use>
+                    </svg>
+                </span>
+                {% translate "Create from predefined parameters" %}
+            </a>
+        </div>
+    {% else %}
+        {{ block.super }}
+    {% endif %}
+{% endblock %}

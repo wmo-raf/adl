@@ -212,19 +212,30 @@ class Unit(models.Model):
 
 
 class DataParameter(models.Model):
+    CATEGORY_CHOICES = [
+        ("meteorological", _("Meteorological")),
+        ("environmental", _("Environmental")),
+        ("health", _("Station Health")),
+        ("communication", _("Communication")),
+    ]
+    
     name = models.CharField(max_length=255, verbose_name=_("Name"), help_text=_("Name of the variable"))
     unit = models.ForeignKey(Unit, on_delete=models.CASCADE, verbose_name=_("Unit"),
                              help_text=_("Unit of the variable"))
     description = models.TextField(verbose_name=_("Description"), blank=True, null=True,
                                    help_text=_("Description of the variable"))
+    category = models.CharField(max_length=50, choices=CATEGORY_CHOICES, default="meteorological",
+                                verbose_name=_("Category"), help_text=_("Type of parameter"))
     custom_unit_context = models.CharField(max_length=255, blank=True, null=True,
                                            choices=get_custom_unit_context_entries,
                                            verbose_name=_("Custom Unit Conversion Context"),
                                            help_text=_("Context of the unit"))
+    
     panels = [
         FieldPanel("name"),
         FieldPanel("unit"),
         FieldPanel("description"),
+        FieldPanel("category"),
         FieldPanel("custom_unit_context"),
     ]
     
