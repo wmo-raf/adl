@@ -1,0 +1,1150 @@
+# SOME DESCRIPTIVE TITLE.
+# Copyright (C) YEAR THE PACKAGE'S COPYRIGHT HOLDER
+# This file is distributed under the same license as the PACKAGE package.
+# FIRST AUTHOR <EMAIL@ADDRESS>, YEAR.
+#
+#, fuzzy
+msgid ""
+msgstr ""
+"Project-Id-Version: PACKAGE VERSION\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2025-04-15 11:40+0000\n"
+"PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
+"Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
+"Language-Team: LANGUAGE <LL@li.org>\n"
+"Language: \n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n > 1);\n"
+
+#: core/constants.py:7 core/forms.py:73 core/models.py:85
+msgid "Station ID"
+msgstr "ID de la station"
+
+#: core/constants.py:8 core/models.py:86
+msgid "Unique Station Identifier"
+msgstr "Identifiant de station unique"
+
+#: core/constants.py:14 core/constants.py:15
+msgid "Station Name"
+msgstr "Nom de station"
+
+#: core/constants.py:21 core/constants.py:22 core/models.py:311
+#: core/templates/adl/import_oscar_surface_station.html:27
+#: core/templates/adl/load_stations_oscar.html:115
+msgid "WIGOS ID"
+msgstr "ID de wigos"
+
+#: core/constants.py:28 core/models.py:98
+msgid "Station Type"
+msgstr "Type de station"
+
+#: core/constants.py:29
+msgid "Type of observing station, encoding using code table 0 02 001"
+msgstr ""
+"Type de station d'observation, codage à l'aide de la table de code 0 02 001"
+
+#: core/constants.py:31 core/forms.py:68 core/models.py:63
+msgid "Automatic"
+msgstr "Automatique"
+
+#: core/constants.py:32 core/forms.py:69 core/models.py:64
+msgid "Manned"
+msgstr "Habillé"
+
+#: core/constants.py:33 core/forms.py:70 core/models.py:65
+msgid "Hybrid: both automatic and manned"
+msgstr "Hybride: à la fois automatique et habité"
+
+#: core/constants.py:41 core/models.py:313
+#: core/templates/adl/import_oscar_surface_station.html:36
+msgid "Latitude"
+msgstr "Latitude"
+
+#: core/constants.py:42
+msgid "Latitude of the station (to 5 decimal places)"
+msgstr "Latitude de la station (à 5 décimales)"
+
+#: core/constants.py:48 core/models.py:314
+#: core/templates/adl/import_oscar_surface_station.html:33
+msgid "Longitude"
+msgstr "Longitude"
+
+#: core/constants.py:49
+msgid "Longitude of the station (to 5 decimal places)"
+msgstr "Longitude de la station (à 5 décimales)"
+
+#: core/constants.py:55 core/models.py:102
+msgid "Station Height Above MSL"
+msgstr "Hauteur de la station au-dessus de MSL"
+
+#: core/constants.py:56 core/models.py:103
+msgid "Height of the station ground above mean sea level (to 1 decimal place)"
+msgstr ""
+"Hauteur du sol de la station au-dessus du niveau moyen de la mer (à 1 "
+"décimal)"
+
+#: core/constants.py:62 core/models.py:108
+msgid "Barometer Height Above MSL"
+msgstr "Hauteur du baromètre au-dessus de MSL"
+
+#: core/constants.py:63 core/models.py:109
+msgid ""
+"Height of the barometer above mean sea level (to 1 decimal place), typically"
+" height of station ground plus the height of the sensor above local ground"
+msgstr ""
+"Hauteur du baromètre au-dessus du niveau moyen de la mer (à 1 décimale), "
+"généralement la hauteur du sol de la station plus la hauteur du capteur au-"
+"dessus du sol local"
+
+#: core/constants.py:70 core/models.py:105
+msgid "Thermometer Height"
+msgstr "Thermomètre"
+
+#: core/constants.py:71 core/models.py:106
+msgid ""
+"Height of thermometer or temperature sensor above the local ground to 2 "
+"decimal places"
+msgstr ""
+"Hauteur du thermomètre ou capteur de température au-dessus du sol local à 2 "
+"décimales"
+
+#: core/constants.py:77 core/models.py:113
+msgid "Anemometer Height"
+msgstr "Hauteur de l'anémomètre"
+
+#: core/constants.py:78
+msgid "Height of the anemometer above local ground to 2 decimal place"
+msgstr "Hauteur de l'anémomètre au-dessus du sol local à 2 décimales"
+
+#: core/constants.py:84 core/models.py:116
+msgid "Rain Sensor Height"
+msgstr "Hauteur du capteur de pluie"
+
+#: core/constants.py:85 core/models.py:117
+msgid "Height of the rain gauge above local ground to 2 decimal place"
+msgstr "Hauteur de la jauge de pluie au-dessus du sol local à 2 décimales"
+
+#: core/constants.py:91 core/models.py:121
+msgid "Method of Ground State Measurement"
+msgstr "Méthode de mesure de l'état fondamental"
+
+#: core/constants.py:92
+msgid ""
+"Method of observing the state of the ground, encoded using code table 0 02 "
+"176"
+msgstr ""
+"Méthode d'observation de l'état du sol, encodé à l'aide du tableau de code 0"
+" 02 176"
+
+#: core/constants.py:97 core/constants.py:113 core/models.py:69
+#: core/models.py:78
+msgid "Manual observation"
+msgstr "Observation manuelle"
+
+#: core/constants.py:98 core/constants.py:115 core/models.py:70
+#: core/models.py:80
+msgid "Video camera method"
+msgstr "Méthode de la caméra vidéo"
+
+#: core/constants.py:99 core/models.py:71
+msgid "Infrared method"
+msgstr "Méthode infrarouge"
+
+#: core/constants.py:100 core/constants.py:116 core/models.py:72
+#: core/models.py:81
+msgid "Laser method"
+msgstr "Méthode laser"
+
+#: core/constants.py:101 core/constants.py:117 core/models.py:73
+#: core/models.py:82
+msgid "Others"
+msgstr "Autres"
+
+#: core/constants.py:102 core/constants.py:118 core/models.py:74
+#: core/models.py:83
+msgid "Missing value"
+msgstr "Valeur manquante"
+
+#: core/constants.py:107 core/models.py:126
+msgid "Method of Snow Depth Measurement"
+msgstr "Méthode de mesure de la profondeur de la neige"
+
+#: core/constants.py:108 core/models.py:123 core/models.py:127
+msgid "Method of observing the snow depth encoded using code table 0 02 177"
+msgstr ""
+"Méthode d'observation de la profondeur de neige codée à l'aide du tableau de"
+" code 0 02 177"
+
+#: core/constants.py:114 core/models.py:79
+msgid "Ultrasonic method"
+msgstr "Méthode ultrasonique"
+
+#: core/constants.py:123 core/models.py:129
+msgid "Time Period of Wind"
+msgstr "Période de vent"
+
+#: core/constants.py:125
+msgid ""
+"Time period over which the wind speed and direction have been averegd. 10 "
+"minutes in normal cases or the number of minutes since a significant change "
+"occuring in the preceeding 10 minutes."
+msgstr ""
+"Période sur laquelle la vitesse et la direction du vent ont été averantes. "
+"10 minutes dans les cas normaux ou le nombre de minutes, car un changement "
+"significatif se produisant dans les 10 minutes précédentes."
+
+#: core/constants.py:144
+msgid "Temperature"
+msgstr "Température"
+
+#: core/constants.py:146
+msgid "Degree Celsius"
+msgstr "Degré Celsius"
+
+#: core/constants.py:150
+msgid "Kelvin"
+msgstr "Kelvin"
+
+#: core/constants.py:151
+msgid "For converting Temperature from Celsius to Kelvin"
+msgstr "Pour convertir la température de Celsius en Kelvin"
+
+#: core/constants.py:156
+msgid "Relative Humidity"
+msgstr "Humidité relative"
+
+#: core/constants.py:158
+msgid "Percent"
+msgstr "Pour cent"
+
+#: core/constants.py:163
+msgid "Atmospheric Pressure"
+msgstr "Pression atmosphérique"
+
+#: core/constants.py:165
+msgid "Hectopascal"
+msgstr "Hectopascal"
+
+#: core/constants.py:169
+msgid "Pascal"
+msgstr "Pascal"
+
+#: core/constants.py:170
+msgid "For converting Pressure from hectopascal to pascal"
+msgstr "Pour convertir la pression de Hectopascal à Pascal"
+
+#: core/constants.py:175
+msgid "Wind Speed"
+msgstr "Vitesse du vent"
+
+#: core/constants.py:177
+msgid "Meters per Second"
+msgstr "Mètres par seconde"
+
+#: core/constants.py:182
+msgid "Wind Direction"
+msgstr "Direction du vent"
+
+#: core/constants.py:184
+msgid "Degrees"
+msgstr "Degrés"
+
+#: core/constants.py:189 core/units.py:90
+msgid "Precipitation"
+msgstr "Précipitation"
+
+#: core/constants.py:191
+msgid "Millimeters"
+msgstr "Millimètres"
+
+#: core/constants.py:196
+msgid "Kilogram per Square Meter"
+msgstr "Kilogramme par mètre carré"
+
+#: core/constants.py:197
+msgid ""
+"For converting Precipitation from millimeters to kilograms per square meter"
+msgstr ""
+"Pour convertir les précipitations des millimètres en kilogrammes par mètre "
+"carré"
+
+#: core/forms.py:11
+msgid "File"
+msgstr "Déposer"
+
+#: core/forms.py:11
+msgid "CSV file"
+msgstr "Fichier csv"
+
+#: core/forms.py:63 core/models.py:54 core/models.py:88 core/models.py:323
+msgid "Network"
+msgstr "Réseau"
+
+#: core/forms.py:74 core/models.py:94
+msgid "WMO Block Number"
+msgstr "Numéro de bloc WMO"
+
+#: core/forms.py:75 core/models.py:97
+msgid "WMO Station Number"
+msgstr "Numéro de station WMO"
+
+#: core/forms.py:77
+msgid "Assign Network"
+msgstr "Affecter le réseau"
+
+#: core/forms.py:78
+msgid "Assign Station Type"
+msgstr "Affecter le type de station"
+
+#: core/forms.py:84
+msgid "Create optional conversion Units"
+msgstr "Créer des unités de conversion en option"
+
+#: core/models.py:38
+msgid "Automatic Weather Stations"
+msgstr "Stations météorologiques automatiques"
+
+#: core/models.py:39
+msgid "Manual Weather Stations"
+msgstr "Stations météorologiques manuelles"
+
+#: core/models.py:42 core/models.py:87 core/models.py:189 core/models.py:222
+#: core/models.py:310 core/models.py:322 core/models.py:458
+#: core/templates/adl/import_oscar_surface_station.html:30
+#: core/templates/adl/load_stations_oscar.html:119 core/views.py:423
+#: core/views.py:488 core/views.py:537 core/views.py:601
+msgid "Name"
+msgstr "Nom"
+
+#: core/models.py:42
+msgid "Name of the network"
+msgstr "Nom du réseau"
+
+#: core/models.py:43
+msgid "Weather Stations Type"
+msgstr "Type de stations météo"
+
+#: core/models.py:44
+msgid "Weather station type"
+msgstr "Type de station météo"
+
+#: core/models.py:55
+msgid "Networks"
+msgstr "Réseaux"
+
+#: core/models.py:87 core/models.py:310
+msgid "Name of the station"
+msgstr "Nom de la station"
+
+#: core/models.py:89
+msgid "WSI Series"
+msgstr "Série WSI"
+
+#: core/models.py:89
+msgid "WIGOS identifier series"
+msgstr "Série d'identificateurs Wigos"
+
+#: core/models.py:90
+msgid "WSI Issuer"
+msgstr "Émetteur WSI"
+
+#: core/models.py:90
+msgid "WIGOS issuer of identifier"
+msgstr "Émetteur Wigos de l'identifiant"
+
+#: core/models.py:91
+msgid "WSI Issue Number"
+msgstr "Numéro de problème WSI"
+
+#: core/models.py:92
+msgid "WIGOS issue number"
+msgstr "Numéro de problème Wigos"
+
+#: core/models.py:93
+msgid "WSI Local"
+msgstr "WSI local"
+
+#: core/models.py:93
+msgid "WIGOS local identifier"
+msgstr "Identificateur local Wigos"
+
+#: core/models.py:94
+msgid "WMO block number"
+msgstr "Numéro de bloc WMO"
+
+#: core/models.py:97
+msgid "WMO station number"
+msgstr "Numéro de station WMO"
+
+#: core/models.py:99
+msgid ""
+"Type of observing station, encoding using code table 0 02 001 (set to 0, "
+"automatic)"
+msgstr ""
+"Type de station d'observation, codage à l'aide du tableau de code 0 02 001 "
+"(réglé sur 0, automatique)"
+
+#: core/models.py:101
+msgid "Location"
+msgstr "Emplacement"
+
+#: core/models.py:101
+msgid "Location of the station"
+msgstr "Emplacement de la station"
+
+#: core/models.py:114
+msgid "Height of the anemometer above local ground to 2 decimal places"
+msgstr "Hauteur de l'anémomètre au-dessus du sol local à 2 décimales"
+
+#: core/models.py:130
+msgid ""
+"Time period over which the wind speed and direction have been averaged. 10 "
+"minutes in normal cases or the number of minutes since a significant change "
+"occuring in the preceeding 10 minutes."
+msgstr ""
+"Période de temps sur laquelle la vitesse et la direction du vent ont été "
+"moyennées. 10 minutes dans les cas normaux ou le nombre de minutes, car un "
+"changement significatif se produisant dans les 10 minutes précédentes."
+
+#: core/models.py:135
+msgid "Station Timezone"
+msgstr "Fuseau horaire de la station"
+
+#: core/models.py:136
+msgid "Timezone used by the station for recording observations"
+msgstr ""
+"Fuseau horaire utilisé par la station pour enregistrer les observations"
+
+#: core/models.py:168
+msgid "Base Information"
+msgstr "Informations sur la base"
+
+#: core/models.py:169
+msgid "WIGOS Identification"
+msgstr "Identification des wigos"
+
+#: core/models.py:170
+msgid "Metadata"
+msgstr "Métadonnées"
+
+#: core/models.py:174 core/models.py:362 core/models.py:395 core/models.py:425
+#: core/models.py:583
+msgid "Station"
+msgstr "Gare"
+
+#: core/models.py:175 core/views.py:82 core/views.py:133 core/views.py:220
+msgid "Stations"
+msgstr "Stations"
+
+#: core/models.py:189
+msgid "Name of the unit"
+msgstr "Nom de l'unité"
+
+#: core/models.py:190
+msgid "Symbol"
+msgstr "Symbole"
+
+#: core/models.py:190
+msgid "Symbol of the unit"
+msgstr "Symbole de l'unité"
+
+#: core/models.py:192 core/models.py:225
+#: core/templates/adl/stations_csv_template.html:79
+#: core/templates/core/create_predefined_data_parameters.html:69
+msgid "Description"
+msgstr "Description"
+
+#: core/models.py:193
+msgid "Description of the unit"
+msgstr "Description de l'unité"
+
+#: core/models.py:196 core/models.py:223
+#: core/templates/core/create_predefined_data_parameters.html:42
+#: core/templates/core/create_predefined_data_parameters.html:66
+msgid "Unit"
+msgstr "Unité"
+
+#: core/models.py:197
+msgid "Units"
+msgstr "Unités"
+
+#: core/models.py:211
+msgid "Unit Registry"
+msgstr "Registre des unités"
+
+#: core/models.py:216
+msgid "Meteorological"
+msgstr "Météorologique"
+
+#: core/models.py:217
+msgid "Environmental"
+msgstr "Environnement"
+
+#: core/models.py:218
+msgid "Station Health"
+msgstr "Santé de la station"
+
+#: core/models.py:219
+msgid "Communication"
+msgstr "Communication"
+
+#: core/models.py:222
+msgid "Name of the variable"
+msgstr "Nom de la variable"
+
+#: core/models.py:224
+msgid "Unit of the variable"
+msgstr "Unité de la variable"
+
+#: core/models.py:226
+msgid "Description of the variable"
+msgstr "Description de la variable"
+
+#: core/models.py:228
+msgid "Category"
+msgstr "Catégorie"
+
+#: core/models.py:228
+msgid "Type of parameter"
+msgstr "Type de paramètre"
+
+#: core/models.py:231
+msgid "Custom Unit Conversion Context"
+msgstr "Contexte de conversion d'unité personnalisé"
+
+#: core/models.py:232
+msgid "Context of the unit"
+msgstr "Contexte de l'unité"
+
+#: core/models.py:243
+msgid "Data Parameter"
+msgstr "Paramètre de données"
+
+#: core/models.py:244
+msgid "Data Parameters"
+msgstr "Paramètres de données"
+
+#: core/models.py:256
+msgid ""
+"Cannot change unit of a parameter that has observation records in the "
+"database. Please remove the observation records first."
+msgstr ""
+"Impossible de modifier l'unité d'un paramètre qui a des enregistrements "
+"d'observation dans la base de données. Veuillez supprimer d'abord les "
+"enregistrements d'observation."
+
+#: core/models.py:295
+msgid "Select Country"
+msgstr "Pays de sélection"
+
+#: core/models.py:295
+msgid "Country"
+msgstr "Pays"
+
+#: core/models.py:297
+msgid "Daily Aggregation Time"
+msgstr "Temps d'agrégation quotidien"
+
+#: core/models.py:305 core/models.py:306
+msgid "ADL Settings"
+msgstr "Paramètres ADL"
+
+#: core/models.py:311
+msgid "WIGOS ID of the station"
+msgstr "ID de wigos de la station"
+
+#: core/models.py:313
+msgid "Latitude of the station"
+msgstr "Latitude de la station"
+
+#: core/models.py:314
+msgid "Longitude of the station"
+msgstr "Longitude de la station"
+
+#: core/models.py:315 core/templates/adl/import_oscar_surface_station.html:39
+msgid "Elevation"
+msgstr "Élévation"
+
+#: core/models.py:315
+msgid "Elevation of the station"
+msgstr "Élévation de la station"
+
+#: core/models.py:324
+msgid "Plugin"
+msgstr "Plugin"
+
+#: core/models.py:325
+msgid "Plugin to use for this network"
+msgstr "Plugin à utiliser pour ce réseau"
+
+#: core/models.py:326
+msgid "Active"
+msgstr "Actif"
+
+#: core/models.py:327
+msgid "If unchecked, the plugin will NOT run automatically"
+msgstr "S'il n'est pas contrôlé, le plugin ne s'exécutera pas automatiquement"
+
+#: core/models.py:329
+msgid "Plugin Auto Processing Interval in Minutes"
+msgstr "Intervalle de traitement automatique du plugin en quelques minutes"
+
+#: core/models.py:331
+msgid "How often the plugin should run, in minutes"
+msgstr "À quelle fréquence le plugin doit fonctionner, en quelques minutes"
+
+#: core/models.py:336
+msgid "Is Daily Data"
+msgstr "Est des données quotidiennes"
+
+#: core/models.py:337
+msgid "Check to mark data from this connection as daily data"
+msgstr ""
+"Vérifiez pour marquer les données de cette connexion sous forme de données "
+"quotidiennes"
+
+#: core/models.py:346
+msgid "Plugin Configuration"
+msgstr "Configuration du plugin"
+
+#: core/models.py:351 core/models.py:360 core/models.py:396 core/models.py:442
+#: core/models.py:448 core/models.py:460
+msgid "Network Connection"
+msgstr "Connexion réseau"
+
+#: core/models.py:352 core/views.py:358 core/views.py:456
+msgid "Network Connections"
+msgstr "Connexions réseau"
+
+#: core/models.py:364 core/models.py:462
+msgid "Enabled"
+msgstr "Activé"
+
+#: core/models.py:365
+msgid "If unchecked, this station  will not be processed"
+msgstr "S'il n'est pas contrôlé, cette station ne sera pas traitée"
+
+#: core/models.py:367
+msgid "Aggregation Start Date"
+msgstr "Date de début de l'agrégation"
+
+#: core/models.py:368
+msgid ""
+"Date to start aggregation from. Leave empty to use the current date and time"
+msgstr ""
+"Date pour démarrer l'agrégation de. Laissez vide pour utiliser la date et "
+"l'heure actuelles"
+
+#: core/models.py:376 core/models.py:490
+msgid "Base"
+msgstr "Base"
+
+#: core/models.py:398 core/models.py:426 core/models.py:524
+#: core/templates/core/create_predefined_data_parameters.html:39
+msgid "Parameter"
+msgstr "Paramètre"
+
+#: core/models.py:399
+msgid "Value"
+msgstr "Valeur"
+
+#: core/models.py:400
+msgid "Is Daily"
+msgstr "Est quotidien"
+
+#: core/models.py:403
+msgid "Observation Record"
+msgstr "Dossier d'observation"
+
+#: core/models.py:404
+msgid "Observation Records"
+msgstr "Dossiers d'observation"
+
+#: core/models.py:427
+msgid "Min Value"
+msgstr "Valeur min"
+
+#: core/models.py:428
+msgid "Max Value"
+msgstr "Valeur maximale"
+
+#: core/models.py:429
+msgid "Avg Value"
+msgstr "Valeur AVG"
+
+#: core/models.py:430 core/models.py:518
+msgid "Sum Value"
+msgstr "Valeur de somme"
+
+#: core/models.py:431
+msgid "Records Count"
+msgstr "Les enregistrements comptent"
+
+#: core/models.py:454
+msgid "Hourly"
+msgstr "De temps"
+
+#: core/models.py:455
+msgid "Daily"
+msgstr "Tous les jours"
+
+#: core/models.py:463
+msgid "Data Check Interval in Minutes"
+msgstr "Intervalle de vérification des données en minutes"
+
+#: core/models.py:465
+msgid ""
+"How often the channel should check the database for new data, in minutes"
+msgstr ""
+"À quelle fréquence le canal doit vérifier la base de données de nouvelles "
+"données, en quelques minutes"
+
+#: core/models.py:471
+msgid "Starting date for the data to dispatch"
+msgstr "Date de début pour les données à expédier"
+
+#: core/models.py:472
+msgid "Leave blank to use the whole data period"
+msgstr "Laissez vide pour utiliser toute la période de données"
+
+#: core/models.py:474
+msgid "Send Aggregated Data"
+msgstr "Envoyer des données agrégées"
+
+#: core/models.py:476
+msgid "Aggregation Period"
+msgstr "Période d'agrégation"
+
+#: core/models.py:477
+msgid "Public URL"
+msgstr "URL publique"
+
+#: core/models.py:478
+msgid "Public URL of the channel,if available"
+msgstr "URL publique de la chaîne, si disponible"
+
+#: core/models.py:494
+msgid "Parameter Mappings"
+msgstr "Mappages de paramètres"
+
+#: core/models.py:517
+msgid "Average Value"
+msgstr "Valeur moyenne"
+
+#: core/models.py:519
+msgid "Minimum Value"
+msgstr "Valeur minimale"
+
+#: core/models.py:520
+msgid "Maximum Value"
+msgstr "Valeur maximale"
+
+#: core/models.py:525
+msgid "Channel Parameter"
+msgstr "Paramètre de canal"
+
+#: core/models.py:526
+msgid "Parameter name in the channel"
+msgstr "Nom du paramètre dans le canal"
+
+#: core/models.py:528
+msgid "Channel Unit"
+msgstr "Unité de canal"
+
+#: core/models.py:529
+msgid "Unit of the parameter in the channel. Leave empty if the same"
+msgstr "Unité du paramètre dans le canal. Laisser vide si le même"
+
+#: core/models.py:533
+msgid "Aggregation Measure"
+msgstr "Mesure d'agrégation"
+
+#: core/models.py:543
+msgid "Storage Endpoint"
+msgstr "Point de terminaison de stockage"
+
+#: core/models.py:544
+msgid "Storage Username"
+msgstr "Nom d'utilisateur de stockage"
+
+#: core/models.py:545
+msgid "Storage Password"
+msgstr "Mot de passe de stockage"
+
+#: core/models.py:546
+msgid "Use Secure Connection"
+msgstr "Utiliser une connexion sécurisée"
+
+#: core/models.py:547
+msgid "If checked, HTTPS connection will be used,otherwise HTTP"
+msgstr "En cas de vérification, la connexion HTTPS sera utilisée, sinon http"
+
+#: core/models.py:548
+msgid "Dataset ID"
+msgstr "ID de l'ensemble de données"
+
+#: core/models.py:557
+msgid "Wis2Box Storage Configuration"
+msgstr "Configuration de stockage Wis2Box"
+
+#: core/models.py:561
+msgid "WIS2BOX Upload"
+msgstr "Téléchargement Wis2Box"
+
+#: core/models.py:562
+msgid "WIS2BOX Uploads"
+msgstr "Téléchargements Wis2box"
+
+#: core/models.py:581
+msgid "Channel"
+msgstr "Canal"
+
+#: core/models.py:584
+msgid "Last Send Observation Time"
+msgstr "Dernier temps d'observation"
+
+#: core/models.py:587 core/models.py:588
+msgid "Station Channel Dispatch Status"
+msgstr "État de répartition du canal de la station"
+
+#: core/templates/adl/home/adl_summary/adl_summary_networks.html:6
+#, python-format
+msgid "<span>%(total)s</span> Network <span class=\"w-sr-only\">created</span>"
+msgid_plural ""
+"<span>%(total)s</span> Networks <span class=\"w-sr-only\">created </span>"
+msgstr[0] ""
+msgstr[1] ""
+
+#: core/templates/adl/home/adl_summary/adl_summary_plugins.html:6
+#, python-format
+msgid "<span>%(total)s</span> Plugin <span class=\"w-sr-only\">installed</span>"
+msgid_plural ""
+"<span>%(total)s</span> Plugins <span class=\"w-sr-only\">installed </span>"
+msgstr[0] ""
+msgstr[1] ""
+
+#: core/templates/adl/home/adl_summary/adl_summary_stations.html:6
+#, python-format
+msgid "<span>%(total)s</span> Station <span class=\"w-sr-only\">created</span>"
+msgid_plural ""
+"<span>%(total)s</span> Stations <span class=\"w-sr-only\">created </span>"
+msgstr[0] ""
+msgstr[1] ""
+
+#: core/templates/adl/home/plugin_monitoring_panel.html:3
+msgid "Plugin Monitoring"
+msgstr "Surveillance du plugin"
+
+#: core/templates/adl/import_oscar_surface_station.html:21
+msgid "Station Data to import"
+msgstr "Données de station à importer"
+
+#: core/templates/adl/import_oscar_surface_station.html:89
+msgid "Import"
+msgstr "Importer"
+
+#: core/templates/adl/load_stations_csv.html:13
+msgid "We found stations that were loaded previously. "
+msgstr "Nous avons trouvé des stations chargées auparavant."
+
+#: core/templates/adl/load_stations_csv.html:22
+msgid "Use existing Stations"
+msgstr "Utiliser les stations existantes"
+
+#: core/templates/adl/load_stations_csv.html:27
+msgid ""
+"If you wish to load/update the local copy stations, you can load the new CSV"
+" downloaded from OSCAR Surface "
+msgstr ""
+"Si vous souhaitez charger / mettre à jour les stations de copie locales, "
+"vous pouvez charger le nouveau CSV téléchargé depuis Oscar Surface"
+
+#: core/templates/adl/load_stations_csv.html:36
+msgid "Load new CSV file"
+msgstr "Chargez un nouveau fichier CSV"
+
+#: core/templates/adl/load_stations_csv.html:49
+msgid ""
+"Use this form to upload the CSV file manually downloaded from OSCAR Surface "
+"for your country"
+msgstr ""
+"Utilisez ce formulaire pour télécharger le fichier CSV téléchargé "
+"manuellement à partir d'Oscar Surface pour votre pays"
+
+#: core/templates/adl/load_stations_csv.html:70
+msgid "Upload"
+msgstr "Télécharger"
+
+#: core/templates/adl/load_stations_csv.html:77
+msgid "Data Preview"
+msgstr "Aperçu des données"
+
+#: core/templates/adl/load_stations_csv.html:86
+msgid ""
+"The following columns were not found in the uploaded file. Starred columns "
+"are required"
+msgstr ""
+"Les colonnes suivantes n'ont pas été trouvées dans le fichier téléchargé. "
+"Des colonnes étoilées sont nécessaires"
+
+#: core/templates/adl/load_stations_oscar.html:13
+msgid "Country not set. Please set the country and try again"
+msgstr "Pays non réglé. Veuillez régler le pays et réessayer"
+
+#: core/templates/adl/load_stations_oscar.html:22
+msgid "Set Country"
+msgstr "Se dérouler"
+
+#: core/templates/adl/load_stations_oscar.html:29
+msgid "An error occured when fetching data from OSCAR Surface"
+msgstr ""
+"Une erreur s'est produite lors de la récupération des données de la surface "
+"de l'Oscar"
+
+#: core/templates/adl/load_stations_oscar.html:37
+msgid "You can check your internet and try again"
+msgstr "Vous pouvez vérifier votre Internet et réessayer"
+
+#: core/templates/adl/load_stations_oscar.html:42
+msgid ""
+"If you have a local copy of the stations CSV data as downloaded from OSCAR "
+"Surface, you can import and use the local copy"
+msgstr ""
+"Si vous avez une copie locale des données CSV des stations téléchargées à "
+"partir d'Oscar Surface, vous pouvez importer et utiliser la copie locale"
+
+#: core/templates/adl/load_stations_oscar.html:52
+msgid "Load from local CSV copy"
+msgstr "Charge à partir de la copie CSV locale"
+
+#: core/templates/adl/load_stations_oscar.html:64
+msgid ""
+"No Stations were found in the local copy of stations downloaded from OSCAR "
+"Surface"
+msgstr ""
+"Aucune station n'a été trouvée dans la copie locale des stations "
+"téléchargées à partir d'Oscar Surface"
+
+#: core/templates/adl/load_stations_oscar.html:75
+msgid "Load local CSV File"
+msgstr "Chargez le fichier CSV local"
+
+#: core/templates/adl/load_stations_oscar.html:85
+msgid ""
+"The stations loaded below are from a locally uploaded copy of the stations, "
+"manually downloaded from OSCAR Surface"
+msgstr ""
+"Les stations chargées ci-dessous proviennent d'une copie localement "
+"téléchargée des stations, téléchargée manuellement à partir d'Oscar Surface"
+
+#: core/templates/adl/load_stations_oscar.html:89
+msgid ""
+"If you have a working internet connection, it is recommended to use the live"
+" version that connects automatically to OSCAR Surface"
+msgstr ""
+"Si vous avez une connexion Internet fonctionnelle, il est recommandé "
+"d'utiliser la version en direct qui se connecte automatiquement à la surface"
+" d'Oscar"
+
+#: core/templates/adl/load_stations_oscar.html:98
+msgid "Load stations directly from OSCAR"
+msgstr "Chargez des stations directement à partir d'Oscar"
+
+#: core/templates/adl/load_stations_oscar.html:107
+msgid "WMO OSCAR Surface Stations for"
+msgstr "Stations de surface des Oscars WMO pour"
+
+#: core/templates/adl/load_stations_oscar.html:122
+msgid "Added to Database"
+msgstr "Ajouté à la base de données"
+
+#: core/templates/adl/load_stations_oscar.html:125
+msgid "Assigned Network"
+msgstr "Réseau attribué"
+
+#: core/templates/adl/load_stations_oscar.html:161
+msgid "Added"
+msgstr "Ajouté"
+
+#: core/templates/adl/load_stations_oscar.html:170
+msgid "Import Station"
+msgstr "Station d'importation"
+
+#: core/templates/adl/stations_csv_template.html:45
+msgid "Download Template"
+msgstr "Télécharger le modèle"
+
+#: core/templates/adl/stations_csv_template.html:54
+msgid "Stations CSV Columns"
+msgstr "Stations CSV Colonnes"
+
+#: core/templates/adl/stations_csv_template.html:70
+msgid "Column"
+msgstr "Colonne"
+
+#: core/templates/adl/stations_csv_template.html:73
+msgid "Required"
+msgstr "Requis"
+
+#: core/templates/adl/stations_csv_template.html:76
+msgid "Data Type"
+msgstr "Type de données"
+
+#: core/templates/adl/stations_csv_template.html:82
+msgid "Choices"
+msgstr "Choix"
+
+#: core/templates/adl/stations_csv_template.html:95
+msgid "Yes"
+msgstr "Oui"
+
+#: core/templates/core/create_predefined_data_parameters.html:11
+msgid "One or more parameters already exist in the database"
+msgstr "Un ou plusieurs paramètres existent déjà dans la base de données"
+
+#: core/templates/core/create_predefined_data_parameters.html:20
+msgid ""
+"Please note that this section helps you to create some default parameters to"
+" use in the system. This is not a required step, but it is available to help"
+" you get started with some parameters."
+msgstr ""
+"Veuillez noter que cette section vous aide à créer des paramètres par défaut"
+" à utiliser dans le système. Ce n'est pas une étape requise, mais elle est "
+"disponible pour vous aider à démarrer avec certains paramètres."
+
+#: core/templates/core/create_predefined_data_parameters.html:25
+#, python-format
+msgid ""
+"Here we are using the %(gbon_link)s parameters as a starting point. You will"
+" still be able to add or modify Data Parameters as needed for your data."
+msgstr ""
+"Ici, nous utilisons les paramètres de %(gbon_link)s comme point de départ. "
+"Vous pourrez toujours ajouter ou modifier les paramètres de données selon "
+"les besoins de vos données."
+
+#: core/templates/core/create_predefined_data_parameters.html:32
+msgid "The following Data parameters and corresponding Units will be created"
+msgstr ""
+"Les paramètres de données suivants et les unités correspondantes seront "
+"créées"
+
+#: core/templates/core/create_predefined_data_parameters.html:59
+msgid ""
+"The following optional conversion units will also be created if checked, and"
+" not already existing in the system"
+msgstr ""
+"Les unités de conversion optionnelles suivantes seront également créées si "
+"elles sont vérifiées, et ne sont pas déjà existantes dans le système"
+
+#: core/templates/core/create_predefined_data_parameters.html:112
+msgid "Create"
+msgstr "Créer"
+
+#: core/templates/core/data_parameter_index_results.html:6
+#, python-format
+msgid "There are no %(model_name)s to display."
+msgstr "Il n'y a pas de %(model_name)s à afficher."
+
+#: core/templates/core/data_parameter_index_results.html:16
+msgid "Create from predefined parameters"
+msgstr "Créer à partir de paramètres prédéfinis"
+
+#: core/units.py:108
+#, python-format
+msgid "'%(unit)s' is not defined in the unit registry"
+msgstr "'%(unit)s' n'est pas défini dans le registre des unités"
+
+#: core/views.py:67
+msgid "Stations loaded successfully."
+msgstr "Les stations sont chargées avec succès."
+
+#: core/views.py:80 core/views.py:131 core/views.py:218 core/views.py:357
+#: core/views.py:455 core/views.py:508 core/views.py:566
+msgid "Home"
+msgstr "Maison"
+
+#: core/views.py:81 core/views.py:132 core/views.py:219 core/views.py:567
+msgid "Snippets"
+msgstr "Extraits"
+
+#: core/views.py:83
+msgid "Load Stations from CSV"
+msgstr "Charger les stations de CSV"
+
+#: core/views.py:134 core/wagtail_hooks.py:198
+msgid "Load Stations from OSCAR Surface"
+msgstr "Charge des stations de la surface des Oscars"
+
+#: core/views.py:221
+msgid "OSCAR Stations"
+msgstr "Stations des Oscars"
+
+#: core/views.py:222
+msgid "Import OSCAR Station"
+msgstr "Station d'Oscar d'importation"
+
+#: core/views.py:234
+msgid "Please set the country in the settings."
+msgstr "Veuillez définir le pays dans les paramètres."
+
+#: core/views.py:276
+msgid "Station imported successfully."
+msgstr "Station importée avec succès."
+
+#: core/views.py:299
+msgid "Station not found in OSCAR database."
+msgstr "Station introuvable dans la base de données Oscar."
+
+#: core/views.py:424 core/wagtail_hooks.py:150
+msgid "Stations Link"
+msgstr "Lien de stations"
+
+#: core/views.py:426
+msgid "Options"
+msgstr "Options"
+
+#: core/views.py:433
+msgid "Add Connection"
+msgstr "Ajouter une connexion"
+
+#: core/views.py:457
+msgid "Select Connection Type"
+msgstr "Sélectionner le type de connexion"
+
+#: core/views.py:509 core/views.py:568 core/wagtail_hooks.py:331
+msgid "Dispatch Channels"
+msgstr "Canaux d'expédition"
+
+#: core/views.py:544
+msgid "Add Dispatch Channel"
+msgstr "Ajouter le canal d'expédition"
+
+#: core/views.py:569
+msgid "Select Dispatch Channel Type"
+msgstr "Sélectionner le type de canal d'expédition"
+
+#: core/views.py:664
+msgid "Predefined parameters created successfully."
+msgstr "Paramètres prédéfinis créés avec succès."
+
+#: core/views.py:668
+msgid "Error creating predefined parameters: "
+msgstr "Erreur créant des paramètres prédéfinis:"
+
+#: core/views.py:673
+msgid "Predefined Data Parameters"
+msgstr "Paramètres de données prédéfinies"
+
+#: core/wagtail_hooks.py:131
+msgid "Station Link"
+msgstr "Lien de station"
+
+#: core/wagtail_hooks.py:241
+msgid "Create from Predefined Data Parameters"
+msgstr "Créer à partir de paramètres de données prédéfinis"
+
+#: core/wagtail_hooks.py:324
+msgid "Connections"
+msgstr "Relations"

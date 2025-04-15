@@ -16,6 +16,7 @@ import os
 from pathlib import Path
 
 import dj_database_url
+import django.conf.locale
 import environ
 
 from adl.version import VERSION
@@ -75,6 +76,7 @@ INSTALLED_APPS = [
     "rest_framework",
     "rest_framework_api_key",
     "django_vue_utilities",
+    "django_deep_translator",
     
     "django.contrib.admin",
     "django.contrib.auth",
@@ -166,7 +168,35 @@ AUTH_PASSWORD_VALIDATORS = [
 # Internationalization
 # https://docs.djangoproject.com/en/5.0/topics/i18n/
 
-LANGUAGE_CODE = "en-us"
+# add amharic to supported locale
+EXTRA_LANG_INFO = {
+    'am': {
+        'bidi': False,
+        'code': 'am',
+        'name': 'Amharic',
+        'name_local': "Amharic"
+    },
+}
+# Add custom languages not provided by Django
+LANG_INFO = dict(django.conf.locale.LANG_INFO, **EXTRA_LANG_INFO)
+django.conf.locale.LANG_INFO = LANG_INFO
+
+LANGUAGES = WAGTAIL_CONTENT_LANGUAGES = WAGTAILADMIN_PERMITTED_LANGUAGES = [
+    ('am', 'Amharic'),
+    ('ar', 'Arabic'),
+    ('en', 'English'),
+    ('es', 'Español'),
+    ('fr', 'French'),
+    ('sw', 'Swahili'),
+]
+
+LANGUAGE_CODE = env.str("LANGUAGE_CODE", default="en")
+
+LOCALE_PATHS = (
+    'core/locale',
+    'monitoring/locale',
+    'viewer/locale',
+)
 
 TIME_ZONE = "UTC"
 

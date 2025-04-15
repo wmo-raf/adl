@@ -1,0 +1,87 @@
+# SOME DESCRIPTIVE TITLE.
+# Copyright (C) YEAR THE PACKAGE'S COPYRIGHT HOLDER
+# This file is distributed under the same license as the PACKAGE package.
+# FIRST AUTHOR <EMAIL@ADDRESS>, YEAR.
+#
+#, fuzzy
+msgid ""
+msgstr ""
+"Project-Id-Version: PACKAGE VERSION\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2025-04-15 11:40+0000\n"
+"PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
+"Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
+"Language-Team: LANGUAGE <LL@li.org>\n"
+"Language: \n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=3; plural=n == 1 ? 0 : n != 0 && n % 1000000 == 0 ? 1 : 2;\n"
+
+#: monitoring/templates/monitoring/dispatch_channel_status.html:61
+msgid "Dispatch Status"
+msgstr "Estado de envío"
+
+#: monitoring/templates/monitoring/dispatch_channel_status.html:69
+msgid "Channel"
+msgstr "Canal"
+
+#: monitoring/templates/monitoring/dispatch_channel_status.html:72
+msgid "Data Check Interval"
+msgstr "Intervalo de verificación de datos"
+
+#: monitoring/templates/monitoring/dispatch_channel_status.html:75
+msgid "Aggregation Period"
+msgstr "Período de agregación"
+
+#: monitoring/templates/monitoring/dispatch_channel_status.html:78
+msgid "Last Processed"
+msgstr "Último procesado"
+
+#: monitoring/templates/monitoring/dispatch_channel_status.html:81
+msgid "Files Dispatched"
+msgstr "Archivos enviados"
+
+#: monitoring/templates/monitoring/dispatch_channel_status.html:85
+msgid "Last Dispatched Observation"
+msgstr "Última observación enviada"
+
+#: monitoring/templates/monitoring/dispatch_channel_status.html:108
+msgid "Minutes"
+msgstr "Minutos"
+
+#: monitoring/templates/monitoring/plugin_monitoring_panel.html:139
+msgid "Enabled"
+msgstr "Activado"
+
+#: monitoring/templates/monitoring/plugin_monitoring_panel.html:149
+msgid "Disabled"
+msgstr "Desactivado"
+
+#: monitoring/templates/monitoring/plugin_monitoring_panel.html:159
+msgid "Processing interval: "
+msgstr "Intervalo de procesamiento:"
+
+#: monitoring/templates/monitoring/plugin_monitoring_panel.html:165
+msgid "minutes"
+msgstr "minutos"
+
+#: monitoring/templates/monitoring/plugin_monitoring_panel.html:176
+msgid "Linked Stations: "
+msgstr "Estaciones vinculadas:"
+
+#: monitoring/templates/monitoring/plugin_monitoring_panel.html:191
+msgid "Latest Pull"
+msgstr "Último tirón"
+
+#: monitoring/templates/wagtailadmin/home.html:28
+msgid ""
+"This is your dashboard on which helpful information about content you've "
+"created will be displayed."
+msgstr ""
+"Este es su tablero en el que se mostrará información útil sobre el contenido"
+" que ha creado."
+
+#: monitoring/templates/wagtailadmin/home/account_summary.html:9
+msgid "Account"
+msgstr "Cuenta"

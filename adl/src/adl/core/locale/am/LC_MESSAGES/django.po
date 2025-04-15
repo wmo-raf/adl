@@ -1,0 +1,1106 @@
+# SOME DESCRIPTIVE TITLE.
+# Copyright (C) YEAR THE PACKAGE'S COPYRIGHT HOLDER
+# This file is distributed under the same license as the PACKAGE package.
+# FIRST AUTHOR <EMAIL@ADDRESS>, YEAR.
+#
+#, fuzzy
+msgid ""
+msgstr ""
+"Project-Id-Version: PACKAGE VERSION\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2025-04-15 11:40+0000\n"
+"PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
+"Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
+"Language-Team: LANGUAGE <LL@li.org>\n"
+"Language: \n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=INTEGER; plural=EXPRESSION;\n"
+
+#: core/constants.py:7 core/forms.py:73 core/models.py:85
+msgid "Station ID"
+msgstr "የጣቢያ መታወቂያ"
+
+#: core/constants.py:8 core/models.py:86
+msgid "Unique Station Identifier"
+msgstr "ልዩ የማጣሪያ መለያ"
+
+#: core/constants.py:14 core/constants.py:15
+msgid "Station Name"
+msgstr "የጣቢያ ስም"
+
+#: core/constants.py:21 core/constants.py:22 core/models.py:311
+#: core/templates/adl/import_oscar_surface_station.html:27
+#: core/templates/adl/load_stations_oscar.html:115
+msgid "WIGOS ID"
+msgstr "Wigos መታወቂያ"
+
+#: core/constants.py:28 core/models.py:98
+msgid "Station Type"
+msgstr "ጣቢያው ዓይነት"
+
+#: core/constants.py:29
+msgid "Type of observing station, encoding using code table 0 02 001"
+msgstr "የኮድን ሰንጠረዥ 0 02 001 በመጠቀም ጣቢያውን የማየት አይነት"
+
+#: core/constants.py:31 core/forms.py:68 core/models.py:63
+msgid "Automatic"
+msgstr "ራስ-ሰር"
+
+#: core/constants.py:32 core/forms.py:69 core/models.py:64
+msgid "Manned"
+msgstr "ማዳን"
+
+#: core/constants.py:33 core/forms.py:70 core/models.py:65
+msgid "Hybrid: both automatic and manned"
+msgstr "ቀሚስ-አውቶማቲክ እና ማገድ"
+
+#: core/constants.py:41 core/models.py:313
+#: core/templates/adl/import_oscar_surface_station.html:36
+msgid "Latitude"
+msgstr "ኬክሮስ"
+
+#: core/constants.py:42
+msgid "Latitude of the station (to 5 decimal places)"
+msgstr "የጣቢያው ኬክሮዎች (እስከ 5 የአስርዮሽ ቦታዎች)"
+
+#: core/constants.py:48 core/models.py:314
+#: core/templates/adl/import_oscar_surface_station.html:33
+msgid "Longitude"
+msgstr "ኬንትሮስ"
+
+#: core/constants.py:49
+msgid "Longitude of the station (to 5 decimal places)"
+msgstr "የጣቢያው ኬንትሮስ (እስከ 5 የአስርዮሽ ቦታዎች)"
+
+#: core/constants.py:55 core/models.py:102
+msgid "Station Height Above MSL"
+msgstr "ከ MSL በላይ የመድረሻ ቁመት"
+
+#: core/constants.py:56 core/models.py:103
+msgid "Height of the station ground above mean sea level (to 1 decimal place)"
+msgstr "ከላይ ያለው የጣቢያ መሬቱ ከፍ ያለ የባህር ወለል (እስከ 1 የአስርዮሽ ቦታ)"
+
+#: core/constants.py:62 core/models.py:108
+msgid "Barometer Height Above MSL"
+msgstr "ከ MSL በላይ ባሮሜትር ቁመት"
+
+#: core/constants.py:63 core/models.py:109
+msgid ""
+"Height of the barometer above mean sea level (to 1 decimal place), typically"
+" height of station ground plus the height of the sensor above local ground"
+msgstr ""
+"ከባህር ጠለል በላይ ያለው የባቡር ሐዲድ ከፍ ያለ የባህር ወለል (እስከ 1 የአስርዮሽ ስፍራ), በተለምዶ የቦታ መሬቶች "
+"እና የአከባቢው ቁመት ቁመት አለው"
+
+#: core/constants.py:70 core/models.py:105
+msgid "Thermometer Height"
+msgstr "ቴርሞሜትር ቁመት"
+
+#: core/constants.py:71 core/models.py:106
+msgid ""
+"Height of thermometer or temperature sensor above the local ground to 2 "
+"decimal places"
+msgstr "ከአካባቢያዊው መሬት እስከ 2 የአስርዮሽ ቦታዎች ድረስ የቲሞሞሜትተር ወይም የሙቀት ዳሳሽ"
+
+#: core/constants.py:77 core/models.py:113
+msgid "Anemometer Height"
+msgstr "የደም ማነስ ቁመት"
+
+#: core/constants.py:78
+msgid "Height of the anemometer above local ground to 2 decimal place"
+msgstr "ከአከባቢው እስከ 2 የአስርዮሽ ስፍራ ድረስ የአስሞሜትር ቁመት"
+
+#: core/constants.py:84 core/models.py:116
+msgid "Rain Sensor Height"
+msgstr "የዝናብ ዳሰሳ ቁመት"
+
+#: core/constants.py:85 core/models.py:117
+msgid "Height of the rain gauge above local ground to 2 decimal place"
+msgstr "ከአካባቢያዊው መሬት እስከ 2 የአስርዮሽ ቦታ ድረስ የዝናብ መለኪያዎች ቁመት"
+
+#: core/constants.py:91 core/models.py:121
+msgid "Method of Ground State Measurement"
+msgstr "የመሬት ግዛት መለኪያ ዘዴ"
+
+#: core/constants.py:92
+msgid ""
+"Method of observing the state of the ground, encoded using code table 0 02 "
+"176"
+msgstr "የመሬቱን ሁኔታ የመመልከት ዘዴ, የኮድ ሰንጠረዥ 0 02 176 ን በመጠቀም የተከለከለ ነው"
+
+#: core/constants.py:97 core/constants.py:113 core/models.py:69
+#: core/models.py:78
+msgid "Manual observation"
+msgstr "መመሪያ ምልከታ"
+
+#: core/constants.py:98 core/constants.py:115 core/models.py:70
+#: core/models.py:80
+msgid "Video camera method"
+msgstr "የቪዲዮ ካሜራ ዘዴ"
+
+#: core/constants.py:99 core/models.py:71
+msgid "Infrared method"
+msgstr "የኢንፍራሬድ ዘዴ"
+
+#: core/constants.py:100 core/constants.py:116 core/models.py:72
+#: core/models.py:81
+msgid "Laser method"
+msgstr "የጨረር ዘዴ"
+
+#: core/constants.py:101 core/constants.py:117 core/models.py:73
+#: core/models.py:82
+msgid "Others"
+msgstr "ሌሎች"
+
+#: core/constants.py:102 core/constants.py:118 core/models.py:74
+#: core/models.py:83
+msgid "Missing value"
+msgstr "እሴት የጎደለው እሴት"
+
+#: core/constants.py:107 core/models.py:126
+msgid "Method of Snow Depth Measurement"
+msgstr "የበረዶ ጥልቀት መለካት ዘዴ"
+
+#: core/constants.py:108 core/models.py:123 core/models.py:127
+msgid "Method of observing the snow depth encoded using code table 0 02 177"
+msgstr "የኮድ ጠረጴዛን በመጠቀም የበረዶውን ጥልቀት የተዘበራረቀ ዘዴን የመመልከት ዘዴ 0 02 177"
+
+#: core/constants.py:114 core/models.py:79
+msgid "Ultrasonic method"
+msgstr "የአልትራሳውንድ ዘዴ"
+
+#: core/constants.py:123 core/models.py:129
+msgid "Time Period of Wind"
+msgstr "የጊዜ ጊዜ"
+
+#: core/constants.py:125
+msgid ""
+"Time period over which the wind speed and direction have been averegd. 10 "
+"minutes in normal cases or the number of minutes since a significant change "
+"occuring in the preceeding 10 minutes."
+msgstr ""
+"የንፋስ ፍጥነት እና አቅጣጫው ACCEDDED ን ያካተተበት ጊዜ. በ 10 ደቂቃዎች ውስጥ ከ 10 ደቂቃዎች ጋር በተያያዘ "
+"ከፍተኛ ለውጥ ከተከሰተ 10 ደቂቃዎች ውስጥ 10 ደቂቃዎች."
+
+#: core/constants.py:144
+msgid "Temperature"
+msgstr "የሙቀት መጠን"
+
+#: core/constants.py:146
+msgid "Degree Celsius"
+msgstr "ዲግሪ ሴልሺየስ"
+
+#: core/constants.py:150
+msgid "Kelvin"
+msgstr "ኬሊቪን"
+
+#: core/constants.py:151
+msgid "For converting Temperature from Celsius to Kelvin"
+msgstr "ከሴኪየስ እስከ ኬልቪን የሙቀት ደረጃን በመቀየር"
+
+#: core/constants.py:156
+msgid "Relative Humidity"
+msgstr "አንጻራዊ እርጥበት"
+
+#: core/constants.py:158
+msgid "Percent"
+msgstr "መቶኛ"
+
+#: core/constants.py:163
+msgid "Atmospheric Pressure"
+msgstr "የከባቢ አየር ግፊት"
+
+#: core/constants.py:165
+msgid "Hectopascal"
+msgstr "ሄክቶፕካካክ"
+
+#: core/constants.py:169
+msgid "Pascal"
+msgstr "ፓስካል"
+
+#: core/constants.py:170
+msgid "For converting Pressure from hectopascal to pascal"
+msgstr "ከሄክታስታካክ ግፊት ወደ ፓስካል ለመለወጥ"
+
+#: core/constants.py:175
+msgid "Wind Speed"
+msgstr "የንፋስ ፍጥነት"
+
+#: core/constants.py:177
+msgid "Meters per Second"
+msgstr "በአንድ ሰከንድ"
+
+#: core/constants.py:182
+msgid "Wind Direction"
+msgstr "የንፋስ አቅጣጫ"
+
+#: core/constants.py:184
+msgid "Degrees"
+msgstr "ዲግሪዎች"
+
+#: core/constants.py:189 core/units.py:90
+msgid "Precipitation"
+msgstr "ዝናብ"
+
+#: core/constants.py:191
+msgid "Millimeters"
+msgstr "ሚሊሜትር"
+
+#: core/constants.py:196
+msgid "Kilogram per Square Meter"
+msgstr "ኪሎግራም በአንድ ካሬ ሜትር"
+
+#: core/constants.py:197
+msgid ""
+"For converting Precipitation from millimeters to kilograms per square meter"
+msgstr "ከሊቁሜትር ወደ ኪሎግራምስ ወደ ኪሎግራም ለመለወጥ"
+
+#: core/forms.py:11
+msgid "File"
+msgstr "ፋይል"
+
+#: core/forms.py:11
+msgid "CSV file"
+msgstr "CSV ፋይል"
+
+#: core/forms.py:63 core/models.py:54 core/models.py:88 core/models.py:323
+msgid "Network"
+msgstr "አውታረ መረብ"
+
+#: core/forms.py:74 core/models.py:94
+msgid "WMO Block Number"
+msgstr "WMO UND ቁጥር"
+
+#: core/forms.py:75 core/models.py:97
+msgid "WMO Station Number"
+msgstr "የ WMA ጣቢያ ቁጥር"
+
+#: core/forms.py:77
+msgid "Assign Network"
+msgstr "አውታረ መረብን መድብ"
+
+#: core/forms.py:78
+msgid "Assign Station Type"
+msgstr "የቤቶች አይነት ይመድቡ"
+
+#: core/forms.py:84
+msgid "Create optional conversion Units"
+msgstr "አማራጭ የውይይት ክፍሎችን ይፍጠሩ"
+
+#: core/models.py:38
+msgid "Automatic Weather Stations"
+msgstr "ራስ-ሰር የአየር ሁኔታ ጣቢያዎች"
+
+#: core/models.py:39
+msgid "Manual Weather Stations"
+msgstr "የጉልበት የአየር ሁኔታ ጣቢያዎች"
+
+#: core/models.py:42 core/models.py:87 core/models.py:189 core/models.py:222
+#: core/models.py:310 core/models.py:322 core/models.py:458
+#: core/templates/adl/import_oscar_surface_station.html:30
+#: core/templates/adl/load_stations_oscar.html:119 core/views.py:423
+#: core/views.py:488 core/views.py:537 core/views.py:601
+msgid "Name"
+msgstr "ስም"
+
+#: core/models.py:42
+msgid "Name of the network"
+msgstr "የአውታረ መረቡ ስም"
+
+#: core/models.py:43
+msgid "Weather Stations Type"
+msgstr "የአየር ሁኔታ ጣቢያዎች ይተይቡ"
+
+#: core/models.py:44
+msgid "Weather station type"
+msgstr "የአየር ሁኔታ ጣቢያው ዓይነት"
+
+#: core/models.py:55
+msgid "Networks"
+msgstr "አውታረመረቦች"
+
+#: core/models.py:87 core/models.py:310
+msgid "Name of the station"
+msgstr "የጣቢያው ስም"
+
+#: core/models.py:89
+msgid "WSI Series"
+msgstr "WSI ተከታታይ"
+
+#: core/models.py:89
+msgid "WIGOS identifier series"
+msgstr "Wigos መለያየት ተከታታይ"
+
+#: core/models.py:90
+msgid "WSI Issuer"
+msgstr "WSI ሰጪ ሰጪ"
+
+#: core/models.py:90
+msgid "WIGOS issuer of identifier"
+msgstr "ዌግስ ለየት ያለ ሰጪ ሰጪ"
+
+#: core/models.py:91
+msgid "WSI Issue Number"
+msgstr "የ WSI እትም ቁጥር"
+
+#: core/models.py:92
+msgid "WIGOS issue number"
+msgstr "Wigos እትም ቁጥር"
+
+#: core/models.py:93
+msgid "WSI Local"
+msgstr "WSI አካባቢያዊ"
+
+#: core/models.py:93
+msgid "WIGOS local identifier"
+msgstr "Wigas የአከባቢ መለያ"
+
+#: core/models.py:94
+msgid "WMO block number"
+msgstr "WMO UND ቁጥር"
+
+#: core/models.py:97
+msgid "WMO station number"
+msgstr "የ WMA ጣቢያ ቁጥር"
+
+#: core/models.py:99
+msgid ""
+"Type of observing station, encoding using code table 0 02 001 (set to 0, "
+"automatic)"
+msgstr "ኮድ ሰንጠረዥ 0 02 001 (ወደ 0, ወደ 8 ደረጃ (አውቶማቲክ) በመጠቀም የመታየት አይነት"
+
+#: core/models.py:101
+msgid "Location"
+msgstr "አካባቢ"
+
+#: core/models.py:101
+msgid "Location of the station"
+msgstr "ጣቢያው ቦታ"
+
+#: core/models.py:114
+msgid "Height of the anemometer above local ground to 2 decimal places"
+msgstr "ከአከባቢው እስከ 2 የአስርዮሽ ቦታዎች ድረስ የአስሞሚተር ቁመት"
+
+#: core/models.py:130
+msgid ""
+"Time period over which the wind speed and direction have been averaged. 10 "
+"minutes in normal cases or the number of minutes since a significant change "
+"occuring in the preceeding 10 minutes."
+msgstr ""
+"የንፋስ ፍጥነት እና አቅጣጫው አማካኝ የተሞላበት ጊዜ. በ 10 ደቂቃዎች ውስጥ ከ 10 ደቂቃዎች ጋር በተያያዘ ከፍተኛ "
+"ለውጥ ከተከሰተ 10 ደቂቃዎች ውስጥ 10 ደቂቃዎች."
+
+#: core/models.py:135
+msgid "Station Timezone"
+msgstr "ጣቢያው የጊዜ ሰሌዳ"
+
+#: core/models.py:136
+msgid "Timezone used by the station for recording observations"
+msgstr "ምልከታዎችን ለመመዝገብ ጣቢያው ጣቢያው ጥቅም ላይ የዋለው የጊዜ ሰንዝ"
+
+#: core/models.py:168
+msgid "Base Information"
+msgstr "የመነሻ መረጃ"
+
+#: core/models.py:169
+msgid "WIGOS Identification"
+msgstr "Wigos መለየት"
+
+#: core/models.py:170
+msgid "Metadata"
+msgstr "ሜታዳታ"
+
+#: core/models.py:174 core/models.py:362 core/models.py:395 core/models.py:425
+#: core/models.py:583
+msgid "Station"
+msgstr "መሣፈሪያ"
+
+#: core/models.py:175 core/views.py:82 core/views.py:133 core/views.py:220
+msgid "Stations"
+msgstr "ጣቢያዎች"
+
+#: core/models.py:189
+msgid "Name of the unit"
+msgstr "የቤቱን ስም"
+
+#: core/models.py:190
+msgid "Symbol"
+msgstr "ምልክት"
+
+#: core/models.py:190
+msgid "Symbol of the unit"
+msgstr "የቤቱን ምልክት"
+
+#: core/models.py:192 core/models.py:225
+#: core/templates/adl/stations_csv_template.html:79
+#: core/templates/core/create_predefined_data_parameters.html:69
+msgid "Description"
+msgstr "መግለጫ"
+
+#: core/models.py:193
+msgid "Description of the unit"
+msgstr "የቤቱን መግለጫ"
+
+#: core/models.py:196 core/models.py:223
+#: core/templates/core/create_predefined_data_parameters.html:42
+#: core/templates/core/create_predefined_data_parameters.html:66
+msgid "Unit"
+msgstr "ክፍል"
+
+#: core/models.py:197
+msgid "Units"
+msgstr "አሃዶች"
+
+#: core/models.py:211
+msgid "Unit Registry"
+msgstr "ክፍል መዝገብ ቤት"
+
+#: core/models.py:216
+msgid "Meteorological"
+msgstr "ሜቶሮሎጂያዊ"
+
+#: core/models.py:217
+msgid "Environmental"
+msgstr "አካባቢያዊ"
+
+#: core/models.py:218
+msgid "Station Health"
+msgstr "የጣቢያ ጤና"
+
+#: core/models.py:219
+msgid "Communication"
+msgstr "መግባባት"
+
+#: core/models.py:222
+msgid "Name of the variable"
+msgstr "ተለዋዋጭ ስም"
+
+#: core/models.py:224
+msgid "Unit of the variable"
+msgstr "ተለዋዋጭው ክፍል"
+
+#: core/models.py:226
+msgid "Description of the variable"
+msgstr "የተለዋዋጭ መግለጫ"
+
+#: core/models.py:228
+msgid "Category"
+msgstr "ምድብ"
+
+#: core/models.py:228
+msgid "Type of parameter"
+msgstr "የመለኪያ አይነት"
+
+#: core/models.py:231
+msgid "Custom Unit Conversion Context"
+msgstr "ብጁ አሃድ የውይይት አውድ"
+
+#: core/models.py:232
+msgid "Context of the unit"
+msgstr "የቤቱን አውድ"
+
+#: core/models.py:243
+msgid "Data Parameter"
+msgstr "የውሂብ መለኪያ"
+
+#: core/models.py:244
+msgid "Data Parameters"
+msgstr "የውሂብ መለኪያዎች"
+
+#: core/models.py:256
+msgid ""
+"Cannot change unit of a parameter that has observation records in the "
+"database. Please remove the observation records first."
+msgstr ""
+"በመረጃ ቋቱ ውስጥ የመመልከቻ መዛግብቶች ያሉት የመግቢያ አሃድ መለካት አልተቻለም. እባክዎን የመጀመሪያውን የመምረጫ "
+"መዝገቦችን ያስወግዱ."
+
+#: core/models.py:295
+msgid "Select Country"
+msgstr "አገር ይምረጡ"
+
+#: core/models.py:295
+msgid "Country"
+msgstr "ሀገር"
+
+#: core/models.py:297
+msgid "Daily Aggregation Time"
+msgstr "ዕለታዊ ድምር ጊዜ"
+
+#: core/models.py:305 core/models.py:306
+msgid "ADL Settings"
+msgstr "Adl ቅንብሮች"
+
+#: core/models.py:311
+msgid "WIGOS ID of the station"
+msgstr "የጣቢያው ጣቢያው መታወቂያ"
+
+#: core/models.py:313
+msgid "Latitude of the station"
+msgstr "የጣቢያው ኬክሮስ"
+
+#: core/models.py:314
+msgid "Longitude of the station"
+msgstr "የጣቢያው ኬንትሮስ"
+
+#: core/models.py:315 core/templates/adl/import_oscar_surface_station.html:39
+msgid "Elevation"
+msgstr "ከፍታ"
+
+#: core/models.py:315
+msgid "Elevation of the station"
+msgstr "ጣቢያው ከፍታ"
+
+#: core/models.py:324
+msgid "Plugin"
+msgstr "መሰካት"
+
+#: core/models.py:325
+msgid "Plugin to use for this network"
+msgstr "ለዚህ አውታረ መረብ ለመጠቀም ተሰኪ"
+
+#: core/models.py:326
+msgid "Active"
+msgstr "ንቁ"
+
+#: core/models.py:327
+msgid "If unchecked, the plugin will NOT run automatically"
+msgstr "ካልተመረጠ ተሰኪው በራስ-ሰር አይሰራም"
+
+#: core/models.py:329
+msgid "Plugin Auto Processing Interval in Minutes"
+msgstr "ተሰኪው በራስ-ሰር የማስኬጃ የጊዜ ክፍተት በደቂቃዎች ውስጥ"
+
+#: core/models.py:331
+msgid "How often the plugin should run, in minutes"
+msgstr "ተሰኪው ስንት ጊዜ መሮጥ አለበት, በደቂቃዎች ውስጥ"
+
+#: core/models.py:336
+msgid "Is Daily Data"
+msgstr "በየቀኑ ውሂብ ነው"
+
+#: core/models.py:337
+msgid "Check to mark data from this connection as daily data"
+msgstr "እንደ ዕለታዊ መረጃዎች ከዚህ ግንኙነት ምልክት ምልክት ያድርጉ"
+
+#: core/models.py:346
+msgid "Plugin Configuration"
+msgstr "ተሰኪ ውቅር"
+
+#: core/models.py:351 core/models.py:360 core/models.py:396 core/models.py:442
+#: core/models.py:448 core/models.py:460
+msgid "Network Connection"
+msgstr "የአውታረ መረብ ግንኙነት"
+
+#: core/models.py:352 core/views.py:358 core/views.py:456
+msgid "Network Connections"
+msgstr "የአውታረ መረብ ግንኙነቶች"
+
+#: core/models.py:364 core/models.py:462
+msgid "Enabled"
+msgstr "ነቅቷል"
+
+#: core/models.py:365
+msgid "If unchecked, this station  will not be processed"
+msgstr "ካልተመረጠ ይህ ጣቢያ አይሰራም"
+
+#: core/models.py:367
+msgid "Aggregation Start Date"
+msgstr "ድምር የመጀመሪያ ቀን"
+
+#: core/models.py:368
+msgid ""
+"Date to start aggregation from. Leave empty to use the current date and time"
+msgstr "የተቆራረጠ ቀን ከ. የአሁኑን ቀን እና ሰዓት ለመጠቀም ባዶ ያድርጉት"
+
+#: core/models.py:376 core/models.py:490
+msgid "Base"
+msgstr "መሠረት"
+
+#: core/models.py:398 core/models.py:426 core/models.py:524
+#: core/templates/core/create_predefined_data_parameters.html:39
+msgid "Parameter"
+msgstr "ግቤት"
+
+#: core/models.py:399
+msgid "Value"
+msgstr "እሴት"
+
+#: core/models.py:400
+msgid "Is Daily"
+msgstr "በየቀኑ ነው"
+
+#: core/models.py:403
+msgid "Observation Record"
+msgstr "መዝገብ"
+
+#: core/models.py:404
+msgid "Observation Records"
+msgstr "የመመልከቻ መዝገብ"
+
+#: core/models.py:427
+msgid "Min Value"
+msgstr "አነስተኛ ዋጋ"
+
+#: core/models.py:428
+msgid "Max Value"
+msgstr "ከፍተኛ እሴት"
+
+#: core/models.py:429
+msgid "Avg Value"
+msgstr "AVG እሴት"
+
+#: core/models.py:430 core/models.py:518
+msgid "Sum Value"
+msgstr "ድምር እሴት"
+
+#: core/models.py:431
+msgid "Records Count"
+msgstr "መዛግብቶች ቆጠራ"
+
+#: core/models.py:454
+msgid "Hourly"
+msgstr "በየሰዓቱ"
+
+#: core/models.py:455
+msgid "Daily"
+msgstr "በየቀኑ"
+
+#: core/models.py:463
+msgid "Data Check Interval in Minutes"
+msgstr "የውሂብ ማረጋገጫ የጊዜ ክፍተት በደቂቃዎች ውስጥ"
+
+#: core/models.py:465
+msgid ""
+"How often the channel should check the database for new data, in minutes"
+msgstr "ሰርጡ ምን ያህል ጊዜ ለአዳዲስ ውሂብ የመረጃ ቋቱን ለመፈተሽ ምን ያህል ጊዜ ነው"
+
+#: core/models.py:471
+msgid "Starting date for the data to dispatch"
+msgstr "ለመላክ ለመረጃው የመነሻ ቀን"
+
+#: core/models.py:472
+msgid "Leave blank to use the whole data period"
+msgstr "አጠቃላይ የውሂብ ጊዜውን ለመጠቀም ባዶ ይተው"
+
+#: core/models.py:474
+msgid "Send Aggregated Data"
+msgstr "የተዋሃደ ውሂብን ይላኩ"
+
+#: core/models.py:476
+msgid "Aggregation Period"
+msgstr "አሰቃቂ ጊዜ"
+
+#: core/models.py:477
+msgid "Public URL"
+msgstr "የህዝብ ዩ አር ኤል"
+
+#: core/models.py:478
+msgid "Public URL of the channel,if available"
+msgstr "የሚገኘው የሰርጣው የህዝብ ዩ.አር.ኤል."
+
+#: core/models.py:494
+msgid "Parameter Mappings"
+msgstr "ልኬት ካርታዎች"
+
+#: core/models.py:517
+msgid "Average Value"
+msgstr "አማካይ እሴት"
+
+#: core/models.py:519
+msgid "Minimum Value"
+msgstr "አነስተኛ እሴት"
+
+#: core/models.py:520
+msgid "Maximum Value"
+msgstr "ከፍተኛ እሴት"
+
+#: core/models.py:525
+msgid "Channel Parameter"
+msgstr "የቻናል መለኪያ"
+
+#: core/models.py:526
+msgid "Parameter name in the channel"
+msgstr "በ <ሰርጥ> ውስጥ ግቤት ስም"
+
+#: core/models.py:528
+msgid "Channel Unit"
+msgstr "ቻናል አሃድ"
+
+#: core/models.py:529
+msgid "Unit of the parameter in the channel. Leave empty if the same"
+msgstr "በሰርጥ ውስጥ የመለኪያ አሃድ. ተመሳሳይ ከሆነ ባዶ ያድርጉ"
+
+#: core/models.py:533
+msgid "Aggregation Measure"
+msgstr "ድምር ልኬት"
+
+#: core/models.py:543
+msgid "Storage Endpoint"
+msgstr "የማጠራቀሚያ መስመር"
+
+#: core/models.py:544
+msgid "Storage Username"
+msgstr "የማጠራቀሚያ የተጠቃሚ ስም"
+
+#: core/models.py:545
+msgid "Storage Password"
+msgstr "የማጠራቀሚያ የይለፍ ቃል"
+
+#: core/models.py:546
+msgid "Use Secure Connection"
+msgstr "ደህንነቱ የተጠበቀ ግንኙነት ይጠቀሙ"
+
+#: core/models.py:547
+msgid "If checked, HTTPS connection will be used,otherwise HTTP"
+msgstr "ከተመረመረ የኤችቲቲፒኤስ ግንኙነት ጥቅም ላይ ይውላል, አለበለዚያ"
+
+#: core/models.py:548
+msgid "Dataset ID"
+msgstr "የውሂብ መታወቂያ መታወቂያ"
+
+#: core/models.py:557
+msgid "Wis2Box Storage Configuration"
+msgstr "የ Wind2box ማከማቻ ውቅር"
+
+#: core/models.py:561
+msgid "WIS2BOX Upload"
+msgstr "የ Wine2box Sons Sons"
+
+#: core/models.py:562
+msgid "WIS2BOX Uploads"
+msgstr "የ Wind2box ሰቀሮች"
+
+#: core/models.py:581
+msgid "Channel"
+msgstr "ቻናል"
+
+#: core/models.py:584
+msgid "Last Send Observation Time"
+msgstr "ለመጨረሻ ጊዜ የምርጫ ጊዜን ይላኩ"
+
+#: core/models.py:587 core/models.py:588
+msgid "Station Channel Dispatch Status"
+msgstr "ጣቢያ ጣቢያ ጣቢያ"
+
+#: core/templates/adl/home/adl_summary/adl_summary_networks.html:6
+#, python-format
+msgid "<span>%(total)s</span> Network <span class=\"w-sr-only\">created</span>"
+msgid_plural ""
+"<span>%(total)s</span> Networks <span class=\"w-sr-only\">created </span>"
+msgstr[0] ""
+msgstr[1] ""
+
+#: core/templates/adl/home/adl_summary/adl_summary_plugins.html:6
+#, python-format
+msgid "<span>%(total)s</span> Plugin <span class=\"w-sr-only\">installed</span>"
+msgid_plural ""
+"<span>%(total)s</span> Plugins <span class=\"w-sr-only\">installed </span>"
+msgstr[0] ""
+msgstr[1] ""
+
+#: core/templates/adl/home/adl_summary/adl_summary_stations.html:6
+#, python-format
+msgid "<span>%(total)s</span> Station <span class=\"w-sr-only\">created</span>"
+msgid_plural ""
+"<span>%(total)s</span> Stations <span class=\"w-sr-only\">created </span>"
+msgstr[0] ""
+msgstr[1] ""
+
+#: core/templates/adl/home/plugin_monitoring_panel.html:3
+msgid "Plugin Monitoring"
+msgstr "ተሰኪ ክትትል"
+
+#: core/templates/adl/import_oscar_surface_station.html:21
+msgid "Station Data to import"
+msgstr "ለማስመጣት ጣቢያዎች"
+
+#: core/templates/adl/import_oscar_surface_station.html:89
+msgid "Import"
+msgstr "ማስመጣት"
+
+#: core/templates/adl/load_stations_csv.html:13
+msgid "We found stations that were loaded previously. "
+msgstr "ቀደም ሲል የተጫኑ ጣቢያዎችን አገኘን."
+
+#: core/templates/adl/load_stations_csv.html:22
+msgid "Use existing Stations"
+msgstr "ነባር ጣቢያዎችን ይጠቀሙ"
+
+#: core/templates/adl/load_stations_csv.html:27
+msgid ""
+"If you wish to load/update the local copy stations, you can load the new CSV"
+" downloaded from OSCAR Surface "
+msgstr "የአካባቢውን ቅጂ ጣቢያዎች ለመጫን / ለማዘመን ከፈለጉ አዲሱን CSV ከኦስካር ወለል ማውረድ ይችላሉ"
+
+#: core/templates/adl/load_stations_csv.html:36
+msgid "Load new CSV file"
+msgstr "አዲስ የ CSV ፋይልን ይጫኑ"
+
+#: core/templates/adl/load_stations_csv.html:49
+msgid ""
+"Use this form to upload the CSV file manually downloaded from OSCAR Surface "
+"for your country"
+msgstr "የ CSV ፋይልን ከ OSVAR ወለል ጋር ወደ ሀገርዎ ለማውረድ ይህንን ቅጽ ይጠቀሙ"
+
+#: core/templates/adl/load_stations_csv.html:70
+msgid "Upload"
+msgstr "ይስቀሉ"
+
+#: core/templates/adl/load_stations_csv.html:77
+msgid "Data Preview"
+msgstr "የውሂብ ቅድመ-እይታ"
+
+#: core/templates/adl/load_stations_csv.html:86
+msgid ""
+"The following columns were not found in the uploaded file. Starred columns "
+"are required"
+msgstr "የሚቀጥሉት ዓምዶች በተሰቀሉት ፋይል ውስጥ አልተገኙም. ኮከብ የተያዙ አምዶች ያስፈልጋሉ"
+
+#: core/templates/adl/load_stations_oscar.html:13
+msgid "Country not set. Please set the country and try again"
+msgstr "ሀገር አልተዘጋችም. እባክዎን አገሪቱን ያዘጋጁ እና እንደገና ይሞክሩ"
+
+#: core/templates/adl/load_stations_oscar.html:22
+msgid "Set Country"
+msgstr "ሀገር አዘጋጅ"
+
+#: core/templates/adl/load_stations_oscar.html:29
+msgid "An error occured when fetching data from OSCAR Surface"
+msgstr "ከኦስካር ወለል ውሂብ በሚወጣበት ጊዜ አንድ ስህተት ተከስቷል"
+
+#: core/templates/adl/load_stations_oscar.html:37
+msgid "You can check your internet and try again"
+msgstr "በይነመረብዎን ማየት እና እንደገና መሞከር ይችላሉ"
+
+#: core/templates/adl/load_stations_oscar.html:42
+msgid ""
+"If you have a local copy of the stations CSV data as downloaded from OSCAR "
+"Surface, you can import and use the local copy"
+msgstr ""
+"ከ Ocscar ወለል እንደተወረወሩ የጆርኪዎች የ CSV ውሂብ ከያዙ የአከባቢውን ቅጂ ማስመጣት እና መጠቀም ይችላሉ"
+
+#: core/templates/adl/load_stations_oscar.html:52
+msgid "Load from local CSV copy"
+msgstr "ከአካባቢያዊ CSV ቅጂ ይጫናል"
+
+#: core/templates/adl/load_stations_oscar.html:64
+msgid ""
+"No Stations were found in the local copy of stations downloaded from OSCAR "
+"Surface"
+msgstr "ከኦስካር ወለል በወረቁበት የአካባቢያዊ ጣቢያዎች ቅጂ ውስጥ ምንም ጣቢያዎች አልተገኙም"
+
+#: core/templates/adl/load_stations_oscar.html:75
+msgid "Load local CSV File"
+msgstr "የአካባቢውን CSV ፋይል ይጫኑ"
+
+#: core/templates/adl/load_stations_oscar.html:85
+msgid ""
+"The stations loaded below are from a locally uploaded copy of the stations, "
+"manually downloaded from OSCAR Surface"
+msgstr ""
+"ከዚህ በታች የተጫኑት ጣቢያዎች ከኦስካር ወለል ከ PASSCAND የወረዱ ጣቢያዎች ከኦፕሬሽር ከተጫነ ኮፒዎች ናቸው"
+
+#: core/templates/adl/load_stations_oscar.html:89
+msgid ""
+"If you have a working internet connection, it is recommended to use the live"
+" version that connects automatically to OSCAR Surface"
+msgstr ""
+"የሥራ የበይነመረብ ግንኙነት ካለዎት, ወደ ኦስካር ወለል በራስ-ሰር የሚያገናኝ የቀጥታ ስሪት እንዲጠቀም ይመከራል"
+
+#: core/templates/adl/load_stations_oscar.html:98
+msgid "Load stations directly from OSCAR"
+msgstr "ከኦስካር በቀጥታ ጭነት ጣቢያዎችን ይጫኑ"
+
+#: core/templates/adl/load_stations_oscar.html:107
+msgid "WMO OSCAR Surface Stations for"
+msgstr "የ WM OOCARAS ወለል ጣቢያዎች ለ"
+
+#: core/templates/adl/load_stations_oscar.html:122
+msgid "Added to Database"
+msgstr "ወደ የመረጃ ቋት ታክሏል"
+
+#: core/templates/adl/load_stations_oscar.html:125
+msgid "Assigned Network"
+msgstr "የተመደበ አውታረ መረብ"
+
+#: core/templates/adl/load_stations_oscar.html:161
+msgid "Added"
+msgstr "ታክሏል"
+
+#: core/templates/adl/load_stations_oscar.html:170
+msgid "Import Station"
+msgstr "አስመጪ ጣቢያ"
+
+#: core/templates/adl/stations_csv_template.html:45
+msgid "Download Template"
+msgstr "አብነት ያውርዱ"
+
+#: core/templates/adl/stations_csv_template.html:54
+msgid "Stations CSV Columns"
+msgstr "የ CSV አምዶች"
+
+#: core/templates/adl/stations_csv_template.html:70
+msgid "Column"
+msgstr "አምድ"
+
+#: core/templates/adl/stations_csv_template.html:73
+msgid "Required"
+msgstr "ያስፈልጋል"
+
+#: core/templates/adl/stations_csv_template.html:76
+msgid "Data Type"
+msgstr "የውሂብ አይነት"
+
+#: core/templates/adl/stations_csv_template.html:82
+msgid "Choices"
+msgstr "ምርጫዎች"
+
+#: core/templates/adl/stations_csv_template.html:95
+msgid "Yes"
+msgstr "አዎ"
+
+#: core/templates/core/create_predefined_data_parameters.html:11
+msgid "One or more parameters already exist in the database"
+msgstr "በመረጃ ቋቱ ውስጥ አንድ ወይም ከዚያ በላይ መለኪያዎች ቀድሞውኑ አሉ"
+
+#: core/templates/core/create_predefined_data_parameters.html:20
+msgid ""
+"Please note that this section helps you to create some default parameters to"
+" use in the system. This is not a required step, but it is available to help"
+" you get started with some parameters."
+msgstr ""
+"እባክዎን ያስተውሉ ይህ ክፍል በስርዓቱ ውስጥ ለመጠቀም የተወሰኑ ነባሪ መለኪያዎች ለመፍጠር እንደሚረዳዎት እባክዎ ልብ "
+"ይበሉ. ይህ አስፈላጊ እርምጃ አይደለም, ግን በአንዳንድ ልኬቶች እንዲጀምሩ ለማገዝ ይገኛል."
+
+#: core/templates/core/create_predefined_data_parameters.html:25
+#, python-format
+msgid ""
+"Here we are using the %(gbon_link)s parameters as a starting point. You will"
+" still be able to add or modify Data Parameters as needed for your data."
+msgstr ""
+"እዚህ እኛ %(gbon_link)s መነሻ ነጥቦችን እንደ መጀመር እንጠቀማለን. ለተንቀሳቃሽ ውሂብዎ እንደአስፈላጊነቱ "
+"የውሂብ መለኪያዎች ማከል ወይም ማሻሻል ይችላሉ."
+
+#: core/templates/core/create_predefined_data_parameters.html:32
+msgid "The following Data parameters and corresponding Units will be created"
+msgstr "የሚከተሉት የውሂብ መለኪያዎች እና ተጓዳኝ ክፍሎች ይፈጠራሉ"
+
+#: core/templates/core/create_predefined_data_parameters.html:59
+msgid ""
+"The following optional conversion units will also be created if checked, and"
+" not already existing in the system"
+msgstr "የሚከተለው አማራጭ የውይይት መለዋወጫዎች እንዲሁ ከተመረመሩ, እና በስርዓቱ ውስጥ ቀድሞውኑ አልነበሩም"
+
+#: core/templates/core/create_predefined_data_parameters.html:112
+msgid "Create"
+msgstr "ፍጠር"
+
+#: core/templates/core/data_parameter_index_results.html:6
+#, python-format
+msgid "There are no %(model_name)s to display."
+msgstr "ምንም %(model_name)s."
+
+#: core/templates/core/data_parameter_index_results.html:16
+msgid "Create from predefined parameters"
+msgstr "ከተቀረጹ መለኪያዎች ፍጠር"
+
+#: core/units.py:108
+#, python-format
+msgid "'%(unit)s' is not defined in the unit registry"
+msgstr "'%(unit)s' በክፍሉ መዝገብ መዝገብ ውስጥ አልተገለጸም"
+
+#: core/views.py:67
+msgid "Stations loaded successfully."
+msgstr "ጣቢያዎች በተሳካ ሁኔታ ተጭነዋል."
+
+#: core/views.py:80 core/views.py:131 core/views.py:218 core/views.py:357
+#: core/views.py:455 core/views.py:508 core/views.py:566
+msgid "Home"
+msgstr "ቤት"
+
+#: core/views.py:81 core/views.py:132 core/views.py:219 core/views.py:567
+msgid "Snippets"
+msgstr "ስፕሊት"
+
+#: core/views.py:83
+msgid "Load Stations from CSV"
+msgstr "ከ CSV ጭነት ጭነቶች"
+
+#: core/views.py:134 core/wagtail_hooks.py:198
+msgid "Load Stations from OSCAR Surface"
+msgstr "ከኦስካር ወለል ላይ ጭነት ጣቢያዎች"
+
+#: core/views.py:221
+msgid "OSCAR Stations"
+msgstr "ኦስካር ጣቢያዎች"
+
+#: core/views.py:222
+msgid "Import OSCAR Station"
+msgstr "ኦስካር ጣቢያ ያስመጡ"
+
+#: core/views.py:234
+msgid "Please set the country in the settings."
+msgstr "እባክዎን አገሪቱን በቅንብሮች ውስጥ ያዘጋጁ."
+
+#: core/views.py:276
+msgid "Station imported successfully."
+msgstr "ጣቢያው በተሳካ ሁኔታ ተፈጠረ."
+
+#: core/views.py:299
+msgid "Station not found in OSCAR database."
+msgstr "በኦስካር ዳታቤዝ ውስጥ አልተገኘም."
+
+#: core/views.py:424 core/wagtail_hooks.py:150
+msgid "Stations Link"
+msgstr "ጣቢያዎች አገናኝ"
+
+#: core/views.py:426
+msgid "Options"
+msgstr "አማራጮች"
+
+#: core/views.py:433
+msgid "Add Connection"
+msgstr "የግንኙነት ያክሉ"
+
+#: core/views.py:457
+msgid "Select Connection Type"
+msgstr "የግንኙነት አይነት ይምረጡ"
+
+#: core/views.py:509 core/views.py:568 core/wagtail_hooks.py:331
+msgid "Dispatch Channels"
+msgstr "ጣቢያ ጣቢያዎች"
+
+#: core/views.py:544
+msgid "Add Dispatch Channel"
+msgstr "የውድድር ጣቢያ ያክሉ"
+
+#: core/views.py:569
+msgid "Select Dispatch Channel Type"
+msgstr "የ Strack Chansel አይነት ይምረጡ"
+
+#: core/views.py:664
+msgid "Predefined parameters created successfully."
+msgstr "የታሸጉ ልኬቶች በተሳካ ሁኔታ ተፈጥረዋል."
+
+#: core/views.py:668
+msgid "Error creating predefined parameters: "
+msgstr "ቀደም ሲል የታሰሩ መለኪያዎች መፍጠር ስህተት"
+
+#: core/views.py:673
+msgid "Predefined Data Parameters"
+msgstr "የተዘረዘሩ የውጤቶች መለኪያዎች"
+
+#: core/wagtail_hooks.py:131
+msgid "Station Link"
+msgstr "የጣቢያ አገናኝ"
+
+#: core/wagtail_hooks.py:241
+msgid "Create from Predefined Data Parameters"
+msgstr "ከተቀረጹ የውሂብ መለኪያዎች ፍጠር"
+
+#: core/wagtail_hooks.py:324
+msgid "Connections"
+msgstr "ግንኙነቶች"

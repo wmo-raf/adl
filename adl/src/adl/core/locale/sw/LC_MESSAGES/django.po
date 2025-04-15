@@ -1,0 +1,1139 @@
+# SOME DESCRIPTIVE TITLE.
+# Copyright (C) YEAR THE PACKAGE'S COPYRIGHT HOLDER
+# This file is distributed under the same license as the PACKAGE package.
+# FIRST AUTHOR <EMAIL@ADDRESS>, YEAR.
+#
+#, fuzzy
+msgid ""
+msgstr ""
+"Project-Id-Version: PACKAGE VERSION\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2025-04-15 11:40+0000\n"
+"PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
+"Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
+"Language-Team: LANGUAGE <LL@li.org>\n"
+"Language: \n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+
+#: core/constants.py:7 core/forms.py:73 core/models.py:85
+msgid "Station ID"
+msgstr "Kituo cha kitambulisho"
+
+#: core/constants.py:8 core/models.py:86
+msgid "Unique Station Identifier"
+msgstr "Kitambulisho cha Kituo cha kipekee"
+
+#: core/constants.py:14 core/constants.py:15
+msgid "Station Name"
+msgstr "Jina la kituo"
+
+#: core/constants.py:21 core/constants.py:22 core/models.py:311
+#: core/templates/adl/import_oscar_surface_station.html:27
+#: core/templates/adl/load_stations_oscar.html:115
+msgid "WIGOS ID"
+msgstr "Id ya Wigis"
+
+#: core/constants.py:28 core/models.py:98
+msgid "Station Type"
+msgstr "Aina ya kituo"
+
+#: core/constants.py:29
+msgid "Type of observing station, encoding using code table 0 02 001"
+msgstr ""
+"Aina ya kituo cha kuangalia, encoding kwa kutumia jedwali la nambari 0 02 "
+"001"
+
+#: core/constants.py:31 core/forms.py:68 core/models.py:63
+msgid "Automatic"
+msgstr "Moja kwa moja"
+
+#: core/constants.py:32 core/forms.py:69 core/models.py:64
+msgid "Manned"
+msgstr "Manned"
+
+#: core/constants.py:33 core/forms.py:70 core/models.py:65
+msgid "Hybrid: both automatic and manned"
+msgstr "Hybrid: moja kwa moja na manned"
+
+#: core/constants.py:41 core/models.py:313
+#: core/templates/adl/import_oscar_surface_station.html:36
+msgid "Latitude"
+msgstr "Latitudo"
+
+#: core/constants.py:42
+msgid "Latitude of the station (to 5 decimal places)"
+msgstr "Latitudo ya kituo (hadi maeneo 5 ya decimal)"
+
+#: core/constants.py:48 core/models.py:314
+#: core/templates/adl/import_oscar_surface_station.html:33
+msgid "Longitude"
+msgstr "Longitudo"
+
+#: core/constants.py:49
+msgid "Longitude of the station (to 5 decimal places)"
+msgstr "Longitudo ya kituo (hadi maeneo 5 ya decimal)"
+
+#: core/constants.py:55 core/models.py:102
+msgid "Station Height Above MSL"
+msgstr "Urefu wa kituo juu ya MSL"
+
+#: core/constants.py:56 core/models.py:103
+msgid "Height of the station ground above mean sea level (to 1 decimal place)"
+msgstr ""
+"Urefu wa ardhi ya kituo hapo juu inamaanisha usawa wa bahari (hadi 1 mahali "
+"pa decimal)"
+
+#: core/constants.py:62 core/models.py:108
+msgid "Barometer Height Above MSL"
+msgstr "Urefu wa Barometer juu ya MSL"
+
+#: core/constants.py:63 core/models.py:109
+msgid ""
+"Height of the barometer above mean sea level (to 1 decimal place), typically"
+" height of station ground plus the height of the sensor above local ground"
+msgstr ""
+"Urefu wa barometer hapo juu inamaanisha kiwango cha bahari (hadi mahali pa "
+"1), kawaida urefu wa kituo cha kituo pamoja na urefu wa sensor juu ya ardhi "
+"ya ndani"
+
+#: core/constants.py:70 core/models.py:105
+msgid "Thermometer Height"
+msgstr "Urefu wa thermometer"
+
+#: core/constants.py:71 core/models.py:106
+msgid ""
+"Height of thermometer or temperature sensor above the local ground to 2 "
+"decimal places"
+msgstr ""
+"Urefu wa thermometer au sensor ya joto juu ya ardhi ya ndani hadi maeneo 2 "
+"ya decimal"
+
+#: core/constants.py:77 core/models.py:113
+msgid "Anemometer Height"
+msgstr "Urefu wa anemometer"
+
+#: core/constants.py:78
+msgid "Height of the anemometer above local ground to 2 decimal place"
+msgstr "Urefu wa anemometer juu ya ardhi ya ndani hadi mahali 2 decimal"
+
+#: core/constants.py:84 core/models.py:116
+msgid "Rain Sensor Height"
+msgstr "Urefu wa sensor ya mvua"
+
+#: core/constants.py:85 core/models.py:117
+msgid "Height of the rain gauge above local ground to 2 decimal place"
+msgstr "Urefu wa chachi ya mvua juu ya ardhi ya ndani hadi mahali 2 decimal"
+
+#: core/constants.py:91 core/models.py:121
+msgid "Method of Ground State Measurement"
+msgstr "Njia ya kipimo cha hali ya ardhi"
+
+#: core/constants.py:92
+msgid ""
+"Method of observing the state of the ground, encoded using code table 0 02 "
+"176"
+msgstr ""
+"Njia ya kuangalia hali ya ardhi, iliyosimbwa kwa kutumia Jedwali la Msimbo 0"
+" 02 176"
+
+#: core/constants.py:97 core/constants.py:113 core/models.py:69
+#: core/models.py:78
+msgid "Manual observation"
+msgstr "Uchunguzi wa mwongozo"
+
+#: core/constants.py:98 core/constants.py:115 core/models.py:70
+#: core/models.py:80
+msgid "Video camera method"
+msgstr "Njia ya kamera ya video"
+
+#: core/constants.py:99 core/models.py:71
+msgid "Infrared method"
+msgstr "Njia ya infrared"
+
+#: core/constants.py:100 core/constants.py:116 core/models.py:72
+#: core/models.py:81
+msgid "Laser method"
+msgstr "Njia ya laser"
+
+#: core/constants.py:101 core/constants.py:117 core/models.py:73
+#: core/models.py:82
+msgid "Others"
+msgstr "Wengine"
+
+#: core/constants.py:102 core/constants.py:118 core/models.py:74
+#: core/models.py:83
+msgid "Missing value"
+msgstr "Thamani ya kukosa"
+
+#: core/constants.py:107 core/models.py:126
+msgid "Method of Snow Depth Measurement"
+msgstr "Njia ya kipimo cha kina cha theluji"
+
+#: core/constants.py:108 core/models.py:123 core/models.py:127
+msgid "Method of observing the snow depth encoded using code table 0 02 177"
+msgstr ""
+"Njia ya kuangalia kina cha theluji kilichowekwa kwa kutumia Jedwali la "
+"Msimbo 0 02 177"
+
+#: core/constants.py:114 core/models.py:79
+msgid "Ultrasonic method"
+msgstr "Njia ya Ultrasonic"
+
+#: core/constants.py:123 core/models.py:129
+msgid "Time Period of Wind"
+msgstr "Kipindi cha upepo"
+
+#: core/constants.py:125
+msgid ""
+"Time period over which the wind speed and direction have been averegd. 10 "
+"minutes in normal cases or the number of minutes since a significant change "
+"occuring in the preceeding 10 minutes."
+msgstr ""
+"Kipindi cha wakati ambacho kasi ya upepo na mwelekeo imekuwa Averegd. Dakika"
+" 10 katika hali ya kawaida au idadi ya dakika kwani mabadiliko makubwa "
+"yanajitokeza katika dakika 10 zilizopita."
+
+#: core/constants.py:144
+msgid "Temperature"
+msgstr "Joto"
+
+#: core/constants.py:146
+msgid "Degree Celsius"
+msgstr "Digrii Celsius"
+
+#: core/constants.py:150
+msgid "Kelvin"
+msgstr "Kelvin"
+
+#: core/constants.py:151
+msgid "For converting Temperature from Celsius to Kelvin"
+msgstr "Kwa kubadilisha joto kutoka Celsius kwenda Kelvin"
+
+#: core/constants.py:156
+msgid "Relative Humidity"
+msgstr "Unyevu wa jamaa"
+
+#: core/constants.py:158
+msgid "Percent"
+msgstr "Asilimia"
+
+#: core/constants.py:163
+msgid "Atmospheric Pressure"
+msgstr "Shinikizo la anga"
+
+#: core/constants.py:165
+msgid "Hectopascal"
+msgstr "Hectopascal"
+
+#: core/constants.py:169
+msgid "Pascal"
+msgstr "Pascal"
+
+#: core/constants.py:170
+msgid "For converting Pressure from hectopascal to pascal"
+msgstr "Kwa kubadilisha shinikizo kutoka hectopascal kwenda Pascal"
+
+#: core/constants.py:175
+msgid "Wind Speed"
+msgstr "Kasi ya upepo"
+
+#: core/constants.py:177
+msgid "Meters per Second"
+msgstr "Mita kwa sekunde"
+
+#: core/constants.py:182
+msgid "Wind Direction"
+msgstr "Mwelekeo wa upepo"
+
+#: core/constants.py:184
+msgid "Degrees"
+msgstr "Digrii"
+
+#: core/constants.py:189 core/units.py:90
+msgid "Precipitation"
+msgstr "Usafirishaji"
+
+#: core/constants.py:191
+msgid "Millimeters"
+msgstr "Milimita"
+
+#: core/constants.py:196
+msgid "Kilogram per Square Meter"
+msgstr "Kilo kwa mita ya mraba"
+
+#: core/constants.py:197
+msgid ""
+"For converting Precipitation from millimeters to kilograms per square meter"
+msgstr "Kwa kubadilisha mvua kutoka milimita hadi kilo kwa mita ya mraba"
+
+#: core/forms.py:11
+msgid "File"
+msgstr "Faili"
+
+#: core/forms.py:11
+msgid "CSV file"
+msgstr "Faili ya CSV"
+
+#: core/forms.py:63 core/models.py:54 core/models.py:88 core/models.py:323
+msgid "Network"
+msgstr "Mtandao"
+
+#: core/forms.py:74 core/models.py:94
+msgid "WMO Block Number"
+msgstr "Nambari ya kuzuia WMO"
+
+#: core/forms.py:75 core/models.py:97
+msgid "WMO Station Number"
+msgstr "Nambari ya kituo cha WMO"
+
+#: core/forms.py:77
+msgid "Assign Network"
+msgstr "Agiza mtandao"
+
+#: core/forms.py:78
+msgid "Assign Station Type"
+msgstr "Agiza aina ya kituo"
+
+#: core/forms.py:84
+msgid "Create optional conversion Units"
+msgstr "Unda vitengo vya ubadilishaji wa hiari"
+
+#: core/models.py:38
+msgid "Automatic Weather Stations"
+msgstr "Vituo vya hali ya hewa moja kwa moja"
+
+#: core/models.py:39
+msgid "Manual Weather Stations"
+msgstr "Vituo vya hali ya hewa ya mwongozo"
+
+#: core/models.py:42 core/models.py:87 core/models.py:189 core/models.py:222
+#: core/models.py:310 core/models.py:322 core/models.py:458
+#: core/templates/adl/import_oscar_surface_station.html:30
+#: core/templates/adl/load_stations_oscar.html:119 core/views.py:423
+#: core/views.py:488 core/views.py:537 core/views.py:601
+msgid "Name"
+msgstr "Jina"
+
+#: core/models.py:42
+msgid "Name of the network"
+msgstr "Jina la mtandao"
+
+#: core/models.py:43
+msgid "Weather Stations Type"
+msgstr "Aina ya vituo vya hali ya hewa"
+
+#: core/models.py:44
+msgid "Weather station type"
+msgstr "Aina ya kituo cha hali ya hewa"
+
+#: core/models.py:55
+msgid "Networks"
+msgstr "Mitandao"
+
+#: core/models.py:87 core/models.py:310
+msgid "Name of the station"
+msgstr "Jina la kituo"
+
+#: core/models.py:89
+msgid "WSI Series"
+msgstr "Mfululizo wa WSI"
+
+#: core/models.py:89
+msgid "WIGOS identifier series"
+msgstr "Mfululizo wa kitambulisho cha Wigis"
+
+#: core/models.py:90
+msgid "WSI Issuer"
+msgstr "Mtoaji wa WSI"
+
+#: core/models.py:90
+msgid "WIGOS issuer of identifier"
+msgstr "Mtoaji wa Wigos wa kitambulisho"
+
+#: core/models.py:91
+msgid "WSI Issue Number"
+msgstr "Nambari ya suala la WSI"
+
+#: core/models.py:92
+msgid "WIGOS issue number"
+msgstr "Nambari ya suala la Wigis"
+
+#: core/models.py:93
+msgid "WSI Local"
+msgstr "WSI wa ndani"
+
+#: core/models.py:93
+msgid "WIGOS local identifier"
+msgstr "Kitambulisho cha Mitaa cha Wigis"
+
+#: core/models.py:94
+msgid "WMO block number"
+msgstr "Nambari ya kuzuia WMO"
+
+#: core/models.py:97
+msgid "WMO station number"
+msgstr "Nambari ya kituo cha WMO"
+
+#: core/models.py:99
+msgid ""
+"Type of observing station, encoding using code table 0 02 001 (set to 0, "
+"automatic)"
+msgstr ""
+"Aina ya kituo cha kuangalia, encoding kwa kutumia jedwali la nambari 0 02 "
+"001 (iliyowekwa kwa 0, moja kwa moja)"
+
+#: core/models.py:101
+msgid "Location"
+msgstr "Mahali"
+
+#: core/models.py:101
+msgid "Location of the station"
+msgstr "Mahali pa kituo"
+
+#: core/models.py:114
+msgid "Height of the anemometer above local ground to 2 decimal places"
+msgstr "Urefu wa anemometer juu ya ardhi ya ndani hadi maeneo 2 ya decimal"
+
+#: core/models.py:130
+msgid ""
+"Time period over which the wind speed and direction have been averaged. 10 "
+"minutes in normal cases or the number of minutes since a significant change "
+"occuring in the preceeding 10 minutes."
+msgstr ""
+"Kipindi cha wakati juu ambayo kasi ya upepo na mwelekeo vimepatikana. Dakika"
+" 10 katika hali ya kawaida au idadi ya dakika kwani mabadiliko makubwa "
+"yanajitokeza katika dakika 10 zilizopita."
+
+#: core/models.py:135
+msgid "Station Timezone"
+msgstr "Kituo cha saa"
+
+#: core/models.py:136
+msgid "Timezone used by the station for recording observations"
+msgstr "Timezone inayotumiwa na kituo cha kurekodi uchunguzi"
+
+#: core/models.py:168
+msgid "Base Information"
+msgstr "Habari ya msingi"
+
+#: core/models.py:169
+msgid "WIGOS Identification"
+msgstr "Kitambulisho cha wigos"
+
+#: core/models.py:170
+msgid "Metadata"
+msgstr "Metadata"
+
+#: core/models.py:174 core/models.py:362 core/models.py:395 core/models.py:425
+#: core/models.py:583
+msgid "Station"
+msgstr "Kituo"
+
+#: core/models.py:175 core/views.py:82 core/views.py:133 core/views.py:220
+msgid "Stations"
+msgstr "Vituo"
+
+#: core/models.py:189
+msgid "Name of the unit"
+msgstr "Jina la kitengo"
+
+#: core/models.py:190
+msgid "Symbol"
+msgstr "Ishara"
+
+#: core/models.py:190
+msgid "Symbol of the unit"
+msgstr "Ishara ya kitengo"
+
+#: core/models.py:192 core/models.py:225
+#: core/templates/adl/stations_csv_template.html:79
+#: core/templates/core/create_predefined_data_parameters.html:69
+msgid "Description"
+msgstr "Maelezo"
+
+#: core/models.py:193
+msgid "Description of the unit"
+msgstr "Maelezo ya kitengo"
+
+#: core/models.py:196 core/models.py:223
+#: core/templates/core/create_predefined_data_parameters.html:42
+#: core/templates/core/create_predefined_data_parameters.html:66
+msgid "Unit"
+msgstr "Sehemu"
+
+#: core/models.py:197
+msgid "Units"
+msgstr "Vitengo"
+
+#: core/models.py:211
+msgid "Unit Registry"
+msgstr "Usajili wa Kitengo"
+
+#: core/models.py:216
+msgid "Meteorological"
+msgstr "Hali ya hewa"
+
+#: core/models.py:217
+msgid "Environmental"
+msgstr "Mazingira"
+
+#: core/models.py:218
+msgid "Station Health"
+msgstr "Afya ya kituo"
+
+#: core/models.py:219
+msgid "Communication"
+msgstr "Mawasiliano"
+
+#: core/models.py:222
+msgid "Name of the variable"
+msgstr "Jina la kutofautisha"
+
+#: core/models.py:224
+msgid "Unit of the variable"
+msgstr "Sehemu ya kutofautisha"
+
+#: core/models.py:226
+msgid "Description of the variable"
+msgstr "Maelezo ya kutofautisha"
+
+#: core/models.py:228
+msgid "Category"
+msgstr "Jamii"
+
+#: core/models.py:228
+msgid "Type of parameter"
+msgstr "Aina ya parameta"
+
+#: core/models.py:231
+msgid "Custom Unit Conversion Context"
+msgstr "Muktadha wa ubadilishaji wa kitengo"
+
+#: core/models.py:232
+msgid "Context of the unit"
+msgstr "Muktadha wa kitengo"
+
+#: core/models.py:243
+msgid "Data Parameter"
+msgstr "Param ya data"
+
+#: core/models.py:244
+msgid "Data Parameters"
+msgstr "Vigezo vya data"
+
+#: core/models.py:256
+msgid ""
+"Cannot change unit of a parameter that has observation records in the "
+"database. Please remove the observation records first."
+msgstr ""
+"Haiwezi kubadilisha kitengo cha paramu ambayo ina rekodi za uchunguzi katika"
+" hifadhidata. Tafadhali ondoa rekodi za uchunguzi kwanza."
+
+#: core/models.py:295
+msgid "Select Country"
+msgstr "Chagua nchi"
+
+#: core/models.py:295
+msgid "Country"
+msgstr "Nchi"
+
+#: core/models.py:297
+msgid "Daily Aggregation Time"
+msgstr "Wakati wa mkusanyiko wa kila siku"
+
+#: core/models.py:305 core/models.py:306
+msgid "ADL Settings"
+msgstr "Mipangilio ya ADL"
+
+#: core/models.py:311
+msgid "WIGOS ID of the station"
+msgstr "Kitambulisho cha Wigos cha kituo"
+
+#: core/models.py:313
+msgid "Latitude of the station"
+msgstr "Latitudo ya kituo"
+
+#: core/models.py:314
+msgid "Longitude of the station"
+msgstr "Longitude ya kituo"
+
+#: core/models.py:315 core/templates/adl/import_oscar_surface_station.html:39
+msgid "Elevation"
+msgstr "Mwinuko"
+
+#: core/models.py:315
+msgid "Elevation of the station"
+msgstr "Mwinuko wa kituo"
+
+#: core/models.py:324
+msgid "Plugin"
+msgstr "Programu -jalizi"
+
+#: core/models.py:325
+msgid "Plugin to use for this network"
+msgstr "Programu -jalizi ya kutumia kwa mtandao huu"
+
+#: core/models.py:326
+msgid "Active"
+msgstr "Kazi"
+
+#: core/models.py:327
+msgid "If unchecked, the plugin will NOT run automatically"
+msgstr "Ikiwa haijatatuliwa, programu -jalizi haitaendesha moja kwa moja"
+
+#: core/models.py:329
+msgid "Plugin Auto Processing Interval in Minutes"
+msgstr "Programu ya usindikaji wa kiotomatiki kwa dakika"
+
+#: core/models.py:331
+msgid "How often the plugin should run, in minutes"
+msgstr "Ni mara ngapi programu -jalizi inapaswa kukimbia, kwa dakika"
+
+#: core/models.py:336
+msgid "Is Daily Data"
+msgstr "Ni data ya kila siku"
+
+#: core/models.py:337
+msgid "Check to mark data from this connection as daily data"
+msgstr ""
+"Angalia alama ya data kutoka kwa unganisho hili kama data ya kila siku"
+
+#: core/models.py:346
+msgid "Plugin Configuration"
+msgstr "Usanidi wa programu -jalizi"
+
+#: core/models.py:351 core/models.py:360 core/models.py:396 core/models.py:442
+#: core/models.py:448 core/models.py:460
+msgid "Network Connection"
+msgstr "Unganisho la mtandao"
+
+#: core/models.py:352 core/views.py:358 core/views.py:456
+msgid "Network Connections"
+msgstr "Viunganisho vya mtandao"
+
+#: core/models.py:364 core/models.py:462
+msgid "Enabled"
+msgstr "Kuwezeshwa"
+
+#: core/models.py:365
+msgid "If unchecked, this station  will not be processed"
+msgstr "Ikiwa haijatatuliwa, kituo hiki hakitashughulikiwa"
+
+#: core/models.py:367
+msgid "Aggregation Start Date"
+msgstr "Tarehe ya kuanza"
+
+#: core/models.py:368
+msgid ""
+"Date to start aggregation from. Leave empty to use the current date and time"
+msgstr ""
+"Tarehe ya kuanza mkusanyiko kutoka. Acha tupu kutumia tarehe na wakati wa "
+"sasa"
+
+#: core/models.py:376 core/models.py:490
+msgid "Base"
+msgstr "Msingi"
+
+#: core/models.py:398 core/models.py:426 core/models.py:524
+#: core/templates/core/create_predefined_data_parameters.html:39
+msgid "Parameter"
+msgstr "Parameta"
+
+#: core/models.py:399
+msgid "Value"
+msgstr "Thamani"
+
+#: core/models.py:400
+msgid "Is Daily"
+msgstr "Ni kila siku"
+
+#: core/models.py:403
+msgid "Observation Record"
+msgstr "Rekodi ya uchunguzi"
+
+#: core/models.py:404
+msgid "Observation Records"
+msgstr "Rekodi za uchunguzi"
+
+#: core/models.py:427
+msgid "Min Value"
+msgstr "Thamani ya min"
+
+#: core/models.py:428
+msgid "Max Value"
+msgstr "Thamani ya Max"
+
+#: core/models.py:429
+msgid "Avg Value"
+msgstr "Thamani ya AVG"
+
+#: core/models.py:430 core/models.py:518
+msgid "Sum Value"
+msgstr "Thamani ya jumla"
+
+#: core/models.py:431
+msgid "Records Count"
+msgstr "Rekodi za kuhesabu"
+
+#: core/models.py:454
+msgid "Hourly"
+msgstr "Saa"
+
+#: core/models.py:455
+msgid "Daily"
+msgstr "Kila siku"
+
+#: core/models.py:463
+msgid "Data Check Interval in Minutes"
+msgstr "Takwimu za kuangalia muda katika dakika"
+
+#: core/models.py:465
+msgid ""
+"How often the channel should check the database for new data, in minutes"
+msgstr ""
+"Ni mara ngapi kituo kinapaswa kuangalia hifadhidata ya data mpya, kwa dakika"
+
+#: core/models.py:471
+msgid "Starting date for the data to dispatch"
+msgstr "Tarehe ya kuanza kwa data kusafirisha"
+
+#: core/models.py:472
+msgid "Leave blank to use the whole data period"
+msgstr "Acha tupu kutumia kipindi chote cha data"
+
+#: core/models.py:474
+msgid "Send Aggregated Data"
+msgstr "Tuma data iliyojumuishwa"
+
+#: core/models.py:476
+msgid "Aggregation Period"
+msgstr "Kipindi cha mkusanyiko"
+
+#: core/models.py:477
+msgid "Public URL"
+msgstr "URL ya umma"
+
+#: core/models.py:478
+msgid "Public URL of the channel,if available"
+msgstr "URL ya umma ya kituo, ikiwa inapatikana"
+
+#: core/models.py:494
+msgid "Parameter Mappings"
+msgstr "Mappings za paramu"
+
+#: core/models.py:517
+msgid "Average Value"
+msgstr "Thamani ya wastani"
+
+#: core/models.py:519
+msgid "Minimum Value"
+msgstr "Thamani ya chini"
+
+#: core/models.py:520
+msgid "Maximum Value"
+msgstr "Thamani ya kiwango cha juu"
+
+#: core/models.py:525
+msgid "Channel Parameter"
+msgstr "Param ya kituo"
+
+#: core/models.py:526
+msgid "Parameter name in the channel"
+msgstr "Jina la parameta kwenye kituo"
+
+#: core/models.py:528
+msgid "Channel Unit"
+msgstr "Kitengo cha kituo"
+
+#: core/models.py:529
+msgid "Unit of the parameter in the channel. Leave empty if the same"
+msgstr "Sehemu ya parameta katika kituo. Acha tupu ikiwa sawa"
+
+#: core/models.py:533
+msgid "Aggregation Measure"
+msgstr "Kipimo cha mkusanyiko"
+
+#: core/models.py:543
+msgid "Storage Endpoint"
+msgstr "Mwisho wa kuhifadhi"
+
+#: core/models.py:544
+msgid "Storage Username"
+msgstr "Jina la mtumiaji la kuhifadhi"
+
+#: core/models.py:545
+msgid "Storage Password"
+msgstr "Nywila ya kuhifadhi"
+
+#: core/models.py:546
+msgid "Use Secure Connection"
+msgstr "Tumia unganisho salama"
+
+#: core/models.py:547
+msgid "If checked, HTTPS connection will be used,otherwise HTTP"
+msgstr "Ikiwa imekaguliwa, unganisho la HTTPS litatumika, vinginevyo HTTP"
+
+#: core/models.py:548
+msgid "Dataset ID"
+msgstr "Kitambulisho cha data"
+
+#: core/models.py:557
+msgid "Wis2Box Storage Configuration"
+msgstr "Usanidi wa Hifadhi ya Wis2box"
+
+#: core/models.py:561
+msgid "WIS2BOX Upload"
+msgstr "Upakiaji wa Wis2box"
+
+#: core/models.py:562
+msgid "WIS2BOX Uploads"
+msgstr "Upakiaji wa Wis2box"
+
+#: core/models.py:581
+msgid "Channel"
+msgstr "Kituo"
+
+#: core/models.py:584
+msgid "Last Send Observation Time"
+msgstr "Tuma mwisho wakati wa uchunguzi"
+
+#: core/models.py:587 core/models.py:588
+msgid "Station Channel Dispatch Status"
+msgstr "Hali ya kituo cha kupeleka kituo"
+
+#: core/templates/adl/home/adl_summary/adl_summary_networks.html:6
+#, python-format
+msgid "<span>%(total)s</span> Network <span class=\"w-sr-only\">created</span>"
+msgid_plural ""
+"<span>%(total)s</span> Networks <span class=\"w-sr-only\">created </span>"
+msgstr[0] ""
+msgstr[1] ""
+
+#: core/templates/adl/home/adl_summary/adl_summary_plugins.html:6
+#, python-format
+msgid "<span>%(total)s</span> Plugin <span class=\"w-sr-only\">installed</span>"
+msgid_plural ""
+"<span>%(total)s</span> Plugins <span class=\"w-sr-only\">installed </span>"
+msgstr[0] ""
+msgstr[1] ""
+
+#: core/templates/adl/home/adl_summary/adl_summary_stations.html:6
+#, python-format
+msgid "<span>%(total)s</span> Station <span class=\"w-sr-only\">created</span>"
+msgid_plural ""
+"<span>%(total)s</span> Stations <span class=\"w-sr-only\">created </span>"
+msgstr[0] ""
+msgstr[1] ""
+
+#: core/templates/adl/home/plugin_monitoring_panel.html:3
+msgid "Plugin Monitoring"
+msgstr "Ufuatiliaji wa programu -jalizi"
+
+#: core/templates/adl/import_oscar_surface_station.html:21
+msgid "Station Data to import"
+msgstr "Data ya kituo cha kuagiza"
+
+#: core/templates/adl/import_oscar_surface_station.html:89
+msgid "Import"
+msgstr "Kuagiza"
+
+#: core/templates/adl/load_stations_csv.html:13
+msgid "We found stations that were loaded previously. "
+msgstr "Tulipata vituo ambavyo vilipakiwa hapo awali."
+
+#: core/templates/adl/load_stations_csv.html:22
+msgid "Use existing Stations"
+msgstr "Tumia vituo vilivyopo"
+
+#: core/templates/adl/load_stations_csv.html:27
+msgid ""
+"If you wish to load/update the local copy stations, you can load the new CSV"
+" downloaded from OSCAR Surface "
+msgstr ""
+"Ikiwa unataka kupakia/kusasisha vituo vya nakala vya hapa, unaweza kupakia "
+"CSV mpya iliyopakuliwa kutoka kwa uso wa Oscar"
+
+#: core/templates/adl/load_stations_csv.html:36
+msgid "Load new CSV file"
+msgstr "Pakia faili mpya ya CSV"
+
+#: core/templates/adl/load_stations_csv.html:49
+msgid ""
+"Use this form to upload the CSV file manually downloaded from OSCAR Surface "
+"for your country"
+msgstr ""
+"Tumia fomu hii kupakia faili ya CSV iliyopakuliwa kwa mikono kutoka kwa uso "
+"wa Oscar kwa nchi yako"
+
+#: core/templates/adl/load_stations_csv.html:70
+msgid "Upload"
+msgstr "Pakia"
+
+#: core/templates/adl/load_stations_csv.html:77
+msgid "Data Preview"
+msgstr "Hakikisho la data"
+
+#: core/templates/adl/load_stations_csv.html:86
+msgid ""
+"The following columns were not found in the uploaded file. Starred columns "
+"are required"
+msgstr ""
+"Nguzo zifuatazo hazikupatikana kwenye faili iliyopakiwa. Nguzo zilizo na "
+"nyota zinahitajika"
+
+#: core/templates/adl/load_stations_oscar.html:13
+msgid "Country not set. Please set the country and try again"
+msgstr "Nchi haijawekwa. Tafadhali weka nchi na ujaribu tena"
+
+#: core/templates/adl/load_stations_oscar.html:22
+msgid "Set Country"
+msgstr "Kuweka nchi"
+
+#: core/templates/adl/load_stations_oscar.html:29
+msgid "An error occured when fetching data from OSCAR Surface"
+msgstr "Kosa lilitokea wakati wa kuchukua data kutoka kwa uso wa Oscar"
+
+#: core/templates/adl/load_stations_oscar.html:37
+msgid "You can check your internet and try again"
+msgstr "Unaweza kuangalia mtandao wako na ujaribu tena"
+
+#: core/templates/adl/load_stations_oscar.html:42
+msgid ""
+"If you have a local copy of the stations CSV data as downloaded from OSCAR "
+"Surface, you can import and use the local copy"
+msgstr ""
+"Ikiwa una nakala ya ndani ya vituo vya CSV kama kupakuliwa kutoka kwa uso wa"
+" Oscar, unaweza kuingiza na kutumia nakala ya ndani"
+
+#: core/templates/adl/load_stations_oscar.html:52
+msgid "Load from local CSV copy"
+msgstr "Mzigo kutoka kwa nakala ya CSV ya ndani"
+
+#: core/templates/adl/load_stations_oscar.html:64
+msgid ""
+"No Stations were found in the local copy of stations downloaded from OSCAR "
+"Surface"
+msgstr ""
+"Hakuna vituo vilivyopatikana katika nakala ya ndani ya vituo vilivyopakuliwa"
+" kutoka kwa uso wa Oscar"
+
+#: core/templates/adl/load_stations_oscar.html:75
+msgid "Load local CSV File"
+msgstr "Pakia faili ya CSV ya ndani"
+
+#: core/templates/adl/load_stations_oscar.html:85
+msgid ""
+"The stations loaded below are from a locally uploaded copy of the stations, "
+"manually downloaded from OSCAR Surface"
+msgstr ""
+"Vituo vilivyopakiwa hapa chini ni kutoka kwa nakala iliyopakiwa ya ndani ya "
+"vituo, vilivyopakuliwa kwa mikono kutoka kwa uso wa Oscar"
+
+#: core/templates/adl/load_stations_oscar.html:89
+msgid ""
+"If you have a working internet connection, it is recommended to use the live"
+" version that connects automatically to OSCAR Surface"
+msgstr ""
+"Ikiwa una muunganisho wa mtandao unaofanya kazi, inashauriwa kutumia toleo "
+"la moja kwa moja ambalo linaunganisha moja kwa moja na uso wa Oscar"
+
+#: core/templates/adl/load_stations_oscar.html:98
+msgid "Load stations directly from OSCAR"
+msgstr "Vituo vya mzigo moja kwa moja kutoka Oscar"
+
+#: core/templates/adl/load_stations_oscar.html:107
+msgid "WMO OSCAR Surface Stations for"
+msgstr "Vituo vya uso vya WMO Oscar kwa"
+
+#: core/templates/adl/load_stations_oscar.html:122
+msgid "Added to Database"
+msgstr "Imeongezwa kwenye hifadhidata"
+
+#: core/templates/adl/load_stations_oscar.html:125
+msgid "Assigned Network"
+msgstr "Mtandao uliopewa"
+
+#: core/templates/adl/load_stations_oscar.html:161
+msgid "Added"
+msgstr "Imeongezwa"
+
+#: core/templates/adl/load_stations_oscar.html:170
+msgid "Import Station"
+msgstr "Kituo cha kuagiza"
+
+#: core/templates/adl/stations_csv_template.html:45
+msgid "Download Template"
+msgstr "Pakua template"
+
+#: core/templates/adl/stations_csv_template.html:54
+msgid "Stations CSV Columns"
+msgstr "Vituo vya CSV"
+
+#: core/templates/adl/stations_csv_template.html:70
+msgid "Column"
+msgstr "Safu"
+
+#: core/templates/adl/stations_csv_template.html:73
+msgid "Required"
+msgstr "Inahitajika"
+
+#: core/templates/adl/stations_csv_template.html:76
+msgid "Data Type"
+msgstr "Aina ya data"
+
+#: core/templates/adl/stations_csv_template.html:82
+msgid "Choices"
+msgstr "Uchaguzi"
+
+#: core/templates/adl/stations_csv_template.html:95
+msgid "Yes"
+msgstr "Ndio"
+
+#: core/templates/core/create_predefined_data_parameters.html:11
+msgid "One or more parameters already exist in the database"
+msgstr "Vigezo moja au zaidi tayari vipo kwenye hifadhidata"
+
+#: core/templates/core/create_predefined_data_parameters.html:20
+msgid ""
+"Please note that this section helps you to create some default parameters to"
+" use in the system. This is not a required step, but it is available to help"
+" you get started with some parameters."
+msgstr ""
+"Tafadhali kumbuka kuwa sehemu hii inakusaidia kuunda vigezo vingine vya "
+"kutumia kwenye mfumo. Hii sio hatua inayohitajika, lakini inapatikana "
+"kukusaidia kuanza na vigezo kadhaa."
+
+#: core/templates/core/create_predefined_data_parameters.html:25
+#, python-format
+msgid ""
+"Here we are using the %(gbon_link)s parameters as a starting point. You will"
+" still be able to add or modify Data Parameters as needed for your data."
+msgstr ""
+"Hapa tunatumia vigezo vya %(gbon_link)s kama mahali pa kuanzia. Bado utaweza "
+"kuongeza au kurekebisha vigezo vya data kama inahitajika kwa data yako."
+
+#: core/templates/core/create_predefined_data_parameters.html:32
+msgid "The following Data parameters and corresponding Units will be created"
+msgstr "Vigezo vifuatavyo vya data na vitengo vinavyolingana vitaundwa"
+
+#: core/templates/core/create_predefined_data_parameters.html:59
+msgid ""
+"The following optional conversion units will also be created if checked, and"
+" not already existing in the system"
+msgstr ""
+"Sehemu zifuatazo za ubadilishaji pia zitaundwa ikiwa imekaguliwa, na haipo "
+"tayari kwenye mfumo"
+
+#: core/templates/core/create_predefined_data_parameters.html:112
+msgid "Create"
+msgstr "Unda"
+
+#: core/templates/core/data_parameter_index_results.html:6
+#, python-format
+msgid "There are no %(model_name)s to display."
+msgstr "Hakuna %(model_name)s kuonyesha."
+
+#: core/templates/core/data_parameter_index_results.html:16
+msgid "Create from predefined parameters"
+msgstr "Unda kutoka kwa vigezo vilivyoainishwa"
+
+#: core/units.py:108
+#, python-format
+msgid "'%(unit)s' is not defined in the unit registry"
+msgstr "'%(unit)s' haijaelezewa katika usajili wa kitengo"
+
+#: core/views.py:67
+msgid "Stations loaded successfully."
+msgstr "Vituo vilivyopakiwa kwa mafanikio."
+
+#: core/views.py:80 core/views.py:131 core/views.py:218 core/views.py:357
+#: core/views.py:455 core/views.py:508 core/views.py:566
+msgid "Home"
+msgstr "Nyumbani"
+
+#: core/views.py:81 core/views.py:132 core/views.py:219 core/views.py:567
+msgid "Snippets"
+msgstr "Snippets"
+
+#: core/views.py:83
+msgid "Load Stations from CSV"
+msgstr "Vituo vya mzigo kutoka CSV"
+
+#: core/views.py:134 core/wagtail_hooks.py:198
+msgid "Load Stations from OSCAR Surface"
+msgstr "Vituo vya mzigo kutoka kwa uso wa Oscar"
+
+#: core/views.py:221
+msgid "OSCAR Stations"
+msgstr "Vituo vya Oscar"
+
+#: core/views.py:222
+msgid "Import OSCAR Station"
+msgstr "Ingiza Kituo cha Oscar"
+
+#: core/views.py:234
+msgid "Please set the country in the settings."
+msgstr "Tafadhali weka nchi katika mipangilio."
+
+#: core/views.py:276
+msgid "Station imported successfully."
+msgstr "Kituo kilichoingizwa kwa mafanikio."
+
+#: core/views.py:299
+msgid "Station not found in OSCAR database."
+msgstr "Kituo hakipatikani katika hifadhidata ya Oscar."
+
+#: core/views.py:424 core/wagtail_hooks.py:150
+msgid "Stations Link"
+msgstr "Viunga vya vituo"
+
+#: core/views.py:426
+msgid "Options"
+msgstr "Chaguzi"
+
+#: core/views.py:433
+msgid "Add Connection"
+msgstr "Ongeza unganisho"
+
+#: core/views.py:457
+msgid "Select Connection Type"
+msgstr "Chagua Aina ya Uunganisho"
+
+#: core/views.py:509 core/views.py:568 core/wagtail_hooks.py:331
+msgid "Dispatch Channels"
+msgstr "Njia za kupeleka"
+
+#: core/views.py:544
+msgid "Add Dispatch Channel"
+msgstr "Ongeza kituo cha kupeleka"
+
+#: core/views.py:569
+msgid "Select Dispatch Channel Type"
+msgstr "Chagua aina ya kituo cha kupeleka"
+
+#: core/views.py:664
+msgid "Predefined parameters created successfully."
+msgstr "Vigezo vilivyoainishwa vilivyoundwa kwa mafanikio."
+
+#: core/views.py:668
+msgid "Error creating predefined parameters: "
+msgstr "Kosa kuunda vigezo vilivyoainishwa:"
+
+#: core/views.py:673
+msgid "Predefined Data Parameters"
+msgstr "Vigezo vya data vilivyoainishwa"
+
+#: core/wagtail_hooks.py:131
+msgid "Station Link"
+msgstr "Kiunga cha kituo"
+
+#: core/wagtail_hooks.py:241
+msgid "Create from Predefined Data Parameters"
+msgstr "Unda kutoka kwa vigezo vya data vilivyoainishwa"
+
+#: core/wagtail_hooks.py:324
+msgid "Connections"
+msgstr "Viunganisho"
