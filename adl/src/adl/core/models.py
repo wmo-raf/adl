@@ -1,7 +1,7 @@
 from datetime import timezone
 
 from django.contrib.gis.db import models
-from django.core.exceptions import ValidationError
+from django.core.exceptions import ValidationError, ObjectDoesNotExist
 from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db.models.signals import post_save
 from django.dispatch import receiver
@@ -248,14 +248,22 @@ class DataParameter(models.Model):
         return f"{self.name} - {self.unit.symbol}"
     
     def clean(self, *args, **kwargs):
-        # do not change unit if ObservationRecord exist referencing this parameter
-        if self.pk:
-            observation_record = ObservationRecord.objects.filter(parameter=self).first()
-            if observation_record:
-                raise ValidationError(
-                    {"unit": _("Cannot change unit of a parameter that has observation records in the database. "
-                               "Please remove the observation records first.")}
-                )
+        if not self.pk:
+            return
+        
+        try:
+            old_instance = DataParameter.objects.only("unit").get(pk=self.pk)
+        except ObjectDoesNotExist:
+            return
+        
+        if old_instance.unit_id != self.unit_id:
+            if ObservationRecord.objects.filter(parameter_id=self.pk).exists():
+                raise ValidationError({
+                    "unit": _(
+                        "Cannot change the unit of a parameter that already has observation records. "
+                        "Please delete them before changing the unit."
+                    )
+                })
     
     def convert_value_from_units(self, value, from_unit):
         if from_unit.symbol in TEMPERATURE_UNITS:
