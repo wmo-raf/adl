@@ -21,6 +21,7 @@ different receiving systems.
 | 10  | 🇳🇬 [Nigeria](https://www.nimet.gov.ng)            | TAHMO Plugin                                                                                                                                                                                                             | Nimet Wis2box                                               | ⏳In Progress  |
 | 11  | 🇬🇳 [Guinea](https://anmeteo.gov.gn)               | Siap + Micros, ADCON                                                                                                                                                                                                     | Guinea wis2box                                              | ⏳In Progress  |
 | 12  | 🇪🇹 [Ethiopia](https://www.ethiomet.gov.et)        | [ADL ADCON DB Plugin](https://github.com/wmo-raf/adl-adcon-db-plugin)                                                                                                                                                    | Ethiomet wis2box                                            | ⏳In Progress  |
+| 13  | 🇸🇳 [Senegal](https://anacim.sn)                   | ADCON, [ADL Pulsonic Plugin](https://github.com/wmo-raf/adl-pulsoweb-plugin)                                                                                                                                             | Anacim wis2box                                              | ⏳In Progress  |
 
 ## 📚 Background
 

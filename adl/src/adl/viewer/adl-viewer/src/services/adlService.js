@@ -18,10 +18,11 @@ export const fetchStationLinkLatestData = (axios, stationLinkId) => {
     return axios.get(`/data/latest/${stationLinkId}/`)
 }
 
-export const fetchStationLinkTimeseriesData = (axios, stationLinkId, page = 1) => {
+export const fetchStationLinkTimeseriesData = (axios, stationLinkId, page = 1, category = "meteorological") => {
     return axios.get(`/data/timeseries/${stationLinkId}/`, {
         params: {
-            page: page
+            page: page,
+            category: category
         }
     })
 }

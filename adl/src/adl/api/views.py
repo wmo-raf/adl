@@ -69,6 +69,16 @@ def get_station_link_detail(request, station_link_id):
         if data_parameters:
             data_parameters = DataParameterSerializer(data_parameters, many=True).data
             station_link_info['data_parameters'] = data_parameters
+            
+            parameter_categories_dict = {category[0]: category[1] for category in DataParameter.CATEGORY_CHOICES}
+            data_categories = {}
+            for parameter in data_parameters:
+                category_id = parameter['category']
+                if category_id not in data_categories:
+                    data_categories[category_id] = parameter_categories_dict[category_id]
+            
+            station_link_info['data_categories'] = [{"id": category_id, "name": name} for category_id, name in
+                                                    data_categories.items()]
     
     return Response(station_link_info)
 
@@ -84,9 +94,16 @@ def get_network_connections(request):
 @api_view()
 @permission_classes([HasAPIKeyOrIsAuthenticated])
 def get_data_parameters(request):
+    parameter_categories = [{"id": category[0], "name": category[1]} for category in DataParameter.CATEGORY_CHOICES]
     data_parameters = DataParameter.objects.all()
     data = DataParameterSerializer(data_parameters, many=True).data
-    return Response(data)
+    
+    response_data = {
+        "categories": parameter_categories,
+        "data_parameters": data,
+    }
+    
+    return Response(response_data)
 
 
 @api_view()
@@ -154,6 +171,8 @@ def get_station_link_timeseries_data(request, station_link_id):
     start_time = request.GET.get('start_time', None)
     end_time = request.GET.get('end_time', None)
     
+    category = request.GET.get('category', None)
+    
     if start_time or end_time:
         try:
             start_time = validate_iso_datetime('start_time', start_time)
@@ -172,6 +191,10 @@ def get_station_link_timeseries_data(request, station_link_id):
         time__gte=start_time,
     )
     
+    if category:
+        # Filter by parameter category if provided
+        query = query.filter(parameter__category=category)
+    
     if not end_time:
         # set end_time to 30 days from start_time if not provided
         end_time = start_time + timedelta(days=30)
@@ -188,7 +211,7 @@ def get_station_link_timeseries_data(request, station_link_id):
     
     if not records.exists():
         return Response({
-            "error": "No observation records found for the given station and connection."
+            "error": "No observation records found for the given station and filters"
         }, status=404)
     
     # Group records by time

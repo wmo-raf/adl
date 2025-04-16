@@ -68,4 +68,4 @@ class DataParameterSerializer(ReadOnlyModelSerializer):
     
     class Meta:
         model = DataParameter
-        fields = ("id", "name", "unit", "description")
+        fields = ("id", "name", "unit", "description", "category")

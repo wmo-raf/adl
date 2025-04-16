@@ -1,29 +1,22 @@
 <script setup>
-import {computed, onMounted, watch} from 'vue'
+import {computed, watch} from 'vue'
 import Select from 'primevue/select';
 
-import {useTableViewStore} from '@/stores/tableView'
+import {useStationStore} from "@/stores/station.js";
+import {useNetworkStore} from "@/stores/network.js";
 
-const tableViewStore = useTableViewStore()
-
-onMounted(() => {
-  tableViewStore.loadNetworkConnections()
-})
+const stationStore = useStationStore()
+const networkStore = useNetworkStore()
 
 const selectedNetworkConnectionStations = computed(() => {
-  const selectedNetworkConnection = tableViewStore.selectedNetworkConnection
-  return tableViewStore.getNetworkConnectionStations(selectedNetworkConnection)
-})
+  const selectedNetworkConnection = networkStore.selectedNetworkConnection
+  return networkStore.getNetworkConnectionStations(selectedNetworkConnection)
+});
 
 
-watch(() => tableViewStore.selectedStation, (newValue) => {
+watch(() => networkStore.selectedNetworkConnection, (newValue) => {
   if (newValue) {
-    tableViewStore.clearStationData()
-
-    tableViewStore.loadStationLinkDetail(newValue)
-    tableViewStore.loadStationLinkLatestData(newValue)
-
-    tableViewStore.loadStationLinkTimeseriesData(newValue, {page: 1})
+    stationStore.clearStationState()
   }
 }, {immediate: true})
 
@@ -34,10 +27,10 @@ watch(() => tableViewStore.selectedStation, (newValue) => {
     <div class="c-selector-title">
       Select Station
     </div>
-    <Select v-model="tableViewStore.selectedStation"
+    <Select v-model="stationStore.selectedStationId"
             :options="selectedNetworkConnectionStations"
-            :disabled="!tableViewStore.selectedNetworkConnection"
-            :loading="tableViewStore.loading"
+            :disabled="!networkStore.selectedNetworkConnection"
+            :loading="stationStore.loading"
             optionLabel="station.name"
             optionValue="id"
             placeholder="Select a station"
