@@ -2,20 +2,17 @@
 import {onMounted, watch} from 'vue'
 import Select from 'primevue/select';
 
-import {useTableViewStore} from '@/stores/tableView'
+import {useNetworkStore} from "@/stores/network.js";
 
-const tableViewStore = useTableViewStore()
+const networkStore = useNetworkStore()
 
 onMounted(() => {
-  tableViewStore.loadNetworkConnections()
+  networkStore.loadNetworkConnections()
 })
 
-
-watch(() => tableViewStore.selectedNetworkConnection, (newValue) => {
+watch(() => networkStore.selectedNetworkConnection, (newValue) => {
   if (newValue) {
-    tableViewStore.clearStationState()
-
-    tableViewStore.loadNetworkConnectionStations(newValue)
+    networkStore.loadNetworkConnectionStations(newValue)
   }
 }, {immediate: true})
 
@@ -27,8 +24,8 @@ watch(() => tableViewStore.selectedNetworkConnection, (newValue) => {
     <div class="c-selector-title">
       Select Network Connection
     </div>
-    <Select v-model="tableViewStore.selectedNetworkConnection"
-            :options="tableViewStore.networkConnections"
+    <Select v-model="networkStore.selectedNetworkConnection"
+            :options="networkStore.networkConnections"
             optionLabel="name" optionValue="id" placeholder="Select a connection"></Select>
   </div>
 </template>
