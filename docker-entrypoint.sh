@@ -60,7 +60,7 @@ start_celery_worker() {
     if [[ -n "$ADL_GUNICORN_NUM_OF_WORKERS" ]]; then
         EXTRA_CELERY_ARGS+=(--concurrency "$ADL_GUNICORN_NUM_OF_WORKERS")
     fi
-    exec celery -A adl worker "${EXTRA_CELERY_ARGS[@]}" -l INFO "$@"
+    exec celery -A adl worker "${EXTRA_CELERY_ARGS[@]}" -l "${ADL_LOG_LEVEL}" "$@"
 }
 
 # Lets devs attach to this container running the passed command, press ctrl-c and only
