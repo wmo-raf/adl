@@ -7,6 +7,7 @@ COLLECT_STATICFILES_ON_STARTUP=${COLLECT_STATICFILES_ON_STARTUP:-true}
 
 ADL_GUNICORN_NUM_OF_WORKERS=${ADL_GUNICORN_NUM_OF_WORKERS:-}
 ADL_CELERY_BEAT_DEBUG_LEVEL=${ADL_CELERY_BEAT_DEBUG_LEVEL:-INFO}
+ADL_CELERY_WORKER_LOG_LEVEL=${ADL_CELERY_WORKER_LOG_LEVEL:-INFO}
 
 ADL_LOG_LEVEL=${ADL_LOG_LEVEL:-INFO}
 
@@ -60,7 +61,7 @@ start_celery_worker() {
     if [[ -n "$ADL_GUNICORN_NUM_OF_WORKERS" ]]; then
         EXTRA_CELERY_ARGS+=(--concurrency "$ADL_GUNICORN_NUM_OF_WORKERS")
     fi
-    exec celery -A adl worker "${EXTRA_CELERY_ARGS[@]}" -l "${ADL_LOG_LEVEL}" "$@"
+    exec celery -A adl worker "${EXTRA_CELERY_ARGS[@]}" -l "${ADL_CELERY_WORKER_LOG_LEVEL}" "$@"
 }
 
 # Lets devs attach to this container running the passed command, press ctrl-c and only
