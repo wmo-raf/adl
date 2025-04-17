@@ -324,35 +324,7 @@ You can add a network by clicking on the `Networks` link on the left sidebar and
 
 Fill in the details for the network and click on the `Save` button.
 
-![Network Details](docs/_static/images/user/add_network_form.png)
-
-A network must be associated with a plugin to make it useful. You can select the plugin to associate with the network by
-selecting from the `Plugin` dropdown. This will be a list of plugins that have been installed.
-
-#### The following fields control how the plugin will be processing data:
-
-- **Plugin Auto Processing Enabled**: This is a boolean field that determines if the plugin is active and should be
-  ingesting data
-
-- **Plugin Auto Processing Interval**: This is the interval in minutes that the plugin should check for new data to
-  ingest
-
-- **Enable WIS2Box Hourly Aggregation**: This is a boolean field that determines if the plugin should aggregate data
-  that
-  is ingested into a wis2box node on an hourly basis. This is in-support of the `GBON` requirement that requires data to
-  be transmitted to the WIS2.0 system in an hourly intervals. If this is enabled, the plugin will aggregate data pushed
-  into wis2box node into an hourly interval depending on the selected method.
-
-- **WIS2Box Hourly Aggregation Method**: This is the method that will be used to aggregate data into an hourly
-  interval. Currently, the method `Latest in the Hour` is implemented. This method will take the latest data point in
-  the
-  hour and use it as the hourly data point. Other methods like `averaging` can be implemented in the future.
-
-- **UnUploaded Records Check Interval in Minutes**: This is the interval in minutes that the plugin should check for
-  records, that for some reason (like the wis2box node being down), were not uploaded to the WIS2Box node. This is to
-  ensure that all that was collected is pushed to wis2box. This also ensures that hourly aggregation data is ingested
-  into
-  wis2box.
+![Network Connection](docs/_static/images/user/add_network_form.png)
 
 ### 3. Add Stations to a Network
 
@@ -422,7 +394,47 @@ manual.
 
 Then click on the `Import` button to import the station.
 
-### 4. Plugin Configuration
+### 4. Add Data Parameters and Units
+
+ADL is dynamic and allows you to add data parameters that are required for your stations data. This means that before
+you can start collecting data, you need to know the observation data parameters that your stations are collecting, and
+define them in the system. A data parameter also contains unit information for data conversion purposes
+
+![Add Data Parameter](docs/_static/images/user/add_data_parameters.png)
+
+To help you get started, the system provides a way to quickly load data parameters from a small predefined list of core
+meteorological parameters. This option is only provided when no data parameters have been added to the system.
+
+![Load predefined Data Parameters](docs/_static/images/user/create_predefined_parameters.png)
+
+You can add or edit data parameters as below:
+
+![Edit Data Parameter](docs/_static/images/user/edit_parameter.png)
+
+A Data Parameter must be associated with a unit. The system provides a form to add and edit units
+
+![Add Unit](docs/_static/images/user/add_units.png)
+
+![Edit Unit](docs/_static/images/user/edit_unit.png)
+
+### 5. Create Network Connection
+
+A `Connection` contains the configuration required for a plugin to communicate and get data from a specific source.
+
+Depending on the plugin, the connection can include information like the host URL or IP, port etc for communication
+protocols like FTP,HTTP, Database connections etc
+
+![Add Network Connection](docs/_static/images/user/add_connection.png)
+
+![Connection Types](docs/_static/images/user/connection_types_list.png)
+
+![Connection Form](docs/_static/images/user/add_connection_form.png)
+
+A network connection must be associated with a plugin, that implements the actual data fetching. You can select the
+plugin to associate with the network connection by selecting from the `Plugin` dropdown. This will be a list of plugins
+that have been installed.
+
+### 6. Plugin Configuration
 
 To start ingesting data from the stations, you need to configure the plugin associated with the network.
 
