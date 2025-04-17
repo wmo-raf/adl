@@ -59,7 +59,7 @@ stations is periodically ingested into the node in a timely way is another. Coun
 scripts to automate this process, but this can be time-consuming and costly especially for developing countries that
 have a 'cocktail' of different AWS vendors.
 
-![WIS2Box ADL Data Flow](docs/_static/images/wis2box-data-flow-adl.png)
+![ADL Data Flow](docs/_static/images/wis2box-data-flow-adl.png)
 
 ## 📜 Introduction
 
@@ -76,8 +76,8 @@ At a high level, this core application is made up of the following components:
   network, an installed plugin must be associated with it to make it useful.
 
 - **Station component** – Table and logic with details for each station, linking to different networks, including
-  defining the data parameters to be used when preparing data for ingestion into WIS2Box, and a way to load stations for
-  a network, from official sources like [OSCAR Surface](https://oscar.wmo.int/surface)
+  defining the data parameters to be used when preparing data for sending to different channels, and a way to load
+  stations for a network, from official sources like [OSCAR Surface](https://oscar.wmo.int/surface)
 
 - **Database** – Postgres database where the system persists its data
 
@@ -85,9 +85,10 @@ At a high level, this core application is made up of the following components:
   types
   of AWS vendors and sources together.
 
-- **Background tasks** for uploading data into WIS2Box node – Each network is associated with a plugin. Since a plugin
-  is standard and defines known methods of exposing its data, background tasks are created for each network that enable
-  continuous checking on availability of new data and consequently the ingestion of it into a wis2box node.
+- **Background tasks** for periodically pulling data from defined sources and pushing data to receiving channels – Each
+  connection is associated with a plugin. Since a plugin is standard and defines known methods of exposing its data,
+  background tasks are created for each network that enable continuous checking on availability of new data and
+  consequently the sending to defined receiving channels like wis2box, Climate Data Management Systems (CDMSs),FTP etc.
 
 On the other hand, a plugin will have the following components and features:
 
@@ -134,10 +135,10 @@ On the other hand, a plugin will have the following components and features:
 
 ## 🧩 Plugins List
 
-The following are the plugins that have been developed and are available for integration with the WIS2Box ADL core:
+The following are the plugins that have been developed and are available for integration with the ADL core:
 
 - [Adcon Telemetry Database Plugin](https://github.com/wmo-raf/adl-adcon-db-plugin)
-- [Davis Instruments Weatherlink Plugin](https://github.com/wmo-raf/wis2box-adl-weatherlink-v2-plugin)
+- [Davis Instruments Weatherlink Plugin](https://github.com/wmo-raf/adl-weatherlink-plugin)
 - [Pulsonic PulsoWeb Plugin](https://github.com/wmo-raf/adl-pulsoweb-plugin)
 - [Generic FTP Plugin](https://github.com/wmo-raf/adl-ftp-plugin)
 
@@ -244,7 +245,7 @@ The following environmental variables are required to be set in the `.env` file:
 | ALLOWED_HOSTS               | A list of strings representing the host/domain names that this Django site can serve. This is a security measure to prevent HTTP Host header attacks, which are possible even under many seemingly-safe web server.                                                                                                       | YES      |                  | [Django Allowed Hosts](https://docs.djangoproject.com/en/4.2/ref/settings/#std-setting-ALLOWED_HOSTS)              |
 | CSRF_TRUSTED_ORIGINS        | A list of trusted origins for unsafe requests                                                                                                                                                                                                                                                                             | NO       |                  | [Django CSRF Trusted Origins](https://docs.djangoproject.com/en/5.1/ref/settings/#csrf-trusted-origins)            |
 | ADL_DEBUG                   | A boolean that turns on/off debug mode. Never deploy a site into production with DEBUG turned on                                                                                                                                                                                                                          | NO       | False            |                                                                                                                    |
-| WAGTAIL_SITE_NAME           | The human-readable name of your Wagtail installation which welcomes users upon login to the Wagtail admin.                                                                                                                                                                                                                | NO       | WIS2BOX ADL      |                                                                                                                    |
+| WAGTAIL_SITE_NAME           | The human-readable name of your Wagtail installation which welcomes users upon login to the Wagtail admin.                                                                                                                                                                                                                | NO       | ADL              |                                                                                                                    |
 | LANGUAGE_CODE               | The language code for the CMS. Available codes are `en` for English. Default is en if not set. Available codes in alphabetical order: `am` for Amharic,`ar` for Arabic, `en` for English, `es` for Spanish, `fr` for French, `sw` for Swahili. The translation are done with automated tools and may not be 100% accurate | NO       | en               |                                                                                                                    |
 | ADL_LOG_LEVEL               | The severity of the messages that the adl service logger will handle. Allowed values are: `DEBUG`, `INFO`, `WARNING`, `ERROR` and `CRITICAL`                                                                                                                                                                              | NO       | WARN             |                                                                                                                    |
 | ADL_GUNICORN_NUM_OF_WORKERS | Number of Gunicorn workers                                                                                                                                                                                                                                                                                                | YES      | 4                |                                                                                                                    |
@@ -329,8 +330,6 @@ Fill in the details for the network and click on the `Save` button.
 ### 3. Add Stations to a Network
 
 After creating a network, you can add stations to the network. Stations are the actual AWS stations or manual stations.
-
-> Stations added to ADL are expected to be already added to your wis2box node, to be able to ingest data from them.
 
 ![Load Stations from OSCAR Surface](docs/_static/images/user/stations_loading_options.png)
 
@@ -461,7 +460,7 @@ a [Django/Wagtail App](https://docs.djangoproject.com/en/5.1/ref/applications/)
 
 The plugin template is a [cookiecutter](https://cookiecutter.readthedocs.io/en/stable/installation.html) template that
 generates a plugin with the required structure and files. This ensures that the plugin follows the expected structure
-and can be easily installed into the wis2box-adl core application.
+and can be easily installed into the adl core application.
 
 To instantiate the template, execute the following commands from the directory where you want to create the plugin:
 
@@ -475,8 +474,8 @@ creating a plugin using the plugin boilerplate.
 
 #### Plugin Installation API
 
-A wis2box-adl docker image contains the following bash scripts that are used to install plugins. They can be used
-to install a plugin into an existing wis2box-adl container at runtime. `install_plugin.sh` can be used to install a
+A adl docker image contains the following bash scripts that are used to install plugins. They can be used
+to install a plugin into an existing adl container at runtime. `install_plugin.sh` can be used to install a
 plugin from an url, a git repo or a local folder on the filesystem.
 
 You can find these scripts in the following locations in the built images:
@@ -485,7 +484,7 @@ You can find these scripts in the following locations in the built images:
 
 On this repo, you can find the scripts in the `deploy/plugins` folder.
 
-These scripts expect a wis2box-adl plugin to follow the conventions described below:
+These scripts expect an adl plugin to follow the conventions described below:
 
 #### Plugin File Structure
 
@@ -501,7 +500,7 @@ The `install_plugin.sh` script expect your plugin to have a specific structure a
 |  ├── src/plugin_name/src/config/settings/settings.py (Optional Django setting file)
 ```
 
-The folder contains three bash files which will be automatically called by wis2box-adl's plugin scripts during
+The folder contains three bash files which will be automatically called by adl's plugin scripts during
 installation and uninstallation of the plugin. You can use these scripts to perform extra build steps, installation of
 packages and other docker container build steps required by your plugin.
 
@@ -553,7 +552,7 @@ For example a conforming git repo should contain something like:
 #### Plugin Boilerplate
 
 With the plugin boilerplate you can easily create a new plugin and setup a docker development environment that installs
-wis2box-adl as a dependency. This can easily be installed via cookiecutter.
+adl as a dependency. This can easily be installed via cookiecutter.
 
 ##### Creating a plugin
 
@@ -561,15 +560,15 @@ To use the plugin boilerplate you must first install
 the [Cookiecutter](https://cookiecutter.readthedocs.io/en/stable/installation.html) tool (`pip install cookiecutter`).
 
 Once you have installed Cookiecutter you can execute the following command to create a new ADL plugin from our
-template. In this guide we will name our plugin “My WIS2Box ADL Plugin”, however you can choose your own plugin name
+template. In this guide we will name our plugin “My ADL Plugin”, however you can choose your own plugin name
 when prompted to by Cookiecutter.
 
-> The python module depends on your chosen plugin name. If we for example go with “My WIS2Box ADL Plugin” the Django app
+> The python module depends on your chosen plugin name. If we for example go with “My ADL Plugin” the Django app
 > name should be my_adl_plugin
 
 ```sh
 cookiecutter gh:wmo-raf/adl --directory plugin-boilerplate
-project_name [My WIS2Box ADL Plugin]: 
+project_name [My ADL Plugin]: 
 project_slug [my-adl-plugin]: 
 project_module [my_adl_plugin]:
 ```
@@ -581,7 +580,7 @@ If you do not see any errors it means that your plugin has been created.
 Now to start your development environment please run the following commands:
 
 ```sh
-cd my-wis2box-adl-plugin
+cd my-adl-plugin
 # Enable Docker buildkit
 export COMPOSE_DOCKER_CLI_BUILD=1
 export DOCKER_BUILDKIT=1
