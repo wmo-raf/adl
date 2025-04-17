@@ -59,7 +59,7 @@ stations is periodically ingested into the node in a timely way is another. Coun
 scripts to automate this process, but this can be time-consuming and costly especially for developing countries that
 have a 'cocktail' of different AWS vendors.
 
-![ADL Data Flow](docs/_static/images/wis2box-data-flow-adl.png)
+![ADL Data Flow](docs/_static/images/adl-wis2box-data-flow-adl.png)
 
 ## 📜 Introduction
 
@@ -105,6 +105,8 @@ On the other hand, a plugin will have the following components and features:
   defined in the core application.
 
 ![ADL Components](docs/_static/images/adl-components.png)
+
+![ADL System Architecture](docs/_static/images/adl-system-architecture.png)
 
 ### 📋 Objectives
 
