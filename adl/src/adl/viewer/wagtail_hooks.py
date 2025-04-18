@@ -4,6 +4,13 @@ from wagtail.admin.menu import Menu, MenuItem, SubmenuMenuItem
 from django.utils.translation import gettext_lazy as _
 
 
+@hooks.register("register_icons")
+def register_icons(icons):
+    return icons + [
+        'wagtailfontawesomesvg/solid/chart-line.svg',
+    ]
+
+
 @hooks.register('register_admin_urls')
 def urlconf_adl_viewer():
     return [
@@ -15,6 +22,7 @@ def urlconf_adl_viewer():
 def register_viewer_menu_item():
     submenu = Menu(items=[
         MenuItem(_('Table'), reverse('viewer_table'), icon_name='table'),
+        MenuItem(_('Chart'), reverse('viewer_chart'), icon_name='chart-line'),
         MenuItem(_('Map'), "#", icon_name='site'),
     ])
     

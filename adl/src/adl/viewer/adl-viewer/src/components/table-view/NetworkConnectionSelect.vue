@@ -24,9 +24,10 @@ watch(() => networkStore.selectedNetworkConnection, (newValue) => {
     <div class="c-selector-title">
       Select Network Connection
     </div>
-    <Select v-model="networkStore.selectedNetworkConnection"
-            :options="networkStore.networkConnections"
-            optionLabel="name" optionValue="id" placeholder="Select a connection"></Select>
+    <Select
+        v-model="networkStore.selectedNetworkConnection"
+        :options="networkStore.networkConnections"
+        optionLabel="name" optionValue="id" placeholder="Select a connection"></Select>
   </div>
 </template>
 
