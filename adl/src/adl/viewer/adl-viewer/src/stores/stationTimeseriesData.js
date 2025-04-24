@@ -34,7 +34,6 @@ export const useStationTimeseriesDataStore = defineStore('stationTimeseriesData'
                             flat[paramNameWithUnit] = v.toFixed(2);
                         }
                     }
-
                     return flat;
                 })
 

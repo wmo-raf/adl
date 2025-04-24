@@ -25,6 +25,7 @@ export default defineConfig({
         rollupOptions: {
             input: {
                 "table-view": resolve('./src/table-view.js'),
+                "chart-view": resolve('./src/chart-view.js'),
             },
             output: {
                 dir: '../static/vue/',
