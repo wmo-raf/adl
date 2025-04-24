@@ -7,11 +7,9 @@ import SelectButton from "primevue/selectbutton";
 
 import {useStationTimeseriesDataStore} from "@/stores/stationTimeseriesData.js";
 import {useStationStore} from "@/stores/station.js";
-import {useDataParameterStore} from "@/stores/dataParameter.js";
 
 const stationStore = useStationStore()
 const stationTimeseriesDataStore = useStationTimeseriesDataStore()
-const dataParameterStore = useDataParameterStore()
 
 const dt = ref();
 const exportCSV = () => {

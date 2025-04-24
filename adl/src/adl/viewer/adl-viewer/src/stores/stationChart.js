@@ -2,7 +2,7 @@
 import {defineStore} from 'pinia'
 import {v4 as uuidv4} from 'uuid'
 
-import {fetchStationLinkTimeseriesData} from '@/services/adlService'
+import {fetchStationLinkDetail, fetchStationLinkTimeseriesData} from '@/services/adlService'
 
 import {useNetworkStore} from "@/stores/network.js";
 
@@ -18,6 +18,7 @@ export const useStationChartStore = defineStore('stationChart', {
                 id,
                 connectionId: null,
                 stationId: null,
+                stationDetail: null,
                 dataParameterId: null,
                 timeseriesData: null,
                 loading: false,
@@ -38,6 +39,16 @@ export const useStationChartStore = defineStore('stationChart', {
 
             await networkStore.loadNetworkConnectionStations(connectionId)
         },
+        async loadStationDetail(chartId, stationId) {
+            const response = await fetchStationLinkDetail(this.axios, stationId)
+            const {data} = response
+
+            const chart = this.charts[chartId]
+            if (!chart) return
+
+            chart.stationDetail = data
+
+        },
         async loadChartData(id) {
             const chart = this.charts[id]
 
@@ -49,7 +60,7 @@ export const useStationChartStore = defineStore('stationChart', {
             try {
                 const response = await fetchStationLinkTimeseriesData(this.axios, chart.stationId, 1)
                 const {data} = response
-                chart.timeseriesData = data
+                chart.timeseriesData = data.results
             } catch (err) {
                 chart.error = err.message
                 chart.timeseriesData = null
