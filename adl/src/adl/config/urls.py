@@ -1,14 +1,19 @@
 from django.conf import settings
 from django.contrib import admin
 from django.urls import include, path
+from rest_framework_simplejwt.views import (
+    TokenObtainPairView,
+    TokenRefreshView,
+)
 from wagtail.admin import urls as wagtailadmin_urls
-from wagtail.documents import urls as wagtaildocs_urls
 
 from adl.api import urls as api_urls
 
 urlpatterns = [
     # path("django-admin/", admin.site.urls),
     path("plugins/", include("adl.core.urls", namespace="plugins")),
+    path('api/token/', TokenObtainPairView.as_view(), name='token_obtain_pair'),
+    path('api/token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
     path("api/", include(api_urls), name="adl_api"),
     path("debug/django-admin/", admin.site.urls),
     path("", include(wagtailadmin_urls)),

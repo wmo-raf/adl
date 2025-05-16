@@ -20,7 +20,12 @@ const dataCategories = computed(() => {
 })
 
 const filteredData = computed(() => {
-  const selectedCategoryId = stationLatestDataStore.selectedDataCategoryId
+  let selectedCategoryId = stationLatestDataStore.selectedDataCategoryId
+
+  if (!selectedCategoryId && stationStore.selectedStationDataCategories && stationStore.selectedStationDataCategories.length > 0) {
+    selectedCategoryId = stationStore.selectedStationDataCategories[0].id
+  }
+
   if (selectedCategoryId) {
     const data = stationLatestDataStore.selectedStationLatestData
     return data && data.filter((item) => item.parameterCategory === selectedCategoryId)

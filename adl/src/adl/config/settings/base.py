@@ -75,6 +75,7 @@ INSTALLED_APPS = [
     "wagtail_modeladmin",
     "rest_framework",
     "rest_framework_api_key",
+    "rest_framework_simplejwt",
     "django_vue_utilities",
     "django_deep_translator",
     
@@ -360,3 +361,9 @@ VUE_FRONTEND_USE_DEV_SERVER = DEBUG
 VUE_FRONTEND_DEV_SERVER_URL = 'http://localhost:5173'
 VUE_FRONTEND_DEV_SERVER_PATH = '/static/vue/src'
 VUE_FRONTEND_STATIC_PATH = 'vue'
+
+REST_FRAMEWORK = {
+    'DEFAULT_AUTHENTICATION_CLASSES': (
+        'rest_framework_simplejwt.authentication.JWTAuthentication',
+    ),
+}

@@ -26,5 +26,6 @@ wagtailgeowidget==8.2.1
 wagtail-modeladmin==2.0.0
 django-polymorphic==3.1.0
 djangorestframework-api-key==3.0.0
+djangorestframework-simplejwt>=5.5.0
 django-vue-utils==0.1.7
 django-deep-translator==1.4.0
