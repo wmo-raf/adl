@@ -40,4 +40,4 @@ the collected data to different receiving systems like wis2box, Climate Data Man
 
 ## Guide
 
-You can access the user and developer guide at [https://adl-tool.readthedocs.io](https://adl-tool.readthedocs.io).
+You can access the user and developer guide at [https://adl-tool.readthedocs.io](https://adl-tool.readthedocs.io)
