@@ -1,0 +1,10 @@
+sphinx_wagtail_theme
+sphinx-rtd-theme
+Sphinx
+myst-parser
+pyenchant
+sphinxcontrib-spelling
+sphinx-copybutton
+Django
+wagtail
+sphinx-intl
