@@ -26,8 +26,8 @@ export const useStationStore = defineStore('stationInfo', {
                 const response = await fetchStationLinkDetail(this.axios, stationId)
                 const {data_parameters, data_categories} = response.data
                 this.selectedStationLinkDetail = response.data
-                this.selectedStationDataParameters = data_parameters
-                this.selectedStationDataCategories = data_categories
+                this.selectedStationDataParameters = data_parameters || []
+                this.selectedStationDataCategories = data_categories || []
             } catch (err) {
                 this.error = err.message || 'Failed to fetch station link detail'
             } finally {

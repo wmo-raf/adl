@@ -20,17 +20,15 @@ const dataCategories = computed(() => {
 })
 
 const filteredData = computed(() => {
-  let selectedCategoryId = stationLatestDataStore.selectedDataCategoryId
-
-  if (!selectedCategoryId && stationStore.selectedStationDataCategories && stationStore.selectedStationDataCategories.length > 0) {
-    selectedCategoryId = stationStore.selectedStationDataCategories[0].id
-  }
+  const selectedCategoryId = stationLatestDataStore.selectedDataCategoryId;
+  const data = stationLatestDataStore.selectedStationLatestData;
 
   if (selectedCategoryId) {
-    const data = stationLatestDataStore.selectedStationLatestData
-    return data && data.filter((item) => item.parameterCategory === selectedCategoryId)
+    console.log(data, selectedCategoryId)
+    return data.filter((item) => item.parameterCategory === selectedCategoryId);
   }
-  return stationLatestDataStore.selectedStationLatestData
+
+  return data;
 });
 
 // fetch new data when station is changed
@@ -48,6 +46,7 @@ watch(() => stationStore.selectedStationDataCategories, (newDataCategories) => {
   }
 }, {immediate: true})
 
+
 </script>
 
 <template>
@@ -63,7 +62,6 @@ watch(() => stationStore.selectedStationDataCategories, (newDataCategories) => {
         placeholder="Select a category"
     />
   </div>
-
   <DataTable
       :value="filteredData"
       :size="'small'"

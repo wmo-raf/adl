@@ -6,10 +6,13 @@
 x-adl-variables: &adl-variables
   DATABASE_URL: postgis://${ADL_DB_USER:-adl}:${ADL_DB_PASSWORD}@adl_db:5432/${ADL_DB_NAME:-adl}
   REDIS_URL: redis://adl_redis:6379/0
+  PLUGIN_RUNTIME_SETUP_MARKER: 0
+  WAIT_TIMEOUT: 120
 
 services:
   adl_db:
     image: timescale/timescaledb-ha:pg15
+    container_name: {{ cookiecutter.project_slug }}-db
     env_file:
       - .env
     environment:
@@ -26,6 +29,7 @@ services:
 
   adl:
     image: {{ cookiecutter.project_slug }}_dev
+    container_name: {{ cookiecutter.project_slug }}
     build:
       context: .
       dockerfile: ./dev.Dockerfile
@@ -33,7 +37,7 @@ services:
         - PLUGIN_BUILD_UID=${PLUGIN_BUILD_UID}
         - PLUGIN_BUILD_GID=${PLUGIN_BUILD_GID}
     ports:
-      - "8000"
+      - "${PORT:-8080}:8000"
     env_file:
       - .env
     environment:
@@ -43,16 +47,15 @@ services:
       - adl_db
       - adl_redis
     volumes:
-      - static:/adl/app/src/adl/static
-      - media:/adl/app/src/adl/media
       - ./plugins/{{ cookiecutter.project_module }}:/adl/plugins/{{ cookiecutter.project_module }}
     # Open stdin and tty so when attaching key input works as expected.
-    stdin_open: true
-    tty: true
+    tty: true              # enables terminal support
+    stdin_open: true       # allows interactive input
 
   adl_celery_worker:
     image: {{ cookiecutter.project_slug }}_dev
     command: celery-worker
+    container_name: {{ cookiecutter.project_slug }}-worker
     env_file:
       - .env
     environment:
@@ -61,8 +64,6 @@ services:
     depends_on:
       - adl
     volumes:
-      - static:/adl/app/src/adl/static
-      - media:/adl/app/src/adl/media
       - ./plugins/{{ cookiecutter.project_module }}:/adl/plugins/{{ cookiecutter.project_module }}
     # Open stdin and tty so when attaching key input works as expected.
     stdin_open: true
@@ -70,6 +71,7 @@ services:
 
   adl_celery_beat:
     image: {{ cookiecutter.project_slug }}_dev
+    container_name: {{ cookiecutter.project_slug }}-beat
     command: celery-beat
     env_file:
       - .env
@@ -79,25 +81,10 @@ services:
     depends_on:
       - adl
     volumes:
-      - static:/adl/app/src/adl/static
-      - media:/adl/app/src/adl/media
       - ./plugins/{{ cookiecutter.project_module }}:/adl/plugins/{{ cookiecutter.project_module }}
     # Open stdin and tty so when attaching key input works as expected.
     stdin_open: true
     tty: true
 
-  adl_web_proxy:
-    image: nginx:1.20.2-alpine
-    env_file:
-      - .env
-    volumes:
-      - static:/wagtail_static
-      - media:/wagtail_media
-      - $PWD/nginx.conf:/etc/nginx/nginx.conf
-    ports:
-      - ${ADL_WEB_PROXY_PORT:-80}:80
-
 volumes:
   pgdata:
-  static:
-  media:

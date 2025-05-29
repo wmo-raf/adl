@@ -34,7 +34,7 @@ celery-worker       : Start the celery worker queue which runs important async t
 celery-beat         : Start the celery beat service used to schedule periodic jobs
 
 DEV COMMANDS:
-django-dev      : Start a normal Baserow backend django development server, performs
+django-dev      : Start a normal ADL backend django development server, performs
                   the same checks and setup as the gunicorn command above.
 """
 }
@@ -122,7 +122,7 @@ source /adl/plugins/utils.sh
 case "$1" in
 django-dev)
     run_setup_commands_if_configured
-    echo "Running Development Server on 0.0.0.0:"
+    echo "Running Development Server on 0.0.0.0:${ADL_PORT}"
     echo "Press CTRL-p CTRL-q to close this session without stopping the container."
     attachable_exec python /adl/app/src/adl/manage.py runserver "0.0.0.0:${ADL_PORT}"
     ;;

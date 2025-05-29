@@ -6,7 +6,7 @@ import {useStationStore} from "@/stores/station.js";
 
 export const useStationLatestDataStore = defineStore('stationLatestData', {
     state: () => ({
-        selectedStationLatestData: null,
+        selectedStationLatestData: [],
         selectedDataCategoryId: null,
         loading: false,
         error: null,
@@ -20,6 +20,10 @@ export const useStationLatestDataStore = defineStore('stationLatestData', {
                 const response = await fetchStationLinkLatestData(this.axios, stationId)
                 const {data} = response
                 const stationDataParameters = stationStore.selectedStationDataParameters
+
+                console.log(stationDataParameters, 'stationDataParameters')
+
+
                 const dataWithParameters = data.data.reduce((all, item) => {
                     const parameter = stationDataParameters.find(p => p.id === item.parameter_id)
 
@@ -39,6 +43,8 @@ export const useStationLatestDataStore = defineStore('stationLatestData', {
                     return all
                 }, []);
 
+                console.log(data, dataWithParameters, 'dataWithParameters')
+
                 this.selectedStationLatestData = dataWithParameters
             } catch (err) {
                 this.error = err.message || 'Failed to fetch station link latest data'
@@ -47,7 +53,7 @@ export const useStationLatestDataStore = defineStore('stationLatestData', {
             }
         },
         clearData() {
-            this.selectedStationLatestData = null
+            this.selectedStationLatestData = []
         },
         selectDataCategoryId(dataCategoryId) {
             this.selectedDataCategoryId = dataCategoryId

@@ -11,9 +11,15 @@ ENV GID=${GID:-9999}
 
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
-# We might be running as a user which already exists in this image. In that situation
-# Everything is OK and we should just continue on.
-RUN groupadd -g $GID adl_docker_group || exit 0
+# Create or rename group to adl_docker_group with desired GID
+RUN if getent group $GID > /dev/null; then \
+        existing_group=$(getent group $GID | cut -d: -f1); \
+        if [ "$existing_group" != "adl_docker_group" ]; then \
+            groupmod -n adl_docker_group "$existing_group"; \
+        fi; \
+    else \
+        groupadd -g $GID adl_docker_group; \
+    fi
 RUN useradd --shell /bin/bash -u $UID -g $GID -o -c "" -m adl_docker_user -l || exit 0
 ENV DOCKER_USER=adl_docker_user
 
