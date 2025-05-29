@@ -25,8 +25,8 @@ different receiving systems.
 
 ## Features
 
-- **Data Ingestion**: Collects data from various AWS networks and manual stations.
-- **Data Dispatch**: Pushes collected data to different receiving systems.
+- **Data Ingestion**: Collects data from various AWS networks and manual stations, based on installed plugins.
+- **Data Dispatch**: Pushes collected data to different receiving systems, based on installed plugins.
 - **Plugin Architecture**: Extensible architecture allowing for custom plugins to be developed for specific AWS vendors
   or data sources.
 
