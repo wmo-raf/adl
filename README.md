@@ -23,6 +23,21 @@ different receiving systems.
 | 12  | 🇪🇹 [Ethiopia](https://www.ethiomet.gov.et)        | [ADL ADCON DB Plugin](https://github.com/wmo-raf/adl-adcon-db-plugin)                                                                                                                                                    | Ethiomet wis2box                                            | ⏳In Progress  |
 | 13  | 🇸🇳 [Senegal](https://anacim.sn)                   | ADCON, [ADL Pulsonic Plugin](https://github.com/wmo-raf/adl-pulsoweb-plugin)                                                                                                                                             | Anacim wis2box                                              | ⏳In Progress  |
 
+## Features
+
+- **Data Ingestion**: Collects data from various AWS networks and manual stations.
+- **Data Dispatch**: Pushes collected data to different receiving systems.
+- **Plugin Architecture**: Extensible architecture allowing for custom plugins to be developed for specific AWS vendors
+  or data sources.
+
+## System Architecture
+
+The Automated Data Loader (ADL) is a plugin based system that defines an architecture for implementing data loaders from
+different observation data sources, such as Automatic Weather Stations (AWS) networks and manual stations, and pushing
+the collected data to different receiving systems like wis2box, Climate Data Management Systems (CDMSs), FTP etc.
+
+![ADL System Architecture](docs/_static/images/adl-system-architecture.png)
+
 ## Guide
 
 You can access the user and developer guide at [https://adl-tool.readthedocs.io](https://adl-tool.readthedocs.io).

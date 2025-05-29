@@ -1,7 +1,8 @@
 # 🏗 System Architecture
 
-The Automated Data Loader (ADL) is a plugin based system that defines an architecture for implementing data loaders for
-different AWS vendors.
+The Automated Data Loader (ADL) is a plugin based system that defines an architecture for implementing data loaders from
+different observation data sources, such as Automatic Weather Stations (AWS) networks and manual stations, and pushing
+the collected data to different receiving systems like wis2box, Climate Data Management Systems (CDMSs), FTP etc.
 
 ![ADL System Architecture](_static/images/adl-system-architecture.png)
 
