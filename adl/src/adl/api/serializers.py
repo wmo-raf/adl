@@ -42,13 +42,13 @@ class StationLinkSerializer(ReadOnlyModelSerializer):
     
     class Meta:
         model = StationLink
-        fields = ("id", "network_connection", "enabled", "station",)
+        fields = ("id", "network_connection", "station",)
 
 
 class NetworkConnectionSerializer(ReadOnlyModelSerializer):
     class Meta:
         model = NetworkConnection
-        fields = ("id", "name", "network", "plugin", "plugin_processing_enabled", "plugin_processing_interval")
+        fields = ("id", "name", "network")
 
 
 class ObservationRecordSerializer(ReadOnlyModelSerializer):

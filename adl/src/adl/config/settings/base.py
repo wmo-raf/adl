@@ -78,6 +78,7 @@ INSTALLED_APPS = [
     "rest_framework_simplejwt",
     "django_vue_utilities",
     "django_deep_translator",
+    "drf_spectacular",
     
     "django.contrib.admin",
     "django.contrib.auth",
@@ -367,4 +368,14 @@ REST_FRAMEWORK = {
         'rest_framework.authentication.SessionAuthentication',
         'rest_framework_simplejwt.authentication.JWTAuthentication',
     ),
+    'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
+}
+
+SPECTACULAR_SETTINGS = {
+    'TITLE': 'ADL API',
+    'DESCRIPTION': 'Automated Data Loader API for Weather Observation Data',
+    'VERSION': '1.0.0',
+    "PREPROCESSING_HOOKS": [
+        "adl.api.schema_hooks.filter_endpoints",
+    ]
 }

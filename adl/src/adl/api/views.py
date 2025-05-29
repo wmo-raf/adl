@@ -3,6 +3,7 @@ from datetime import timedelta
 from django.db.models import Min, Max
 from django.shortcuts import get_object_or_404
 from django.utils import timezone as dj_timezone
+from drf_spectacular.utils import extend_schema, OpenApiParameter, OpenApiExample
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
 from rest_framework_api_key.permissions import HasAPIKey
@@ -26,6 +27,12 @@ from .serializers import (
 from .utils import validate_iso_datetime, _group_records_by_time
 
 
+@extend_schema(
+    summary="List all networks",
+    description="Returns a list of all networks configured in the system.",
+    responses=NetworkSerializer(many=True),
+    tags=["Networks"]
+)
 @api_view()
 @permission_classes([HasAPIKey])
 def get_networks(request):
@@ -34,6 +41,16 @@ def get_networks(request):
     return Response(data)
 
 
+@extend_schema(
+    summary="Get station link details",
+    description="Returns detailed information about a station link including mapped data parameters and available data dates.",
+    parameters=[
+        OpenApiParameter(name="station_link_id", type=int, location=OpenApiParameter.PATH,
+                         description="ID of the station link"),
+    ],
+    responses=StationLinkSerializer,
+    tags=["Station Links"]
+)
 @api_view()
 @permission_classes([HasAPIKeyOrIsAuthenticated])
 def get_station_link_detail(request, station_link_id):
@@ -83,6 +100,12 @@ def get_station_link_detail(request, station_link_id):
     return Response(station_link_info)
 
 
+@extend_schema(
+    summary="Get network connections",
+    description="Returns all network connections available in the system.",
+    responses=NetworkConnectionSerializer(many=True),
+    tags=["Connections"]
+)
 @api_view()
 @permission_classes([HasAPIKeyOrIsAuthenticated])
 def get_network_connections(request):
@@ -91,6 +114,20 @@ def get_network_connections(request):
     return Response(data)
 
 
+@extend_schema(
+    summary="List all data parameters",
+    description="Returns all data parameters and their categories.",
+    responses={
+        200: OpenApiExample(
+            name="Data Parameters Response",
+            value={
+                "categories": [{"id": "TMP", "name": "Temperature"}],
+                "data_parameters": []
+            }
+        )
+    },
+    tags=["Parameters"]
+)
 @api_view()
 @permission_classes([HasAPIKeyOrIsAuthenticated])
 def get_data_parameters(request):
@@ -106,6 +143,16 @@ def get_data_parameters(request):
     return Response(response_data)
 
 
+@extend_schema(
+    summary="Get station links by network connection",
+    description="Returns all station links for the given network connection.",
+    parameters=[
+        OpenApiParameter(name="network_conn_id", type=int, location=OpenApiParameter.PATH,
+                         description="ID of the network connection"),
+    ],
+    responses=StationLinkSerializer(many=True),
+    tags=["Station Links"]
+)
 @api_view()
 @permission_classes([HasAPIKeyOrIsAuthenticated])
 def get_network_connection_station_links(request, network_conn_id):
@@ -115,6 +162,16 @@ def get_network_connection_station_links(request, network_conn_id):
     return Response(data)
 
 
+@extend_schema(
+    summary="Get raw observation records for a station in a network connection",
+    description="Returns raw ungrouped observation records for a specific station and connection.",
+    parameters=[
+        OpenApiParameter(name="connection_id", type=int, location=OpenApiParameter.PATH),
+        OpenApiParameter(name="station_id", type=str, location=OpenApiParameter.PATH),
+    ],
+    responses=ObservationRecordSerializer(many=True),
+    tags=["Observation Records"]
+)
 @api_view()
 @permission_classes([HasAPIKey])
 def get_raw_observation_records_for_connection_station(request, connection_id, station_id):
@@ -130,6 +187,15 @@ def get_raw_observation_records_for_connection_station(request, connection_id, s
     return Response(data)
 
 
+@extend_schema(
+    summary="Get latest data for station link",
+    description="Returns the latest observation for each parameter at the station link.",
+    parameters=[
+        OpenApiParameter(name="station_link_id", type=int, location=OpenApiParameter.PATH),
+    ],
+    responses=ObservationRecordSerializer(many=True),
+    tags=["Observation Records"]
+)
 @api_view()
 @permission_classes([HasAPIKeyOrIsAuthenticated])
 def get_station_link_latest_data(request, station_link_id):
@@ -159,6 +225,24 @@ def get_station_link_latest_data(request, station_link_id):
     return Response(data)
 
 
+@extend_schema(
+    summary="Get time series data for a station link",
+    description=(
+            "Returns observation records grouped by time for a given station link, "
+            "optionally filtered by time range and parameter category."
+    ),
+    parameters=[
+        OpenApiParameter(name="station_link_id", type=int, location=OpenApiParameter.PATH),
+        OpenApiParameter(name="start_time", required=False, type=str, location=OpenApiParameter.QUERY,
+                         description="Start datetime (ISO 8601 format)"),
+        OpenApiParameter(name="end_time", required=False, type=str, location=OpenApiParameter.QUERY,
+                         description="End datetime (ISO 8601 format)"),
+        OpenApiParameter(name="category", required=False, type=str, location=OpenApiParameter.QUERY,
+                         description="Parameter category to filter by"),
+    ],
+    responses=ObservationRecordSerializer(many=True),
+    tags=["Observation Records"]
+)
 @api_view()
 @permission_classes([HasAPIKeyOrIsAuthenticated])
 def get_station_link_timeseries_data(request, station_link_id):

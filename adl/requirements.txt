@@ -29,3 +29,4 @@ djangorestframework-api-key==3.0.0
 djangorestframework-simplejwt>=5.5.0
 django-vue-utils==0.1.7
 django-deep-translator==1.4.0
+drf-spectacular
