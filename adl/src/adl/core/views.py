@@ -630,7 +630,7 @@ def create_predefined_data_parameters(request):
                     for parameter in PREDEFINED_DATA_PARAMETERS:
                         unit = parameter.get("unit")
                         unit_symbol = unit.get("symbol")
-                        conversion_context = unit.get("conversion_context")
+                        conversion_context = parameter.get("conversion_context")
                         wis2box_aws_csv_template_unit = parameter.get("wis2box_aws_csv_template_unit")
                         
                         # get or create unit
