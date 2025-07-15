@@ -1,33 +1,25 @@
 from django.urls import reverse, path
-from django.urls.exceptions import NoReverseMatch
-from django.utils.functional import cached_property
-from django.utils.safestring import mark_safe
 from django.utils.translation import gettext_lazy as _
 from wagtail import hooks
 from wagtail.admin.menu import MenuItem
-from wagtail.admin.widgets import HeaderButton
-from wagtail.snippets.models import register_snippet
-from wagtail.snippets.views.snippets import SnippetViewSet, IndexView
-from wagtail_modeladmin.helpers import AdminURLHelper, ButtonHelper
-from wagtail_modeladmin.options import ModelAdmin, modeladmin_register
 
-from .constants import PREDEFINED_DATA_PARAMETERS
 from .home import (
     NetworksSummaryItem,
     StationsSummaryItem,
     PluginsSummaryItem
 )
 from .models import (
-    Network,
-    Station,
-    DataParameter,
     NetworkConnection,
-    DispatchChannel,
-    Unit
+    DispatchChannel
+)
+from .registries import (
+    dispatch_channel_viewset_registry,
+    station_link_viewset_registry,
+    connection_viewset_registry
 )
 from .utils import (
     get_all_child_models,
-    get_model_by_string_label
+    get_model_by_string_label, make_registrable_viewset, make_registrable_connection_viewset
 )
 from .views import (
     load_stations_csv,
@@ -39,6 +31,7 @@ from .views import (
     dispatch_channel_add_select,
     create_predefined_data_parameters
 )
+from .viewsets import admin_viewsets
 
 adl_register_plugin_menu_items_hook_name = "register_adl_plugin_menu_items"
 
@@ -46,228 +39,64 @@ adl_register_plugin_menu_items_hook_name = "register_adl_plugin_menu_items"
 @hooks.register('register_admin_urls')
 def urlconf_adl():
     return [
-        path('adl/load-stations-oscar-csv/', load_stations_csv, name='load_stations_oscar_csv'),
-        path('adl/load-stations-oscar/', load_stations_oscar, name='load_stations_oscar'),
-        path('adl/import-oscar-station/<str:wigos_id>', import_oscar_station, name='import_oscar_station'),
-        path('adl/create-predefined-data-parameters', create_predefined_data_parameters,
+        path('load-stations-oscar-csv/', load_stations_csv, name='load_stations_oscar_csv'),
+        path('load-stations-oscar/', load_stations_oscar, name='load_stations_oscar'),
+        path('import-oscar-station/<str:wigos_id>', import_oscar_station, name='import_oscar_station'),
+        path('create-predefined-data-parameters', create_predefined_data_parameters,
              name='create_predefined_data_parameters'),
-        path('adl/connections/', connections_list, name="connections_list"),
-        path('adl/connections/select', connection_add_select, name="connections_add_select"),
-        path('adl/dispatch-channels', dispatch_channels_list, name="dispatch_channels_list"),
-        path('adl/dispatch-channels/select', dispatch_channel_add_select, name="dispatch_channel_add_select"),
+        path('connections/', connections_list, name="connections_list"),
+        path('connections/select', connection_add_select, name="connections_add_select"),
+        path('dispatch-channels', dispatch_channels_list, name="dispatch_channels_list"),
+        path('dispatch-channels/select', dispatch_channel_add_select, name="dispatch_channel_add_select"),
     ]
 
 
-class NetworkAdmin(ModelAdmin):
-    model = Network
-    base_url_path = "network"
-    menu_icon = "circle-nodes"
-    add_to_admin_menu = True
-    menu_order = 100
-
-
-modeladmin_register(NetworkAdmin)
-
-
-class StationLinkButtonHelper(ButtonHelper):
-    def get_buttons_for_obj(self, obj, exclude=None, classnames_add=None, classnames_exclude=None):
-        buttons = super().get_buttons_for_obj(obj, exclude, classnames_add, classnames_exclude)
-        
-        classnames = self.edit_button_classnames + classnames_add
-        cn = self.finalise_classname(classnames, classnames_exclude)
-        
-        if hasattr(obj, "get_extra_model_admin_buttons"):
-            buttons.extend(obj.get_extra_model_admin_buttons(classname=cn))
-        
-        return buttons
-
-
 # Register all NetworkConnection models
-def register_network_connections_models():
+def get_connection_viewsets():
     connection_model_cls = get_all_child_models(NetworkConnection)
     
+    station_link_viewsets = []
+    connection_viewsets = []
+    
     for model_cls in connection_model_cls:
-        station_link_admin = None
         station_link_model = None
-        
         if hasattr(model_cls, "station_link_model_string_label"):
             station_link_model = get_model_by_string_label(model_cls.station_link_model_string_label)
-            
             if station_link_model:
-                class StationLinkAdmin(ModelAdmin):
-                    model = station_link_model
-                    add_to_admin_menu = False
-                    list_filter = ["network_connection"]
-                    button_helper_class = StationLinkButtonHelper
-                    
-                    # add extra list display fields if defined in the model
-                    list_display = (["__str__", "enabled"] +
-                                    list(getattr(station_link_model, "extra_list_display", [])))
-                    
-                    def get_queryset(self, request):
-                        qs = super().get_queryset(request)
-                        
-                        network_connection = request.GET.get("network_connection")
-                        
-                        if network_connection:
-                            qs = qs.filter(network_connection=network_connection)
-                        
-                        return qs
-                
-                station_link_admin = StationLinkAdmin
+                station_link_viewset = make_registrable_viewset(station_link_model, list_filter=["network_connection"])
+                station_link_viewset_registry.register(station_link_viewset)
+                station_link_viewsets.append(station_link_viewset)
         
-        class ConnectionAdmin(ModelAdmin):
-            model = model_cls
-            add_to_admin_menu = False
-            
-            # add extra list display fields if defined in the model
-            list_display = (["__str__", "plugin_processing_enabled"] +
-                            list(getattr(model_cls, "extra_list_display", [])))
-            
-            def __init__(self, parent=None):
-                super().__init__(parent)
-                
-                self.list_display = (list(self.list_display) or []) + ['get_station_link']
-                self.get_station_link.__func__.short_description = _('Station Link')
-            
-            def get_station_link(self, obj):
-                station_link_url = None
-                
-                if hasattr(obj, "get_station_link_url"):
-                    station_link_url = obj.get_station_link_url()
-                else:
-                    if station_link_admin and station_link_model:
-                        url_helper = AdminURLHelper(station_link_model)
-                        try:
-                            station_link_url = url_helper.index_url
-                            station_link_url += f"?network_connection={obj.id}"
-                        except NoReverseMatch:
-                            pass
-                
-                if station_link_url is None:
-                    return None
-                
-                label = _("Stations Link")
-                button_html = f"""
-                        <a href="{station_link_url}" class="button button-small button--icon button-secondary">
-                            <span class="icon-wrapper">
-                                <svg class="icon icon-map-pin icon" aria-hidden="true">
-                                    <use href="#icon-map-pin"></use>
-                                </svg>
-                            </span>
-                            {label}
-                        </a>
-                    """
-                return mark_safe(button_html)
-        
-        # register connection admin
-        modeladmin_register(ConnectionAdmin)
-        
-        # register station link admin
-        if station_link_admin:
-            modeladmin_register(station_link_admin)
+        connection_viewset = make_registrable_connection_viewset(model_cls, station_link_model=station_link_model,
+                                                                 list_filter=["network"])
+        connection_viewset_registry.register(connection_viewset)
+        connection_viewsets.append(connection_viewset)
+    
+    return station_link_viewsets + connection_viewsets
 
 
-register_network_connections_models()
-
-
-def register_dispatch_channels_models():
+def get_dispatch_channels_viewsets():
     dispatch_channels_model_cls = get_all_child_models(DispatchChannel)
+    viewsets = []
     
     for model_cls in dispatch_channels_model_cls:
-        class DispatchChannelAdmin(ModelAdmin):
-            model = model_cls
-            add_to_admin_menu = False
+        viewset = make_registrable_viewset(model_cls)
         
-        modeladmin_register(DispatchChannelAdmin)
-
-
-register_dispatch_channels_models()
-
-
-class StationIndexView(IndexView):
-    list_display = ["name", "network", "station_id", "wigos_id"]
-    list_filter = ["network", ]
+        # add this viewset to a local registry so that
+        # we can refer to it later
+        dispatch_channel_viewset_registry.register(viewset)
+        
+        viewsets.append(viewset)
     
-    @cached_property
-    def header_buttons(self):
-        buttons = super().header_buttons
-        
-        buttons.extend([
-            HeaderButton(
-                label=_('Load Stations from OSCAR Surface'),
-                url=reverse("load_stations_oscar"),
-                icon_name="plus",
-            ),
-        ])
-        
-        return buttons
+    return viewsets
 
 
-class StationViewSet(SnippetViewSet):
-    model = Station
-    base_url_path = "station"
-    index_view_class = StationIndexView
-    menu_icon = "map-pin"
-    add_to_admin_menu = True
-    menu_order = 200
-
-
-register_snippet(StationViewSet)
-
-
-class UnitViewSet(SnippetViewSet):
-    model = Unit
-    menu_icon = "list-ul"
-    add_to_settings_menu = True
-    add_to_admin_menu = False
-    list_display = ["name", "symbol", "get_registry_unit"]
-    menu_order = 700
-
-
-register_snippet(UnitViewSet)
-
-
-class DataParameterIndexView(IndexView):
-    @cached_property
-    def header_buttons(self):
-        buttons = super().header_buttons
-        
-        has_existing_objects = self.get_queryset().exists()
-        
-        if not has_existing_objects:
-            buttons.extend([
-                HeaderButton(
-                    label=_('Create from Predefined Data Parameters'),
-                    url=reverse("create_predefined_data_parameters"),
-                    icon_name="plus",
-                ),
-            ])
-        
-        return buttons
+@hooks.register("register_admin_viewset")
+def register_viewsets():
+    connection_viewsets = get_connection_viewsets()
+    dispatch_channels_viewsets = get_dispatch_channels_viewsets()
     
-    def get_context_data(self):
-        context = super().get_context_data()
-        context["create_predefined_data_parameters_url"] = reverse("create_predefined_data_parameters")
-        
-        items_count = context.get("items_count")
-        
-        if items_count == 0:
-            context["predefined_data_parameters"] = PREDEFINED_DATA_PARAMETERS
-        
-        return context
-
-
-class DataParameterViewSet(SnippetViewSet):
-    index_results_template_name = "core/data_parameter_index_results.html"
-    model = DataParameter
-    index_view_class = DataParameterIndexView
-    add_to_settings_menu = True
-    menu_order = 800
-    menu_icon = "form"
-
-
-register_snippet(DataParameterViewSet)
+    return admin_viewsets + connection_viewsets + dispatch_channels_viewsets
 
 
 @hooks.register('construct_main_menu')
@@ -329,5 +158,4 @@ def register_connections_menu():
 def register_dispatch_channels_menu():
     list_url = reverse('dispatch_channels_list')
     label = _("Dispatch Channels")
-    
     return MenuItem(label, list_url, icon_name='resubmit', order=600)
