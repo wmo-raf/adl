@@ -1,4 +1,5 @@
 import json
+from collections import defaultdict
 
 from django.contrib.gis.geos import Point
 from django.core.cache import cache
@@ -6,12 +7,10 @@ from django.core.paginator import Paginator, InvalidPage
 from django.db import transaction
 from django.shortcuts import render, redirect
 from django.urls import reverse_lazy, reverse
-from django.urls.exceptions import NoReverseMatch
 from django.utils.translation import gettext as _
 from wagtail.admin import messages
-from wagtail.admin.ui.tables import Column, Table, TitleColumn, ButtonsColumnMixin
-from wagtail.admin.widgets import HeaderButton, ListingButton
-from wagtail_modeladmin.helpers import AdminURLHelper
+from wagtail.admin.ui.tables import Table, TitleColumn
+from wagtail.admin.widgets import HeaderButton
 
 from .constants import OSCAR_SURFACE_REQUIRED_CSV_COLUMNS, PREDEFINED_DATA_PARAMETERS
 from .forms import StationLoaderForm, OSCARStationImportForm, CreatePredefinedDataParametersForm
@@ -22,19 +21,19 @@ from .models import (
     NetworkConnection,
     DispatchChannel, DataParameter, Unit
 )
-from .table import LinkColumnWithIcon
+from .registries import dispatch_channel_viewset_registry, connection_viewset_registry, plugin_registry
 from .utils import (
     get_stations_for_country_live,
     get_stations_for_country_local,
     get_wigos_id_parts,
     extract_digits,
     get_all_child_models,
-    get_child_model_by_name, get_model_by_string_label
+    get_child_model_by_name
 )
 
 
 def load_stations_csv(request):
-    from .wagtail_hooks import StationViewSet
+    from .viewsets import StationViewSet
     stations_url = StationViewSet().menu_url
     
     template_name = "adl/load_stations_csv.html"
@@ -123,7 +122,7 @@ def load_stations_oscar(request):
     use_local_copy = request.GET.get("use_local", '').lower()
     use_local_copy = use_local_copy in ['1', 'true']
     
-    from .wagtail_hooks import StationViewSet
+    from .viewsets import StationViewSet
     stations_url = StationViewSet().menu_url
     station_edit_url_name = StationViewSet().get_url_name("edit")
     
@@ -207,7 +206,7 @@ def load_stations_oscar(request):
 
 
 def import_oscar_station(request, wigos_id):
-    from .wagtail_hooks import StationViewSet
+    from .viewsets import StationViewSet
     
     use_local_copy = request.GET.get("use_local", '').lower()
     use_local_copy = use_local_copy in ['1', 'true']
@@ -350,101 +349,45 @@ def import_oscar_station(request, wigos_id):
     return render(request, template_name=template_name, context=context)
 
 
+def get_index_url_for_connection(connection):
+    model_cls = get_child_model_by_name(NetworkConnection, connection._meta.model_name)
+    viewset = connection_viewset_registry.get(model_cls._meta.model_name)
+    return reverse(viewset.get_url_name("index"))
+
+
 def connections_list(request):
-    queryset = NetworkConnection.objects.all().order_by("name")
+    connections = NetworkConnection.objects.all().order_by("name")
     
-    breadcrumbs_items = [
-        {"url": reverse_lazy("wagtailadmin_home"), "label": _("Home")},
-        {"url": "", "label": _("Network Connections")},
-    ]
+    # Group connections by plugin
+    grouped_connections = defaultdict(list)
+    for conn in connections:
+        grouped_connections[conn.plugin].append(conn)
     
-    # Get search parameters from the query string.
-    try:
-        page_num = int(request.GET.get("p", 0))
-    except ValueError:
-        page_num = 0
-    
-    all_count = queryset.count()
-    result_count = all_count
-    paginator = Paginator(queryset, 20)
-    
-    try:
-        page_obj = paginator.page(page_num + 1)
-    except InvalidPage:
-        page_obj = paginator.page(1)
-    
-    def get_edit_url(instance):
-        model_cls = instance.__class__
-        if model_cls:
-            url_helper = AdminURLHelper(model_cls)
-            edit_url = url_helper.get_action_url("edit", instance.id)
-            return edit_url
-        
-        return None
-    
-    def get_stations_link_url(instance):
-        model_cls = instance.__class__
-        station_link_url = None
-        
-        if hasattr(instance, "get_station_link_url"):
-            station_link_url = instance.get_station_link_url()
-        else:
-            if hasattr(model_cls, "station_link_model_string_label"):
-                station_link_model = get_model_by_string_label(model_cls.station_link_model_string_label)
-                
-                if station_link_model:
-                    url_helper = AdminURLHelper(station_link_model)
-                    try:
-                        station_link_url = url_helper.index_url
-                    except NoReverseMatch:
-                        pass
-        
-        return station_link_url
-    
-    class ExtraColumnButtons(ButtonsColumnMixin, Column):
-        cell_template_name = "adl/tables/column_cell.html"
-        
-        def get_buttons(self, instance, parent_context):
-            extra_links = []
-            if hasattr(instance, "get_extra_model_admin_links"):
-                links = instance.get_extra_model_admin_links()
-                for link in links:
-                    extra_links.append(
-                        ListingButton(
-                            link.get("label"),
-                            url=link.get("url"),
-                            icon_name=link.get("icon_name", ""),
-                            **link.get("kwargs", {})
-                        )
-                    )
-            return extra_links
-    
-    columns = [
-        TitleColumn("name", label=_("Name"), get_url=get_edit_url),
-        LinkColumnWithIcon("stations_link", label=_("Stations Link"), icon_name="map-pin",
-                           get_url=get_stations_link_url),
-        ExtraColumnButtons("options", label=_("Options"))
-    ]
-    
-    add_url = reverse("connections_add_select")
-    
-    buttons = [
-        HeaderButton(
-            label=_('Add Connection'),
-            url=add_url,
-            icon_name="plus",
-        ),
-    ]
+    # Prepare data for each plugin group
+    data = []
+    for plugin, conns in grouped_connections.items():
+        plugin_obj = plugin_registry.get(plugin)
+        data.append({
+            "plugin": {"name": plugin_obj.label},
+            "connection": {
+                "index_url": get_index_url_for_connection(conns[0]),
+                "count": len(conns),
+            },
+        })
     
     context = {
-        "breadcrumbs_items": breadcrumbs_items,
-        "all_count": all_count,
-        "result_count": result_count,
-        "paginator": paginator,
-        "page_obj": page_obj,
-        "object_list": page_obj.object_list,
-        "header_buttons": buttons,
-        "table": Table(columns, page_obj.object_list),
+        "breadcrumbs_items": [
+            {"url": reverse_lazy("wagtailadmin_home"), "label": _("Home")},
+            {"url": "", "label": _("Network Connections")},
+        ],
+        "header_buttons": [
+            HeaderButton(
+                label=_('Add Connection'),
+                url=reverse("connections_add_select"),
+                icon_name="plus",
+            ),
+        ],
+        "plugin_connections": data,  # Optional: pass it to template if needed
     }
     
     return render(request, "core/connection_list.html", context)
@@ -477,12 +420,11 @@ def connection_add_select(request):
     
     def get_url(instance):
         model_cls = get_child_model_by_name(NetworkConnection, instance["name"])
-        if model_cls:
-            url_helper = AdminURLHelper(model_cls)
-            create_url = url_helper.get_action_url("create")
-            return create_url
+        model_name = model_cls._meta.model_name
         
-        return None
+        viewset = connection_viewset_registry.get(model_name)
+        create_url = reverse(viewset.get_url_name("add"))
+        return create_url
     
     columns = [
         TitleColumn("verbose_name", label=_("Name"), get_url=get_url),
@@ -502,60 +444,41 @@ def connection_add_select(request):
 
 
 def dispatch_channels_list(request):
-    queryset = DispatchChannel.objects.all().order_by("name")
+    dispatch_channels = DispatchChannel.objects.all().order_by("name")
     
     breadcrumbs_items = [
         {"url": reverse_lazy("wagtailadmin_home"), "label": _("Home")},
         {"url": "", "label": _("Dispatch Channels")},
     ]
     
-    # Get search parameters from the query string.
-    try:
-        page_num = int(request.GET.get("p", 0))
-    except ValueError:
-        page_num = 0
+    channel_types = get_all_child_models(DispatchChannel)
     
-    all_count = queryset.count()
-    result_count = all_count
-    paginator = Paginator(queryset, 20)
+    data = {}
     
-    try:
-        page_obj = paginator.page(page_num + 1)
-    except InvalidPage:
-        page_obj = paginator.page(1)
+    for channel_type in channel_types:
+        model_name = channel_type._meta.model_name
+        viewset = dispatch_channel_viewset_registry.get(model_name)
+        index_url = reverse(viewset.get_url_name("index"))
+        data[model_name] = {
+            "name": channel_type._meta.verbose_name,
+            "index_url": index_url,
+            "channels": [],
+        }
     
-    def get_edit_url(instance):
-        model_cls = instance.__class__
-        if model_cls:
-            url_helper = AdminURLHelper(model_cls)
-            edit_url = url_helper.get_action_url("edit", instance.id)
-            return edit_url
-        
-        return None
-    
-    columns = [
-        TitleColumn("name", label=_("Name"), get_url=get_edit_url),
-    ]
-    
-    add_url = reverse("dispatch_channel_add_select")
-    
-    buttons = [
-        HeaderButton(
-            label=_('Add Dispatch Channel'),
-            url=add_url,
-            icon_name="plus",
-        ),
-    ]
+    for channel in dispatch_channels:
+        model_name = channel.__class__._meta.model_name
+        data[model_name]["channels"].append(channel)
     
     context = {
         "breadcrumbs_items": breadcrumbs_items,
-        "all_count": all_count,
-        "result_count": result_count,
-        "paginator": paginator,
-        "page_obj": page_obj,
-        "object_list": page_obj.object_list,
-        "header_buttons": buttons,
-        "table": Table(columns, page_obj.object_list),
+        "header_buttons": [
+            HeaderButton(
+                label=_('Add Dispatch Channel'),
+                url=reverse("dispatch_channel_add_select"),
+                icon_name="plus",
+            ),
+        ],
+        "dispatch_channels": data,
     }
     
     return render(request, "core/dispatch_channel_list.html", context)
@@ -590,12 +513,11 @@ def dispatch_channel_add_select(request):
     
     def get_url(instance):
         model_cls = get_child_model_by_name(DispatchChannel, instance["name"])
-        if model_cls:
-            url_helper = AdminURLHelper(model_cls)
-            create_url = url_helper.get_action_url("create")
-            return create_url
+        model_name = model_cls._meta.model_name
         
-        return None
+        viewset = dispatch_channel_viewset_registry.get(model_name)
+        create_url = reverse(viewset.get_url_name("add"))
+        return create_url
     
     columns = [
         TitleColumn("name", label=_("Name"), get_url=get_url),
@@ -615,7 +537,7 @@ def dispatch_channel_add_select(request):
 
 
 def create_predefined_data_parameters(request):
-    from .wagtail_hooks import DataParameterViewSet
+    from .viewsets import DataParameterViewSet
     
     form = CreatePredefinedDataParametersForm()
     
@@ -630,7 +552,7 @@ def create_predefined_data_parameters(request):
                     for parameter in PREDEFINED_DATA_PARAMETERS:
                         unit = parameter.get("unit")
                         unit_symbol = unit.get("symbol")
-                        conversion_context = unit.get("conversion_context")
+                        conversion_context = parameter.get("conversion_context")
                         wis2box_aws_csv_template_unit = parameter.get("wis2box_aws_csv_template_unit")
                         
                         # get or create unit

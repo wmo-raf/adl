@@ -22,6 +22,7 @@ from wagtail.models import Orderable
 from wagtail.snippets.models import register_snippet
 from wagtailgeowidget.panels import LeafletPanel
 
+from adl.core.registries import plugin_registry
 from .dispatchers import get_dispatch_channel_data
 from .dispatchers.wis2box import upload_to_wis2box
 from .tasks import create_or_update_aggregation_periodic_tasks
@@ -192,6 +193,12 @@ class Unit(models.Model):
     description = models.TextField(verbose_name=_("Description"), blank=True, null=True,
                                    help_text=_("Description of the unit"))
     
+    panels = [
+        FieldPanel("name"),
+        FieldPanel("symbol"),
+        FieldPanel("description"),
+    ]
+    
     class Meta:
         verbose_name = _("Unit")
         verbose_name_plural = _("Units")
@@ -333,9 +340,7 @@ class NetworkConnection(PolymorphicModel, ClusterableModel):
                               help_text=_("Plugin to use for this network"))
     plugin_processing_enabled = models.BooleanField(default=True, verbose_name=_("Active"),
                                                     help_text=_("If unchecked, the plugin will NOT run automatically"))
-    plugin_processing_interval = models.PositiveIntegerField(default=15,
-                                                             verbose_name=_("Plugin Auto Processing Interval "
-                                                                            "in Minutes"),
+    plugin_processing_interval = models.PositiveIntegerField(default=15, verbose_name=_("Interval"),
                                                              help_text=_("How often the plugin should run, in minutes"),
                                                              validators=[
                                                                  MaxValueValidator(30),
@@ -361,6 +366,17 @@ class NetworkConnection(PolymorphicModel, ClusterableModel):
     
     def __str__(self):
         return self.name
+    
+    def get_plugin(self):
+        plugin_type = self.plugin
+        plugin = plugin_registry.get(plugin_type)
+        return plugin
+    
+    def run_plugin_process(self):
+        plugin = self.get_plugin()
+        if not plugin:
+            raise ValueError(f"Plugin {self.plugin} not found in the registry.")
+        return plugin.run_process(self)
 
 
 class StationLink(PolymorphicModel, ClusterableModel):

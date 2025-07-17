@@ -101,3 +101,14 @@ class CustomUnitContextRegistry(Registry):
 
 
 custom_unit_context_registry = CustomUnitContextRegistry()
+
+
+class ViewSetRegistry(Registry):
+    def __init__(self, name, allow_instance_override=True):
+        self.name = name
+        super().__init__(allow_instance_override=allow_instance_override)
+
+
+dispatch_channel_viewset_registry = ViewSetRegistry(name="dispatch_channel_viewset_registry")
+connection_viewset_registry = ViewSetRegistry(name="connection_viewset_registry")
+station_link_viewset_registry = ViewSetRegistry(name="station_link_viewset_registry")

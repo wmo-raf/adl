@@ -7,7 +7,16 @@ from django.apps import apps
 from django.contrib.gis.geos import Polygon, Point
 from django.core.exceptions import ValidationError
 from django.core.files.base import ContentFile
+from django.urls import reverse
+from django.utils.translation import gettext
 from pyoscar import OSCARClient
+from wagtail.admin.views import generic
+from wagtail.admin.viewsets.model import ModelViewSet
+from wagtail.admin.widgets import ListingButton
+
+from adl.core.registries import station_link_viewset_registry
+from adl.core.registry import Instance
+from adl.core.table import LinkColumnWithIcon
 
 logger = logging.getLogger(__name__)
 
@@ -213,3 +222,90 @@ def import_class_by_string_label(class_path):
     
     # Get the class from the module
     return getattr(module, class_name)
+
+
+def make_registrable_viewset(model_cls, icon="snippet", list_display=None, list_filter=None):
+    model_name = model_cls._meta.model_name
+    viewset_name = f"{model_name.title()}ViewSet"
+    
+    attrs = {
+        "model": model_cls,
+        "add_to_admin_menu": False,
+        "type": model_name,
+        "icon": icon,
+    }
+    
+    if list_display:
+        attrs["list_display"] = list_display
+    
+    if list_filter:
+        attrs["list_filter"] = list_filter
+    
+    # Dynamically create the subclass
+    ViewSetCls = type(viewset_name, (ModelViewSet, Instance), attrs)
+    
+    return ViewSetCls()
+
+
+class ConnectionIndexView(generic.IndexView):
+    def get_list_more_buttons(self, instance):
+        buttons = super().get_list_more_buttons(instance)
+        if hasattr(instance, "get_extra_model_admin_links"):
+            extra_links = instance.get_extra_model_admin_links()
+            for link in extra_links:
+                label = link.get("label", None)
+                url = link.get("url", None)
+                icon_name = link.get("icon_name", "link")
+                attrs = link.get("kwargs", {}).get("attrs", {})
+                if label and url:
+                    buttons.append(
+                        ListingButton(
+                            label,
+                            url=url,
+                            icon_name=icon_name,
+                            attrs=attrs,
+                        )
+                    )
+        
+        return buttons
+    
+    def get_table_kwargs(self):
+        table_kwargs = super().get_table_kwargs()
+        table_kwargs["template_name"] = "core/card_view.html"
+        return table_kwargs
+
+
+def make_registrable_connection_viewset(model_cls, icon="snippet", station_link_model=None, list_filter=None):
+    model_name = model_cls._meta.model_name
+    viewset_name = f"{model_name.title()}ViewSet"
+    
+    def get_station_link_url(obj):
+        if hasattr(obj, "get_station_link_url"):
+            station_link_url = obj.get_station_link_url()
+        else:
+            station_link_viewset = station_link_viewset_registry.get(station_link_model._meta.model_name)
+            station_link_url = reverse(station_link_viewset.get_url_name("index"))
+        
+        return station_link_url
+    
+    column = LinkColumnWithIcon("stations_link", label=gettext("Stations Link"), icon_name="map-pin",
+                                get_url=get_station_link_url)
+    list_display = ["__str__", column, "plugin_processing_enabled", "plugin_processing_interval"] + list(
+        getattr(model_cls, "extra_list_display", []))
+    
+    attrs = {
+        "model": model_cls,
+        "add_to_admin_menu": False,
+        "type": model_name,
+        "icon": icon,
+        "list_display": list_display,
+        "index_view_class": ConnectionIndexView,
+    }
+    
+    if list_filter:
+        attrs["list_filter"] = list_filter
+    
+    # Dynamically create the subclass
+    ViewSetCls = type(viewset_name, (ModelViewSet, Instance), attrs)
+    
+    return ViewSetCls()
