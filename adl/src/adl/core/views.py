@@ -444,58 +444,41 @@ def connection_add_select(request):
 
 
 def dispatch_channels_list(request):
-    queryset = DispatchChannel.objects.all().order_by("name")
+    dispatch_channels = DispatchChannel.objects.all().order_by("name")
     
     breadcrumbs_items = [
         {"url": reverse_lazy("wagtailadmin_home"), "label": _("Home")},
         {"url": "", "label": _("Dispatch Channels")},
     ]
     
-    # Get search parameters from the query string.
-    try:
-        page_num = int(request.GET.get("p", 0))
-    except ValueError:
-        page_num = 0
+    channel_types = get_all_child_models(DispatchChannel)
     
-    all_count = queryset.count()
-    result_count = all_count
-    paginator = Paginator(queryset, 20)
+    data = {}
     
-    try:
-        page_obj = paginator.page(page_num + 1)
-    except InvalidPage:
-        page_obj = paginator.page(1)
-    
-    def get_edit_url(instance):
-        model_cls = instance.__class__
-        model_name = model_cls._meta.model_name
+    for channel_type in channel_types:
+        model_name = channel_type._meta.model_name
         viewset = dispatch_channel_viewset_registry.get(model_name)
-        edit_url = reverse(viewset.get_url_name("edit"), args=[instance.id])
-        return edit_url
+        index_url = reverse(viewset.get_url_name("index"))
+        data[model_name] = {
+            "name": channel_type._meta.verbose_name,
+            "index_url": index_url,
+            "channels": [],
+        }
     
-    columns = [
-        TitleColumn("name", label=_("Name"), get_url=get_edit_url),
-    ]
-    
-    add_url = reverse("dispatch_channel_add_select")
-    
-    buttons = [
-        HeaderButton(
-            label=_('Add Dispatch Channel'),
-            url=add_url,
-            icon_name="plus",
-        ),
-    ]
+    for channel in dispatch_channels:
+        model_name = channel.__class__._meta.model_name
+        data[model_name]["channels"].append(channel)
     
     context = {
         "breadcrumbs_items": breadcrumbs_items,
-        "all_count": all_count,
-        "result_count": result_count,
-        "paginator": paginator,
-        "page_obj": page_obj,
-        "object_list": page_obj.object_list,
-        "header_buttons": buttons,
-        "table": Table(columns, page_obj.object_list),
+        "header_buttons": [
+            HeaderButton(
+                label=_('Add Dispatch Channel'),
+                url=reverse("dispatch_channel_add_select"),
+                icon_name="plus",
+            ),
+        ],
+        "dispatch_channels": data,
     }
     
     return render(request, "core/dispatch_channel_list.html", context)

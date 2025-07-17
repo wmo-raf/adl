@@ -1,6 +1,7 @@
 from django.urls import reverse
 from django.utils.functional import cached_property
 from django.utils.translation import gettext_lazy as _
+from wagtail.admin.ui.tables import Table
 from wagtail.admin.viewsets.chooser import ChooserViewSet
 from wagtail.admin.viewsets.model import ModelViewSet
 from wagtail.admin.widgets import HeaderButton
@@ -48,6 +49,11 @@ class StationIndexView(IndexView):
         ])
         
         return buttons
+    
+    def get_table_kwargs(self):
+        table_kwargs = super().get_table_kwargs()
+        # table_kwargs["template_name"] = "core/station_index_table.html"
+        return table_kwargs
 
 
 class StationViewSet(ModelViewSet):

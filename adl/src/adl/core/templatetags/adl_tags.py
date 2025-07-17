@@ -14,3 +14,8 @@ def django_settings(value):
 @register.simple_tag
 def adl_version():
     return __version__
+
+
+@register.filter
+def get_item(dictionary, key):
+    return dictionary.get(key)

@@ -340,9 +340,7 @@ class NetworkConnection(PolymorphicModel, ClusterableModel):
                               help_text=_("Plugin to use for this network"))
     plugin_processing_enabled = models.BooleanField(default=True, verbose_name=_("Active"),
                                                     help_text=_("If unchecked, the plugin will NOT run automatically"))
-    plugin_processing_interval = models.PositiveIntegerField(default=15,
-                                                             verbose_name=_("Plugin Auto Processing Interval "
-                                                                            "in Minutes"),
+    plugin_processing_interval = models.PositiveIntegerField(default=15, verbose_name=_("Interval"),
                                                              help_text=_("How often the plugin should run, in minutes"),
                                                              validators=[
                                                                  MaxValueValidator(30),
