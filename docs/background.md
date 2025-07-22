@@ -1,37 +1,38 @@
 # 📚 Background
 
-One of the challenges confronting NMHSs in Africa in observation data management is the disparities between the
-different station types managed by the institutions or provided through projects. This has given rise to barriers in
-using the data collected by Automated Weather Stations in a harmonized way.
+Across Africa, National Meteorological and Hydrological Services (NMHSs) face a persistent challenge in managing
+observation data due to the diversity of Automatic Weather Station (AWS) types deployed through various initiatives and
+donor-funded projects. Each AWS vendor typically uses proprietary formats and structures for storing and transmitting
+weather data, leading to significant fragmentation in the datasets collected across national networks.
 
-These disparities include major differences in the way the data from various AWS vendors are formatted and stored, which
-result in poorly coordinated, fragmented, and un-harmonized datasets coming from different AWS networks.
+This lack of standardization makes it difficult to integrate and analyze data effectively. As a result, NMHSs often have
+to rely on manual processes or develop custom scripts to extract, convert, and harmonize the data. This process is not
+only time-consuming but also technically demanding—especially for countries that lack sufficient in-house technical
+capacity.
 
-Given the broad category of AWS vendors and types that share similar purpose of collecting weather observation data,
-with different storage structure, having a monolithic application would be too large and complex to accommodate all the
-possible AWS vendor types in Africa NMHSs.
+Recognizing the need for a unified and scalable approach to streamline data ingestion from heterogeneous AWS systems,
+the Automated Data Loader (ADL) was conceptualized as a flexible, plugin-based framework. Rather than attempting to
+build a one-size-fits-all solution, ADL embraces **modularity**: a core engine manages scheduling and orchestration,
+while vendor-specific plugins handle the nuances of connecting to and extracting data from each AWS type.
 
-A solution for unifying this data collection would be to have a core application that only knows about the high-level
-information of the AWS network, and then develop small units (plugins) on demand, to handle the complexities of each AWS
-vendor type. Similar case for pushing data to different receiving systems. For each receiving channel (could be an FTP,
-Database, API, Webhook, S3 Storage etc), a plugin can be developed to handle the complexities of periodically pushing
-data to these systems.
+The same modular philosophy applies to data delivery. In addition to its original mandate—automating the ingestion of
+observation data into WIS2 nodes such as wis2box, ADL now supports the development of export plugins. These allow users
+to push data to a variety of destinations, including FTP servers, cloud storage (e.g., S3), APIs, and databases. This
+extensibility makes ADL adaptable to the evolving data flow needs of NMHSs, enabling smooth integration into both global
+data-sharing systems and national archives.
 
-This project is an implementation of such a solution.
+[WIS2box](https://github.com/World-Meteorological-Organization/wis2box), a reference implementation of the WMO
+Information System for the 21st century (WIS 2.0), is designed to support open, real-time, and standards-based data
+exchange. While deploying a WIS2 node like wis2box is becoming increasingly straightforward, ensuring that real-time
+data from disparate AWS networks is consistently ingested remains a major hurdle—especially in contexts where AWS
+infrastructure is fragmented. ADL bridges this gap by acting as the automation layer between observation networks and
+WIS2 nodes.
 
-The initial idea for this project was to create a tool that would automate the collection of data from different AWS and
-ingest into a [WIS2Box node](https://github.com/wmo-im/wis2box). However, this has been expanded to include the ability
-to develop plugins to send to other receiving storages and systems
+The ADL goal is **to enable data to flow**—consistently, securely, and in harmonized formats—from collection points to
+downstream systems that support forecasting, climate services, and early warning dissemination.
 
-[WIS2 in a box](https://github.com/wmo-im/wis2box) (wis2box) is a Free and Open Source (FOSS) Reference Implementation
-of a WMO WIS2 Node. The project provides a plug and play toolset to ingest, process, and publish weather/climate/water
-data using standards-based approaches in alignment with the WIS2 principles. WIS2 in a box enables World Meteorological
-Organization (WMO) members to publish and download data through the WIS2 network.
-
-One of the critical steps in the WIS2 data flow is the ingestion of realtime data from observation stations (either
-Manual or Automatic Weather Stations) into a WIS2 node. Setting up wis2box is one thing, ensuring that the data from
-stations is periodically ingested into the node in a timely way is another. Countries can develop their own tools and
-scripts to automate this process, but this can be time-consuming and costly especially for developing countries that
-have a 'cocktail' of different AWS vendors.
+In summary, ADL helps NMHSs address the fragmentation in their AWS networks. It does this by offering a robust,
+scalable, and extensible system for automating both data collection and delivery. ADL not only supports integration with
+WIS2, but also enables broader national and regional data sharing efforts.
 
 ![ADL Data Flow](_static/images/adl-wis2box-data-flow-adl.png)
