@@ -114,6 +114,7 @@ def get_dispatch_channel_data(dispatch_channel):
             
             record = {
                 "station_id": station_id,
+                "wigos_id": station_link.station.wigos_id,
                 "timestamp": time,
                 "values": data_values
             }
