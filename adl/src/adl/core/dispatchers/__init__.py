@@ -50,13 +50,14 @@ def get_station_channel_records(dispatch_channel, station_id):
 
 
 def get_dispatch_channel_data(dispatch_channel):
-    logger.info(f"[DISPATCH] Getting dispatch data for channel '{dispatch_channel.name}'")
+    channel_name = dispatch_channel.name
+    logger.info(f"[DISPATCH] Getting dispatch data for channel '{channel_name}'")
     
     parameter_mappings = dispatch_channel.parameter_mappings.all()
     
     if not parameter_mappings:
         logger.error(
-            f"[DISPATCH] No parameter mappings found for dispatch channel {dispatch_channel.name}. Skipping...")
+            f"[DISPATCH] No parameter mappings found for dispatch channel {channel_name}. Skipping...")
         return
     
     parameter_mappings_ids = parameter_mappings.values_list("parameter_id", flat=True)
@@ -79,27 +80,34 @@ def get_dispatch_channel_data(dispatch_channel):
     # group by station and by time
     by_station_by_time = {}
     
+    logger.debug(f"[DISPATCH] Found {len(station_links)} station links for connection '{connection.name}'")
+    
     for station_link in station_links:
         # get all records for the station and channel
         station_channel_records = get_station_channel_records(dispatch_channel, station_link.station_id)
         
         logger.debug(f"[DISPATCH] Found {station_channel_records.count()} records for "
-                     f"station {station_link.station_id} and channel '{dispatch_channel.name}'")
+                     f"station {station_link.station_id} and channel '{channel_name}'")
         
         for obs in station_channel_records:
             if obs.station_id not in by_station_by_time:
                 by_station_by_time[obs.station_id] = {}
             
             if obs.time not in by_station_by_time[obs.station_id]:
-                by_station_by_time[obs.station_id][obs.time] = []
+                by_station_by_time[obs.station_id][obs.time] = {
+                    "wigos_id": station_link.station.wigos_id,
+                    "observations": []
+                }
             
             if obs.parameter_id in parameter_mappings_ids:
-                by_station_by_time[obs.station_id][obs.time].append(obs)
+                by_station_by_time[obs.station_id][obs.time]["observations"].append(obs)
     
-    records = []
+    station_records = []
     for station_id, time_obs_map in by_station_by_time.items():
-        for time, obs_list in time_obs_map.items():
+        for time, station_record in time_obs_map.items():
             data_values = {}
+            obs_list = station_record["observations"]
+            wigos_id = station_record["wigos_id"]
             for obs in obs_list:
                 key = parameter_channel_mapping[obs.parameter_id]["channel_parameter"]
                 data_value = getattr(obs, parameter_channel_mapping[obs.parameter_id]["value_field"])
@@ -114,16 +122,17 @@ def get_dispatch_channel_data(dispatch_channel):
             
             record = {
                 "station_id": station_id,
-                "wigos_id": station_link.station.wigos_id,
+                "wigos_id": wigos_id,
                 "timestamp": time,
                 "values": data_values
             }
             
-            records.append(record)
+            station_records.append(record)
     
-    logger.debug(f"[DISPATCH] Found a total of {len(records)} records for dispatch channel '{dispatch_channel.name}'")
+    logger.debug(
+        f"[DISPATCH] Collected data records from a total of {len(station_records)} stations for channel '{channel_name}'")
     
-    return records
+    return station_records
 
 
 def run_dispatch_channel(dispatcher_id):
