@@ -1,0 +1,12 @@
+{% load i18n wagtailadmin_tags %}
+
+<li>
+    {% icon name="resubmit" %}
+    <a href="{{ link }}">
+        {% blocktrans trimmed count counter=total_dispatch_channels with total_dispatch_channels|intcomma as total %}
+        <span>{{ total }}</span> Dispatch Channel <span class="w-sr-only">created</span>
+        {% plural %}
+        <span>{{ total }}</span> Dispatch Channels <span class="w-sr-only">created </span>
+        {% endblocktrans %}
+    </a>
+</li>

@@ -536,6 +536,29 @@ def dispatch_channel_add_select(request):
     return render(request, "core/dispatch_channel_add_select.html", context)
 
 
+def get_plugin_list(request):
+    """
+    Returns a list of plugins with their labels and URLs.
+    """
+    plugins = plugin_registry.get_all()
+    plugin_list = []
+    
+    for plugin in plugins:
+        plugin_list.append({
+            "label": plugin.label,
+        })
+    
+    context = {
+        "breadcrumbs_items": [
+            {"url": reverse_lazy("wagtailadmin_home"), "label": _("Home")},
+            {"url": "", "label": _("Plugins")},
+        ],
+        "plugins": plugin_list,
+    }
+    
+    return render(request, "core/plugin_list.html", context)
+
+
 def create_predefined_data_parameters(request):
     from .viewsets import DataParameterViewSet
     

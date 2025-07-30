@@ -1,0 +1,12 @@
+{% load i18n wagtailadmin_tags %}
+
+<li>
+    {% icon name="plug" %}
+    <a href="{{ link }}">
+        {% blocktrans trimmed count counter=total_connections with total_connections|intcomma as total %}
+            <span>{{ total }}</span> Connection <span class="w-sr-only">created</span>
+            {% plural %}
+            <span>{{ total }}</span> Connections <span class="w-sr-only">created </span>
+        {% endblocktrans %}
+    </a>
+</li>

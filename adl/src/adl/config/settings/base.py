@@ -42,11 +42,6 @@ DEBUG = env('DEBUG', False)
 
 # Application definition
 INSTALLED_APPS = [
-    "adl.home",
-    "adl.core",
-    "adl.api",
-    "adl.monitoring",
-    "adl.viewer",
     
     "django_countries",
     "django_celery_beat",
@@ -88,6 +83,12 @@ INSTALLED_APPS = [
     "django.contrib.messages",
     "django.contrib.staticfiles",
     "django.contrib.humanize",
+    
+    "adl.home",
+    "adl.core",
+    "adl.api",
+    "adl.monitoring",
+    "adl.viewer",
 ]
 
 ADL_PLUGIN_DIRS = env.list("ADL_PLUGIN_DIRS", default=["/adl/plugins", ])

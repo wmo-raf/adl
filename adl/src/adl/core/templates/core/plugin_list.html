@@ -1,0 +1,75 @@
+{% extends "wagtailadmin/generic/base.html" %}
+
+{% load i18n wagtailadmin_tags static wagtailiconchooser_tags %}
+
+{% block main_content %}
+
+    <style>
+        .c-panels-container {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 30px;
+            padding: 16px;
+            margin-top: 40px;
+        }
+
+        .c-panel {
+            display: flex;
+            flex-direction: column;
+            padding: 16px;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1), 0 1px 3px rgba(0, 0, 0, 0.06);
+            min-height: 150px;
+            min-width: 300px;
+        }
+
+        .c-panel-header {
+            display: flex;
+            align-items: center;
+            border-bottom: 1px solid #e4e4e4;
+        }
+
+        .c-panel-icon svg {
+            height: 20px;
+            width: 20px;
+        }
+
+        .c-panel-title {
+            font-size: 1.2em;
+            font-weight: bold;
+            margin-left: 10px;
+        }
+
+    </style>
+
+    <div style="margin-top: 40px">
+        <h1>
+            {% translate 'Installed Plugins' %}
+        </h1>
+
+        <div class="c-panels-container">
+
+            {% for plugin in plugins %}
+
+                <div class="c-panel">
+
+                    <div class="c-panel-header">
+                        <div class="c-panel-icon">
+                            {% icon name="puzzle-piece" %}
+                        </div>
+                        <div class="c-panel-title">
+                            {{ plugin.label }}
+                        </div>
+                    </div>
+
+
+                </div>
+
+            {% endfor %}
+        </div>
+
+    </div>
+
+
+{% endblock %}
+

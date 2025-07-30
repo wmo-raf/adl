@@ -6,7 +6,9 @@ from wagtail.admin.menu import MenuItem
 from .home import (
     NetworksSummaryItem,
     StationsSummaryItem,
-    PluginsSummaryItem
+    ConnectionsSummaryItem,
+    DispatchChannelsSummaryItem,
+    PluginsSummaryItem,
 )
 from .models import (
     NetworkConnection,
@@ -29,7 +31,7 @@ from .views import (
     connection_add_select,
     dispatch_channels_list,
     dispatch_channel_add_select,
-    create_predefined_data_parameters
+    create_predefined_data_parameters, get_plugin_list
 )
 from .viewsets import admin_viewsets
 
@@ -42,12 +44,13 @@ def urlconf_adl():
         path('load-stations-oscar-csv/', load_stations_csv, name='load_stations_oscar_csv'),
         path('load-stations-oscar/', load_stations_oscar, name='load_stations_oscar'),
         path('import-oscar-station/<str:wigos_id>', import_oscar_station, name='import_oscar_station'),
-        path('create-predefined-data-parameters', create_predefined_data_parameters,
+        path('create-predefined-data-parameters/', create_predefined_data_parameters,
              name='create_predefined_data_parameters'),
         path('connections/', connections_list, name="connections_list"),
-        path('connections/select', connection_add_select, name="connections_add_select"),
-        path('dispatch-channels', dispatch_channels_list, name="dispatch_channels_list"),
-        path('dispatch-channels/select', dispatch_channel_add_select, name="dispatch_channel_add_select"),
+        path('connections/select/', connection_add_select, name="connections_add_select"),
+        path('dispatch-channels/', dispatch_channels_list, name="dispatch_channels_list"),
+        path('dispatch-channels/select/', dispatch_channel_add_select, name="dispatch_channel_add_select"),
+        path('plugins/', get_plugin_list, name="plugins_list"),
     ]
 
 
@@ -112,11 +115,13 @@ def construct_homepage_summary_items(request, summary_items):
     
     summary_items[:] = [item for item in summary_items if item.__class__.__name__ not in hidden_summary_items]
     
-    summary_items.extend([
+    summary_items[:] = [
         NetworksSummaryItem(request),
         StationsSummaryItem(request),
+        ConnectionsSummaryItem(request),
+        DispatchChannelsSummaryItem(request),
         PluginsSummaryItem(request),
-    ])
+    ]
 
 
 @hooks.register("register_icons")

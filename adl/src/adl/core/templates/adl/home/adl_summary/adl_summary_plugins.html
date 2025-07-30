@@ -1,11 +1,11 @@
 {% load i18n wagtailadmin_tags %}
 
 <li>
-    {% icon name="plug" %}
-    <a href="">
+    {% icon name="puzzle-piece" %}
+    <a href="{{ link }}">
         {% blocktrans trimmed count counter=total_plugins with total_plugins|intcomma as total %}
             <span>{{ total }}</span> Plugin <span class="w-sr-only">installed</span>
-        {% plural %}
+            {% plural %}
             <span>{{ total }}</span> Plugins <span class="w-sr-only">installed </span>
         {% endblocktrans %}
     </a>

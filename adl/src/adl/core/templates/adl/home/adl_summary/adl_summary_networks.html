@@ -2,10 +2,10 @@
 
 <li>
     {% icon name="circle-nodes" %}
-    <a href="">
+    <a href="{{ link }}">
         {% blocktrans trimmed count counter=total_networks with total_networks|intcomma as total %}
             <span>{{ total }}</span> Network <span class="w-sr-only">created</span>
-        {% plural %}
+            {% plural %}
             <span>{{ total }}</span> Networks <span class="w-sr-only">created </span>
         {% endblocktrans %}
     </a>

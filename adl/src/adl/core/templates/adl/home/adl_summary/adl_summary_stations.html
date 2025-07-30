@@ -2,10 +2,10 @@
 
 <li>
     {% icon name="map-pin" %}
-    <a href="">
+    <a href="{{ link }}">
         {% blocktrans trimmed count counter=total_stations with total_stations|intcomma as total %}
             <span>{{ total }}</span> Station <span class="w-sr-only">created</span>
-        {% plural %}
+            {% plural %}
             <span>{{ total }}</span> Stations <span class="w-sr-only">created </span>
         {% endblocktrans %}
     </a>
