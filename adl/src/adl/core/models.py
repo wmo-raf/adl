@@ -372,7 +372,7 @@ class NetworkConnection(PolymorphicModel, ClusterableModel):
         plugin = plugin_registry.get(plugin_type)
         return plugin
     
-    def run_plugin_process(self):
+    def collect_data(self):
         plugin = self.get_plugin()
         if not plugin:
             raise ValueError(f"Plugin {self.plugin} not found in the registry.")
