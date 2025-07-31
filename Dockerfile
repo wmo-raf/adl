@@ -48,7 +48,12 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 # install docker-compose wait
-ADD https://github.com/ufoscout/docker-compose-wait/releases/download/2.12.1/wait /wait
+ARG DOCKER_COMPOSE_WAIT_VERSION
+ENV DOCKER_COMPOSE_WAIT_VERSION=${DOCKER_COMPOSE_WAIT_VERSION:-2.12.1}
+ARG DOCKER_COMPOSE_WAIT_PLATFORM_SUFFIX
+ENV DOCKER_COMPOSE_WAIT_PLATFORM_SUFFIX=${DOCKER_COMPOSE_WAIT_PLATFORM_SUFFIX:-}
+
+ADD https://github.com/ufoscout/docker-compose-wait/releases/download/$DOCKER_COMPOSE_WAIT_VERSION/wait${DOCKER_COMPOSE_WAIT_PLATFORM_SUFFIX} /wait
 RUN chmod +x /wait
 
 USER $UID:$GID

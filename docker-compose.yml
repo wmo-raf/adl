@@ -62,6 +62,7 @@ services:
       args:
         - UID=${UID}
         - GID=${GID}
+        - DOCKER_COMPOSE_WAIT_PLATFORM_SUFFIX=${DOCKER_COMPOSE_WAIT_PLATFORM_SUFFIX:-}
     restart: unless-stopped
     command: gunicorn wsgi
     environment:
@@ -87,6 +88,7 @@ services:
       args:
         - UID=${UID}
         - GID=${GID}
+        - DOCKER_COMPOSE_WAIT_PLATFORM_SUFFIX=${DOCKER_COMPOSE_WAIT_PLATFORM_SUFFIX:-}
     restart: unless-stopped
     init: true
     command: celery-worker
@@ -110,6 +112,7 @@ services:
       args:
         - UID=${UID}
         - GID=${GID}
+        - DOCKER_COMPOSE_WAIT_PLATFORM_SUFFIX=${DOCKER_COMPOSE_WAIT_PLATFORM_SUFFIX:-}
     restart: unless-stopped
     init: true
     command: celery-beat
