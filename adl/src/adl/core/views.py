@@ -21,6 +21,7 @@ from .models import (
     NetworkConnection,
     DispatchChannel, DataParameter, Unit
 )
+from .plugin_utils import get_plugin_metadata
 from .registries import dispatch_channel_viewset_registry, connection_viewset_registry, plugin_registry
 from .utils import (
     get_stations_for_country_live,
@@ -544,8 +545,10 @@ def get_plugin_list(request):
     plugin_list = []
     
     for plugin in plugins:
+        plugin_metadata = get_plugin_metadata(plugin)
         plugin_list.append({
             "label": plugin.label,
+            "metadata": plugin_metadata
         })
     
     context = {

@@ -20,7 +20,8 @@
             border-radius: 8px;
             box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1), 0 1px 3px rgba(0, 0, 0, 0.06);
             min-height: 150px;
-            min-width: 300px;
+            width: 400px;
+            flex-wrap: wrap;
         }
 
         .c-panel-header {
@@ -40,6 +41,32 @@
             margin-left: 10px;
         }
 
+        .c-panel-body {
+            display: flex;
+            flex: 1;
+            padding: 16px 0;
+            flex-direction: column;
+            justify-content: center;
+        }
+
+        table.c-panel-meta {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        .c-panel-meta th.item-key {
+            text-align: left;
+            vertical-align: top;
+            white-space: nowrap;
+            width: 70px; /* Set to the expected longest label width */
+            padding-right: 1rem;
+            font-weight: 500;
+        }
+
+        .c-panel-meta td.item-value {
+            text-align: left;
+        }
+
     </style>
 
     <div style="margin-top: 40px">
@@ -52,7 +79,6 @@
             {% for plugin in plugins %}
 
                 <div class="c-panel">
-
                     <div class="c-panel-header">
                         <div class="c-panel-icon">
                             {% icon name="puzzle-piece" %}
@@ -62,7 +88,35 @@
                         </div>
                     </div>
 
+                    <div class="c-panel-body">
+                        <table class="c-panel-meta">
+                            <tr class="c-panel-meta-item">
+                                <th class="item-key">Version:</th>
+                                <td class="item-value">{{ plugin.metadata.version }}</td>
+                            </tr>
+                            <tr class="c-panel-meta-item">
+                                <th class="item-key">Summary:</th>
+                                <td class="item-value">{{ plugin.metadata.summary }}</td>
+                            </tr>
+                            <tr class="c-panel-meta-item">
+                                <th class="item-key">Author:</th>
+                                <td class="item-value">{{ plugin.metadata.author }}</td>
+                            </tr>
+                            <tr class="c-panel-meta-item">
+                                <th class="item-key">URL:</th>
+                                <td class="item-value">
+                                    {% if plugin.metadata.home_page %}
+                                        <a href="{{ plugin.metadata.home_page }}" target="_blank">
+                                            {{ plugin.metadata.home_page }}
+                                        </a>
+                                    {% else %}
+                                        <span>-</span>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                        </table>
 
+                    </div>
                 </div>
 
             {% endfor %}
