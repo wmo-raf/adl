@@ -3,6 +3,7 @@ from django.utils.translation import gettext_lazy as _
 from wagtail import hooks
 from wagtail.admin.menu import MenuItem
 
+from .bulk_actions import AdletDeleteBulkAction
 from .home import (
     NetworksSummaryItem,
     StationsSummaryItem,
@@ -21,7 +22,9 @@ from .registries import (
 )
 from .utils import (
     get_all_child_models,
-    get_model_by_string_label, make_registrable_viewset, make_registrable_connection_viewset
+    get_model_by_string_label,
+    make_registrable_viewset,
+    make_registrable_connection_viewset
 )
 from .views import (
     load_stations_csv,
@@ -31,7 +34,8 @@ from .views import (
     connection_add_select,
     dispatch_channels_list,
     dispatch_channel_add_select,
-    create_predefined_data_parameters, get_plugin_list
+    create_predefined_data_parameters,
+    get_plugin_list
 )
 from .viewsets import admin_viewsets
 
@@ -165,3 +169,6 @@ def register_dispatch_channels_menu():
     list_url = reverse('dispatch_channels_list')
     label = _("Dispatch Channels")
     return MenuItem(label, list_url, icon_name='resubmit', order=600)
+
+
+hooks.register("register_bulk_action", AdletDeleteBulkAction)

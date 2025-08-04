@@ -1,10 +1,11 @@
 from django.urls import reverse
 from django.utils.functional import cached_property
 from django.utils.translation import gettext_lazy as _
+from wagtail.admin.ui.tables import BulkActionsCheckboxColumn
+from wagtail.admin.views import generic
 from wagtail.admin.viewsets.chooser import ChooserViewSet
 from wagtail.admin.viewsets.model import ModelViewSet
 from wagtail.admin.widgets import HeaderButton
-from wagtail.snippets.views.snippets import IndexView
 
 from .constants import PREDEFINED_DATA_PARAMETERS
 from .models import (
@@ -14,11 +15,40 @@ from .models import (
     Unit
 )
 
+ADLET_MODELS = []
 
-class NetworkViewSet(ModelViewSet):
+
+class AdletViewSet(ModelViewSet):
+    def on_register(self):
+        super().on_register()
+        
+        # Register the model in the global ADLET_MODELS list
+        ADLET_MODELS.append(self.model)
+        
+        self.model.adlet_viewset = self
+
+
+class AdletIndexView(generic.IndexView):
+    template_name = "core/viewset_index.html"
+    
+    @cached_property
+    def columns(self):
+        columns = super().columns
+        
+        # Add a checkbox column for bulk actions
+        columns = [
+            BulkActionsCheckboxColumn("bulk_actions", obj_type="adlet"),
+            *columns,
+        ]
+        
+        return columns
+
+
+class NetworkViewSet(AdletViewSet):
     model = Network
     base_url_path = "network"
     icon = "circle-nodes"
+    index_view_class = AdletIndexView
     add_to_admin_menu = True
     menu_order = 100
 
@@ -31,7 +61,7 @@ class NetworkChooserViewSet(ChooserViewSet):
     edit_item_text = "Edit this Network"
 
 
-class StationIndexView(IndexView):
+class StationIndexView(AdletIndexView):
     list_display = ["name", "network", "station_id", "wigos_id"]
     list_filter = ["network", ]
     
@@ -55,7 +85,7 @@ class StationIndexView(IndexView):
         return table_kwargs
 
 
-class StationViewSet(ModelViewSet):
+class StationViewSet(AdletViewSet):
     model = Station
     index_view_class = StationIndexView
     icon = "map-pin"
@@ -73,9 +103,10 @@ class StationChooserViewSet(ChooserViewSet):
     list_per_page = 50
 
 
-class UnitViewSet(ModelViewSet):
+class UnitViewSet(AdletViewSet):
     model = Unit
     icon = "list-ul"
+    index_view_class = AdletIndexView
     add_to_settings_menu = True
     list_display = ["name", "symbol", "get_registry_unit"]
     menu_order = 700
@@ -85,13 +116,14 @@ class UnitViewSet(ModelViewSet):
 class UnitChooserViewSet(ChooserViewSet):
     model = Unit
     icon = "list-ul"
+    index_view_class = AdletIndexView
     choose_one_text = "Choose Unit"
     choose_another_text = "Choose different Unit"
     edit_item_text = "Edit this unit"
     per_page = 50
 
 
-class DataParameterIndexView(IndexView):
+class DataParameterIndexView(AdletIndexView):
     @cached_property
     def header_buttons(self):
         buttons = super().header_buttons
@@ -121,7 +153,7 @@ class DataParameterIndexView(IndexView):
         return context
 
 
-class DataParameterViewSet(ModelViewSet):
+class DataParameterViewSet(AdletViewSet):
     model = DataParameter
     index_results_template_name = "core/data_parameter_index_results.html"
     index_view_class = DataParameterIndexView

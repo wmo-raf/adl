@@ -225,6 +225,8 @@ def import_class_by_string_label(class_path):
 
 
 def make_registrable_viewset(model_cls, icon="snippet", list_display=None, list_filter=None):
+    from adl.core.viewsets import AdletViewSet, AdletIndexView
+    
     model_name = model_cls._meta.model_name
     viewset_name = f"{model_name.title()}ViewSet"
     
@@ -233,6 +235,7 @@ def make_registrable_viewset(model_cls, icon="snippet", list_display=None, list_
         "add_to_admin_menu": False,
         "type": model_name,
         "icon": icon,
+        "index_view_class": AdletIndexView,
     }
     
     if list_display:
@@ -242,7 +245,7 @@ def make_registrable_viewset(model_cls, icon="snippet", list_display=None, list_
         attrs["list_filter"] = list_filter
     
     # Dynamically create the subclass
-    ViewSetCls = type(viewset_name, (ModelViewSet, Instance), attrs)
+    ViewSetCls = type(viewset_name, (AdletViewSet, Instance), attrs)
     
     return ViewSetCls()
 
