@@ -141,12 +141,12 @@ class DataParameterChooserViewSet(ChooserViewSet):
 
 
 admin_viewsets = [
-    NetworkViewSet("network"),
+    NetworkViewSet(),
     NetworkChooserViewSet("network_chooser"),
-    StationViewSet("station"),
+    StationViewSet(),
     StationChooserViewSet("station_chooser"),
-    UnitViewSet("unit"),
+    UnitViewSet(),
     UnitChooserViewSet("unit_chooser"),
-    DataParameterViewSet("data_parameter"),
+    DataParameterViewSet(),
     DataParameterChooserViewSet("data_parameter_chooser"),
 ]

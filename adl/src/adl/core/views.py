@@ -570,7 +570,7 @@ def create_predefined_data_parameters(request):
     if request.method == "POST":
         form = CreatePredefinedDataParametersForm(request.POST)
         if form.is_valid():
-            data_parameter_index_url = DataParameterViewSet().get_url_name("list")
+            data_parameter_url_name = DataParameterViewSet().get_url_name("index")
             create_conversion_units = form.cleaned_data.get("create_conversion_units")
             
             try:
@@ -610,7 +610,7 @@ def create_predefined_data_parameters(request):
                             })
                 
                 messages.success(request, _("Predefined parameters created successfully."))
-                return redirect(data_parameter_index_url)
+                return redirect(data_parameter_url_name)
             except Exception as e:
                 form.add_error(None, e)
                 messages.error(request, _("Error creating predefined parameters: ") + str(e))
