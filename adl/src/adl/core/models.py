@@ -407,6 +407,23 @@ class StationLink(PolymorphicModel, ClusterableModel):
     class Meta:
         unique_together = ['network_connection', 'station']
     
+    def get_variable_mappings(self):
+        """
+        Returns the variable mappings for the station link.
+        This method should be overridden in subclasses to provide specific mappings.
+        """
+        return []
+    
+    def get_first_collection_date(self):
+        """
+        Returns the first collection date for the station link.
+        This method should be overridden in subclasses to provide specific logic.
+        """
+        return None
+    
+    def get_timezone(self):
+        return "UTC"
+    
     def get_extra_model_admin_buttons(self, classname=None):
         return []
 
