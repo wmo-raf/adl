@@ -160,7 +160,10 @@ class Plugin(Instance):
             
             if not start_date:
                 # If no start date is found, use the station's first collection date, if set
-                start_date = station_link.get_first_collection_date()
+                first_collection_start_date = station_link.get_first_collection_date()
+                if first_collection_start_date:
+                    timezone = station_link.get_timezone()
+                    start_date = dj_timezone.localtime(station_link.start_date, timezone=timezone)
                 
                 # if no first collection date is set, use the default start date
                 if not start_date:
@@ -168,6 +171,13 @@ class Plugin(Instance):
                     start_date = self.get_default_start_date(station_link)
             
             end_date = self.get_default_end_date(station_link)
+            
+            # if start_date is equal to end_date, add one hour to end_date
+            if end_date == start_date:
+                end_date += timedelta(hours=1)
+            
+            logger.info(
+                f"[{self.label}] Getting data for station link: {station_link} from {start_date} to {end_date}.")
             
             # get the station data
             station_records = self.get_station_data(station_link, start_date=start_date, end_date=end_date)
