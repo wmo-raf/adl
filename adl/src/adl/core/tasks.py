@@ -1,11 +1,15 @@
 import json
 import logging
+import time
 
+from celery import shared_task
 from celery.signals import worker_ready
 from celery_singleton import Singleton, clear_locks
+from django.core.cache import cache
 from django.utils import timezone as dj_timezone
 from django.utils.dateparse import parse_time
 from django_celery_beat.models import IntervalSchedule, PeriodicTask, CrontabSchedule
+from more_itertools import chunked
 
 from adl.config.celery import app
 from .utils import get_object_or_none
@@ -13,13 +17,29 @@ from .utils import get_object_or_none
 logger = logging.getLogger(__name__)
 
 
-@app.task(
-    base=Singleton,
-    bind=True
-)
+@shared_task(bind=True)
 def run_network_plugin(self, network_id):
+    from .models import NetworkConnection
+    network_connection = get_object_or_none(NetworkConnection, id=network_id)
+    
+    if not network_connection:
+        logger.error(f"Network Connection with id {network_id} does not exist. Skipping...")
+        return
+    
+    batch_size = network_connection.batch_size or 10
+    
+    station_link_ids = network_connection.station_links.filter(enabled=True).values_list("id", flat=True)
+    for batch in chunked(station_link_ids, batch_size):
+        process_station_link_batch_task.delay(network_id, batch)
+
+
+@shared_task(bind=True)
+def process_station_link_batch_task(self, network_id, station_link_ids):
     from adl.core.registries import plugin_registry
     from .models import NetworkConnection
+    from .models import StationLink
+    from adl.monitoring.models import StationLinkActivityLog
+    
     network_connection = get_object_or_none(NetworkConnection, id=network_id)
     
     if not network_connection:
@@ -29,37 +49,44 @@ def run_network_plugin(self, network_id):
     network_plugin_type = network_connection.plugin
     plugin = plugin_registry.get(network_plugin_type)
     
-    if plugin:
-        plugin_processing_enabled = network_connection.plugin_processing_enabled
-        plugin_label = plugin.label or plugin.type
+    for station_link_id in station_link_ids:
+        station_link = get_object_or_none(StationLink, id=station_link_id)
         
-        if not plugin_processing_enabled:
-            logger.info(f"Network plugin processing is disabled for network {network_connection.name}. Skipping...")
-            return
+        if not station_link:
+            logger.error(f"Station link with id {station_link_id} does not exist. Skipping...")
+            continue
         
-        logger.info(f"Starting plugin processing '{plugin_label}' for network {network_connection.name}...")
+        lock_key = f"lock:station:{station_link_id}"
         
-        saved_stations_records_count = plugin.run_process(network_connection)
+        lock_acquired = cache.add(lock_key, "locked", timeout=None)
         
-        if saved_stations_records_count:
-            total_stations_count = len(saved_stations_records_count.keys())
-            saved_records_count = sum(saved_stations_records_count.values())
+        if not lock_acquired:
+            logger.warning(f"Station link {station_link_id} is still processing. Skipping...")
+            continue
+        
+        start = time.monotonic()
+        log = StationLinkActivityLog.objects.create(
+            time=dj_timezone.now(),
+            station_link=station_link,
+            direction='pull',
+        )
+        
+        try:
+            saved_records_count = plugin.process_station(station_link)
             
-            logger.info(
-                f"Plugin processing '{plugin_label}' for network {network_connection.name} finished."
-                f"Processed {saved_records_count} records from {total_stations_count} stations.")
+            log.success = True
+            log.records_count = saved_records_count
+        except Exception as e:
+            log.success = False
+            log.message = str(e)
+            logger.error(f"Error processing station link {station_link_id}: {e}")
+        finally:
             
-            return {
-                "saved_records_count": saved_records_count,
-                "total_stations_count": total_stations_count,
-                "station_records": saved_stations_records_count
-            }
-        
-        else:
-            logger.info(f"Plugin processing '{plugin_label}' for network {network_connection.name} finished. "
-                        f"No records processed.")
-        
-        return {"saved_records_count": 0, "total_stations_count": 0, "station_records": {}}
+            log.duration_ms = (time.monotonic() - start) * 1000
+            log.save()
+            
+            # Release the lock after processing
+            cache.delete(lock_key)
 
 
 @app.on_after_finalize.connect
@@ -74,6 +101,15 @@ def setup_network_plugin_processing_tasks(sender, **kwargs):
 @worker_ready.connect
 def unlock_all(**kwargs):
     clear_locks(app)
+    
+    # get lock keys
+    cache_lock_keys = cache.keys("lock:station:*")
+    
+    # clear all locks
+    if cache_lock_keys:
+        logger.info(f"Unlocking all station links: {len(cache_lock_keys)}...")
+        for cache_lock_key in cache_lock_keys:
+            cache.delete(cache_lock_key)
 
 
 def create_or_update_network_plugin_periodic_tasks(network_connection):

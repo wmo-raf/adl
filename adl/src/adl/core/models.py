@@ -346,6 +346,8 @@ class NetworkConnection(PolymorphicModel, ClusterableModel):
                                                                  MaxValueValidator(30),
                                                                  MinValueValidator(1)
                                                              ])
+    batch_size = models.PositiveIntegerField(default=10, verbose_name=_("Processing Batch Size"),
+                                             help_text=_("Number of stations to process in a single batch"))
     is_daily_data = models.BooleanField(default=False, verbose_name=_("Is Daily Data"),
                                         help_text=_("Check to mark data from this connection as daily data"))
     
@@ -356,6 +358,7 @@ class NetworkConnection(PolymorphicModel, ClusterableModel):
             FieldPanel('plugin', widget=PluginSelectWidget),
             FieldPanel("plugin_processing_enabled"),
             FieldPanel("plugin_processing_interval"),
+            FieldPanel("batch_size"),
         ], heading=_("Plugin Configuration")),
         FieldPanel("is_daily_data"),
     ]

@@ -155,37 +155,7 @@ class Plugin(Instance):
                 logger.info(f"[{self.label}] Skipping disabled station link: {station_link}")
                 continue
             
-            # get the latest observation time for the station and connection
-            start_date = self.get_start_date_from_db(station_link)
-            
-            if not start_date:
-                # If no start date is found, use the station's first collection date, if set
-                first_collection_start_date = station_link.get_first_collection_date()
-                if first_collection_start_date:
-                    timezone = station_link.get_timezone()
-                    start_date = dj_timezone.localtime(station_link.start_date, timezone=timezone)
-                
-                # if no first collection date is set, use the default start date
-                if not start_date:
-                    # If no start date is set, use the default start date
-                    start_date = self.get_default_start_date(station_link)
-            
-            end_date = self.get_default_end_date(station_link)
-            
-            # if start_date is equal to end_date, add one hour to end_date
-            if end_date == start_date:
-                end_date += timedelta(hours=1)
-            
-            logger.info(
-                f"[{self.label}] Getting data for station link: {station_link} from {start_date} to {end_date}.")
-            
-            # get the station data
-            station_records = self.get_station_data(station_link, start_date=start_date, end_date=end_date)
-            
-            # save the records to the database
-            saved_obs_records = self.save_records(station_link, station_records)
-            
-            saved_obs_records_count = len(saved_obs_records) if saved_obs_records else 0
+            saved_obs_records_count = self.process_station(station_link)
             
             all_saved_records_count[station_link.station.id] = saved_obs_records_count
             
@@ -194,6 +164,41 @@ class Plugin(Instance):
                 perform_hourly_aggregation.delay(network_connection.id)
         
         return all_saved_records_count
+    
+    def process_station(self, station_link):
+        # get the latest observation time for the station and connection
+        start_date = self.get_start_date_from_db(station_link)
+        
+        if not start_date:
+            # If no start date is found, use the station's first collection date, if set
+            first_collection_start_date = station_link.get_first_collection_date()
+            if first_collection_start_date:
+                timezone = station_link.get_timezone()
+                start_date = dj_timezone.localtime(station_link.start_date, timezone=timezone)
+            
+            # if no first collection date is set, use the default start date
+            if not start_date:
+                # If no start date is set, use the default start date
+                start_date = self.get_default_start_date(station_link)
+        
+        end_date = self.get_default_end_date(station_link)
+        
+        # if start_date is equal to end_date, add one hour to end_date
+        if end_date == start_date:
+            end_date += timedelta(hours=1)
+        
+        logger.info(
+            f"[{self.label}] Getting data for station link: {station_link} from {start_date} to {end_date}.")
+        
+        # get the station data
+        station_records = self.get_station_data(station_link, start_date=start_date, end_date=end_date)
+        
+        # save the records to the database
+        saved_obs_records = self.save_records(station_link, station_records)
+        
+        saved_obs_records_count = len(saved_obs_records) if saved_obs_records else 0
+        
+        return saved_obs_records_count
 
 
 class PluginRegistry(Registry):
