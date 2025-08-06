@@ -74,6 +74,7 @@ INSTALLED_APPS = [
     "django_vue_utilities",
     "django_deep_translator",
     "drf_spectacular",
+    "dbbackup",
     
     "django.contrib.admin",
     "django.contrib.auth",
@@ -379,4 +380,20 @@ SPECTACULAR_SETTINGS = {
     "PREPROCESSING_HOOKS": [
         "adl.api.schema_hooks.filter_endpoints",
     ]
+}
+
+DBBACKUP_STORAGE = 'django.core.files.storage.FileSystemStorage'
+DBBACKUP_STORAGE_OPTIONS = {'location': os.path.join(BASE_DIR, "backup")}
+DBBACKUP_CLEANUP_KEEP_MEDIA = 1
+DBBACKUP_CLEANUP_KEEP = 1
+DBBACKUP_CONNECTORS = {
+    "default": {
+        "CONNECTOR": "dbbackup.db.postgresql.PgDumpBinaryConnector",  # Use pg_dump binary
+        "DUMP_SUFFIX": "-e plpgsql",  # dump only system extensions
+        "RESTORE_SUFFIX": "--if-exists"  # Drop only if exists
+    }
+}
+
+DBBACKUP_CONNECTOR_MAPPING = {
+    "timescale.db.backends.postgis": "dbbackup.db.postgresql.PgDumpBinaryConnector",
 }
