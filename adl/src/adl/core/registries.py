@@ -1,5 +1,5 @@
 import logging
-from datetime import timedelta
+from datetime import timedelta, datetime
 
 from django.core.exceptions import ImproperlyConfigured
 from django.utils import timezone as dj_timezone
@@ -73,6 +73,17 @@ class Plugin(Instance):
             if not observation_time:
                 logger.warning(f"[{self.label}] No observation time found in record for station {station.name}.")
                 continue
+            
+            if not isinstance(observation_time, datetime):
+                error = (
+                    f"[{self.label}] Observation time for station {station.name} is not a datetime object: {observation_time}. "
+                    f"Please ensure your plugin returns a valid datetime object for observation_time.")
+                logger.error(error)
+                raise ValueError(error)
+            
+            if dj_timezone.is_aware(observation_time):
+                # If the observation time is timezone-aware, convert it to naive
+                observation_time = observation_time.replace(tzinfo=None)
             
             observation_time = dj_timezone.make_aware(observation_time, timezone=station_link.timezone)
             
