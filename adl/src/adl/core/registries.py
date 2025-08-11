@@ -173,7 +173,7 @@ class Plugin(Instance):
             # If no start date is found, use the station's first collection date, if set
             first_collection_start_date = station_link.get_first_collection_date()
             if first_collection_start_date:
-                start_date = dj_timezone.localtime(station_link.start_date, timezone=station_link.timezone)
+                start_date = dj_timezone.localtime(first_collection_start_date, timezone=station_link.timezone)
             
             # if no first collection date is set, use the default start date
             if not start_date:
