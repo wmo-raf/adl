@@ -17,7 +17,7 @@ class Migration(migrations.Migration):
         ),
         migrations.AddField(
             model_name='stationlink',
-            name='timezone',
+            name='timezone_info',
             field=timezone_field.fields.TimeZoneField(default='UTC', help_text='Timezone used by the station for recording observations', verbose_name='Station Timezone'),
         ),
     ]

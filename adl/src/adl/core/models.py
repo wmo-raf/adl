@@ -386,8 +386,8 @@ class StationLink(PolymorphicModel, ClusterableModel):
     
     enabled = models.BooleanField(default=True, verbose_name=_("Enabled"),
                                   help_text=_("If unchecked, this station  will not be processed"))
-    timezone = TimeZoneField(default='UTC', verbose_name=_("Station Timezone"),
-                             help_text=_("Timezone used by the station for recording observations"))
+    timezone_info = TimeZoneField(default='UTC', verbose_name=_("Station Timezone"),
+                                  help_text=_("Timezone used by the station for recording observations"))
     
     aggregate_from_date = models.DateTimeField(blank=True, null=True, verbose_name=_("Aggregation Start Date"),
                                                help_text=_("Date to start aggregation from. "
@@ -398,7 +398,7 @@ class StationLink(PolymorphicModel, ClusterableModel):
             FieldPanel("network_connection"),
             FieldPanel("station"),
             FieldPanel("enabled"),
-            FieldPanel("timezone"),
+            FieldPanel("timezone_info"),
         ], heading=_("Base"))
     ]
     

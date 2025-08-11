@@ -46,8 +46,8 @@ class Plugin(Instance):
         raise NotImplementedError
     
     def get_default_end_date(self, station_link):
-        timezone = station_link.timezone
-        end_date = dj_timezone.localtime(timezone=timezone)
+        timezone_info = station_link.timezone_info
+        end_date = dj_timezone.localtime(timezone=timezone_info)
         
         # set the end date to the start of the next hour
         end_date = end_date.replace(minute=0, second=0, microsecond=0) + timedelta(hours=1)
@@ -85,7 +85,7 @@ class Plugin(Instance):
                 # If the observation time is timezone-aware, convert it to naive
                 observation_time = observation_time.replace(tzinfo=None)
             
-            observation_time = dj_timezone.make_aware(observation_time, timezone=station_link.timezone)
+            observation_time = dj_timezone.make_aware(observation_time, timezone=station_link.timezone_info)
             
             for variable in variable_mappings:
                 if not hasattr(variable, "adl_parameter"):
@@ -181,7 +181,7 @@ class Plugin(Instance):
         """Return station's first collection date in its local timezone, or None."""
         date = station_link.get_first_collection_date()
         if date:
-            return dj_timezone.localtime(date, timezone=station_link.timezone)
+            return dj_timezone.localtime(date, timezone=station_link.timezone_info)
         return None
     
     def get_dates_for_station(self, station_link, latest=False):
