@@ -133,9 +133,6 @@ class Station(models.Model):
                                                                   "the number of minutes since a significant change "
                                                                   "occuring in the preceeding 10 minutes."))
     
-    timezone = TimeZoneField(default='UTC', verbose_name=_("Station Timezone"),
-                             help_text=_("Timezone used by the station for recording observations"))
-    
     basic_info_panels = [
         FieldPanel("station_id"),
         FieldPanel("name"),
@@ -162,7 +159,6 @@ class Station(models.Model):
         FieldPanel("method_of_ground_state_measurement"),
         FieldPanel("method_of_snow_depth_measurement"),
         FieldPanel("time_period_of_wind"),
-        FieldPanel("timezone"),
     ]
     
     edit_handler = TabbedInterface([
@@ -390,6 +386,8 @@ class StationLink(PolymorphicModel, ClusterableModel):
     
     enabled = models.BooleanField(default=True, verbose_name=_("Enabled"),
                                   help_text=_("If unchecked, this station  will not be processed"))
+    timezone = TimeZoneField(default='UTC', verbose_name=_("Station Timezone"),
+                             help_text=_("Timezone used by the station for recording observations"))
     
     aggregate_from_date = models.DateTimeField(blank=True, null=True, verbose_name=_("Aggregation Start Date"),
                                                help_text=_("Date to start aggregation from. "
@@ -400,6 +398,7 @@ class StationLink(PolymorphicModel, ClusterableModel):
             FieldPanel("network_connection"),
             FieldPanel("station"),
             FieldPanel("enabled"),
+            FieldPanel("timezone"),
         ], heading=_("Base"))
     ]
     
@@ -423,9 +422,6 @@ class StationLink(PolymorphicModel, ClusterableModel):
         This method should be overridden in subclasses to provide specific logic.
         """
         return None
-    
-    def get_timezone(self):
-        return "UTC"
     
     def get_extra_model_admin_buttons(self, classname=None):
         return []

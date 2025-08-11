@@ -46,7 +46,7 @@ class Plugin(Instance):
         raise NotImplementedError
     
     def get_default_end_date(self, station_link):
-        timezone = station_link.get_timezone()
+        timezone = station_link.timezone
         end_date = dj_timezone.localtime(timezone=timezone)
         
         # set the end date to the start of the next hour
@@ -74,7 +74,7 @@ class Plugin(Instance):
                 logger.warning(f"[{self.label}] No observation time found in record for station {station.name}.")
                 continue
             
-            observation_time = dj_timezone.make_aware(observation_time, timezone=station_link.get_timezone())
+            observation_time = dj_timezone.make_aware(observation_time, timezone=station_link.timezone)
             
             for variable in variable_mappings:
                 if not hasattr(variable, "adl_parameter"):
@@ -173,8 +173,7 @@ class Plugin(Instance):
             # If no start date is found, use the station's first collection date, if set
             first_collection_start_date = station_link.get_first_collection_date()
             if first_collection_start_date:
-                timezone = station_link.get_timezone()
-                start_date = dj_timezone.localtime(station_link.start_date, timezone=timezone)
+                start_date = dj_timezone.localtime(station_link.start_date, timezone=station_link.timezone)
             
             # if no first collection date is set, use the default start date
             if not start_date:
