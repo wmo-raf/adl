@@ -425,6 +425,25 @@ class StationLink(PolymorphicModel, ClusterableModel):
     
     def get_extra_model_admin_buttons(self, classname=None):
         return []
+    
+    def fetch_latest_data(self):
+        """
+        Fetches latest data for the station link using the network connection's plugin.
+        """
+        # get plugin
+        plugin = self.network_connection.get_plugin()
+        
+        # get latest date
+        start_date, end_date = plugin.get_dates_for_station(self, latest=True)
+        
+        # get data records, using the latest dates
+        data_records = plugin.get_station_data(self, start_date=start_date, end_date=end_date)
+        
+        return {
+            "start_date": start_date,
+            "end_date": end_date,
+            "data_records": data_records
+        }
 
 
 @register_snippet

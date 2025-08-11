@@ -176,26 +176,44 @@ class Plugin(Instance):
         
         return all_saved_records_count
     
-    def process_station(self, station_link):
-        # get the latest observation time for the station and connection
-        start_date = self.get_start_date_from_db(station_link)
+    @staticmethod
+    def _get_station_first_collection_date(station_link):
+        """Return station's first collection date in its local timezone, or None."""
+        date = station_link.get_first_collection_date()
+        if date:
+            return dj_timezone.localtime(date, timezone=station_link.timezone)
+        return None
+    
+    def get_dates_for_station(self, station_link, latest=False):
+        """
+        Determine start_date based on priority:
         
-        if not start_date:
-            # If no start date is found, use the station's first collection date, if set
-            first_collection_start_date = station_link.get_first_collection_date()
-            if first_collection_start_date:
-                start_date = dj_timezone.localtime(first_collection_start_date, timezone=station_link.timezone)
-            
-            # if no first collection date is set, use the default start date
-            if not start_date:
-                # If no start date is set, use the default start date
-                start_date = self.get_default_start_date(station_link)
+        If latest=True:
+            → Always use the default start date (fresh fetch, ignore history)
+        Else:
+            → 1. Use the latest observation date from the DB (resume where left off)
+            → 2. If missing, use Station's first collection date (apply station timezone)
+            → 3. If still missing, use default start date (last resort)
+        """
+        
+        if latest:
+            start_date = self.get_default_start_date(station_link)
+        else:
+            start_date = (
+                    self.get_start_date_from_db(station_link)
+                    or self._get_station_first_collection_date(station_link)
+                    or self.get_default_start_date(station_link)
+            )
         
         end_date = self.get_default_end_date(station_link)
         
-        # if start_date is equal to end_date, add one hour to end_date
         if end_date == start_date:
             end_date += timedelta(hours=1)
+        
+        return start_date, end_date
+    
+    def process_station(self, station_link):
+        start_date, end_date = self.get_dates_for_station(station_link)
         
         logger.info(
             f"[{self.label}] Getting data for station link: {station_link} from {start_date} to {end_date}.")
