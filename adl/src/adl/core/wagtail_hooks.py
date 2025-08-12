@@ -1,4 +1,6 @@
+from django.templatetags.static import static
 from django.urls import reverse, path
+from django.utils.html import format_html
 from django.utils.translation import gettext_lazy as _
 from wagtail import hooks
 from wagtail.admin.menu import MenuItem
@@ -56,6 +58,13 @@ def urlconf_adl():
         path('dispatch-channels/select/', dispatch_channel_add_select, name="dispatch_channel_add_select"),
         path('plugins/', get_plugin_list, name="plugins_list"),
     ]
+
+
+@hooks.register("insert_editor_js")
+def insert_editor_js():
+    return format_html(
+        '<script src="{}"></script>', static("adl/js/conditional_fields.js"),
+    )
 
 
 # Register all NetworkConnection models

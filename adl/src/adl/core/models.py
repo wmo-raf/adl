@@ -342,6 +342,8 @@ class NetworkConnection(PolymorphicModel, ClusterableModel):
                                                                  MaxValueValidator(30),
                                                                  MinValueValidator(1)
                                                              ])
+    stations_timezone = TimeZoneField(default='UTC', verbose_name=_("Stations Timezone"),
+                                      help_text=_("Default Timezone of the stations in this network connection"))
     batch_size = models.PositiveIntegerField(default=10, verbose_name=_("Processing Batch Size"),
                                              help_text=_("Number of stations to process in a single batch"))
     is_daily_data = models.BooleanField(default=False, verbose_name=_("Is Daily Data"),
@@ -350,6 +352,7 @@ class NetworkConnection(PolymorphicModel, ClusterableModel):
     panels = [
         FieldPanel("name"),
         FieldPanel("network"),
+        FieldPanel("stations_timezone"),
         MultiFieldPanel([
             FieldPanel('plugin', widget=PluginSelectWidget),
             FieldPanel("plugin_processing_enabled"),
@@ -386,18 +389,23 @@ class StationLink(PolymorphicModel, ClusterableModel):
     
     enabled = models.BooleanField(default=True, verbose_name=_("Enabled"),
                                   help_text=_("If unchecked, this station  will not be processed"))
+    use_connection_timezone = models.BooleanField(default=True,
+                                                  verbose_name=_("Use Connection Timezone"),
+                                                  help_text=_("If checked, the station will use the timezone from the "
+                                                              "network connection. If unchecked, it will use the "
+                                                              "station's set timezone that will be appear below"))
     timezone_info = TimeZoneField(default='UTC', verbose_name=_("Station Timezone"),
                                   help_text=_("Timezone used by the station for recording observations"))
     
     aggregate_from_date = models.DateTimeField(blank=True, null=True, verbose_name=_("Aggregation Start Date"),
                                                help_text=_("Date to start aggregation from. "
                                                            "Leave empty to use the current date and time"))
-    
     panels = [
         MultiFieldPanel([
             FieldPanel("network_connection"),
             FieldPanel("station"),
             FieldPanel("enabled"),
+            FieldPanel("use_connection_timezone"),
             FieldPanel("timezone_info"),
         ], heading=_("Base"))
     ]
@@ -408,6 +416,17 @@ class StationLink(PolymorphicModel, ClusterableModel):
     
     class Meta:
         unique_together = ['network_connection', 'station']
+    
+    @property
+    def timezone(self):
+        """
+        Returns the timezone for the station link.
+        If use_connection_timezone is True, it returns the timezone from the network connection.
+        Otherwise, it returns the station's timezone.
+        """
+        if self.use_connection_timezone:
+            return self.network_connection.stations_timezone
+        return self.timezone_info
     
     def get_variable_mappings(self):
         """
