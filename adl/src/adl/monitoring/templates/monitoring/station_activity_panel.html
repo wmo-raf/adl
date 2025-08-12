@@ -1,0 +1,74 @@
+{% load i18n humanize wagtailiconchooser_tags %}
+
+
+<style>
+    .station-activity-container {
+        display: flex;
+        flex-direction: column;
+        gap: 20px;
+        padding: 16px;
+    }
+
+    .station-activity-panel {
+        padding: 16px;
+        min-height: 420px;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1), 0 1px 3px rgba(0, 0, 0, 0.06);
+    }
+
+    /* Base */
+    .vis-item .vis-item-content {
+        color: #fff;
+        font-weight: 600;
+    }
+
+    /* Success with data vs without */
+    .vis-item.success-with-records {
+        background: #16a34a;
+        border-color: #15803d;
+    }
+
+    .vis-item.success-no-records {
+        background: #d9dcda;
+        border-color: #535753;
+    }
+
+    /* Errors */
+    .vis-item.error-with-message {
+        background: #dc2626;
+        border-color: #b91c1c;
+    }
+
+    .vis-item.error-no-message {
+        background: #ef4444;
+        border-color: #dc2626;
+    }
+
+    /* Improve focus ring for a11y */
+    .vis-item.vis-selected {
+        box-shadow: 0 0 0 2px #111827 inset;
+    }
+
+    .vis-label.station-group .vis-inner {
+        font-weight: bold;
+        font-size: 14px;
+    }
+
+
+</style>
+
+<div class="station-activity-container">
+    {% for network_connection in network_connections %}
+        <div class="station-activity-panel">
+            <div id="t-timeline-{{ network_connection.id }}"></div>
+            <script>
+                new StationsActivityTimeline({
+                    connectionId: "{{ network_connection.id }}",
+                    timelineElId: "t-timeline-{{ network_connection.id }}",
+                    apiBaseUrl: "{{ data_api_base_url }}",
+                });
+            </script>
+        </div>
+    {% endfor %}
+</div>
+
+

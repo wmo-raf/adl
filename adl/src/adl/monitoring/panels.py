@@ -33,3 +33,34 @@ class PluginMonitoringPanel(Component):
         )
         
         return media
+
+
+class StationActivityPanel(Component):
+    name = "station_activity"
+    template_name = "monitoring/station_activity_panel.html"
+    order = 200
+    
+    def get_context_data(self, parent_context):
+        context = super().get_context_data(parent_context)
+        
+        network_connections = NetworkConnection.objects.all().order_by("network_id")
+        context["network_connections"] = network_connections
+        
+        context["data_api_base_url"] = "/monitoring/station-activity"
+        return context
+    
+    @property
+    def media(self):
+        media = Media(
+            css={
+                "all": [
+                    "css/vendor/vis-timeline-graph2d.min.css",
+                ]
+            },
+            js=[
+                "js/vendor/vis-timeline-graph2d.min.js",
+                "js/monitoring.js",
+            ]
+        )
+        
+        return media
