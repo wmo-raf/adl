@@ -1,4 +1,4 @@
-{% load i18n humanize wagtailiconchooser_tags %}
+{% load i18n wagtailadmin_tags wagtailiconchooser_tags monitoring_tags %}
 
 
 <style>
@@ -6,16 +6,89 @@
         display: flex;
         flex-direction: column;
         gap: 20px;
-        padding: 16px;
     }
 
     .station-activity-panel {
-        padding: 16px;
+        padding: 32px;
         min-height: 420px;
         box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1), 0 1px 3px rgba(0, 0, 0, 0.06);
     }
 
-    /* Base */
+    .station-activity-panel .t-header {
+        display: flex;
+        flex-direction: column;
+        font-size: 18px;
+        gap: 8px;
+        padding: 16px 0;
+    }
+
+    .station-activity-panel .t-header-title {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-weight: 600;
+        padding-bottom: 16px;
+        border-bottom: 1px solid #e2e8f0
+    }
+
+    .station-activity-panel .t-header .t-icon-large svg {
+        height: 20px;
+        width: 20px;
+    }
+
+    .station-activity-panel .t-header .network-name {
+        color: #111827; /* Dark gray */
+        font-size: 20px;
+    }
+
+    .t-icon-large {
+        display: flex;
+        align-items: center;
+    }
+
+    .t-panel-icon-large svg {
+        height: 30px;
+        width: 30px;
+    }
+
+    .t-panel-icon-small {
+        display: flex;
+        align-items: center;
+    }
+
+    .t-panel-icon-small svg {
+        height: 16px;
+        width: 16px;
+    }
+
+    .t-panel-meta {
+        padding: 10px 0;
+        display: flex;
+        align-items: center;
+        gap: 4px;
+        font-size: 14px;
+        background: #f7f8fa;
+    }
+
+    .t-panel-meta-item {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+        padding: 0 8px;
+    }
+
+    .meta-parts {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+    }
+
+    .meta-part {
+        margin-right: 4px;
+    }
+
+
+    /* Vis Timeline */
     .vis-item .vis-item-content {
         color: #fff;
         font-weight: 600;
@@ -59,6 +132,67 @@
 <div class="station-activity-container">
     {% for network_connection in network_connections %}
         <div class="station-activity-panel">
+            <div class="t-header">
+                <div class="t-header-title">
+                    <div class="t-icon-large">
+                        {% icon name="plug" classname="..." title="..." %}
+                    </div>
+                    <div class="network-name">{{ network_connection.name }}</div>
+                </div>
+                <div class="t-panel-meta">
+                    {% if network_connection.plugin_processing_enabled %}
+                        <div class="t-panel-meta-item">
+                            <div class="t-panel-icon-small" style="color: var(--w-color-positive-100)">
+                                {% icon name="circle-check" %}
+                            </div>
+                            <div>
+                                {% translate "Enabled" %}
+                            </div>
+                        </div>
+
+                    {% else %}
+                        <div class="t-panel-meta-item">
+                            <div class="t-panel-icon-small" style="color: var(--w-color-critical-200)">
+                                {% icon name="error" %}
+                            </div>
+                            <div>
+                                {% translate "Disabled" %}
+                            </div>
+                        </div>
+                    {% endif %}
+                    <div class="t-panel-meta-item">
+                        <div class="t-panel-icon-small">
+                            {% icon name="time" %}
+                        </div>
+                        <div class="meta-parts">
+                                 <span class="meta-part">
+                                     {% translate "Processing interval: " %}
+                                 </span>
+                            <span class="meta-part">
+                                     {{ network_connection.plugin_processing_interval }}
+                                 </span>
+                            <span class="meta-part">
+                                     {% translate "minutes" %}
+                                 </span>
+                        </div>
+                    </div>
+
+                    <div class="t-panel-meta-item">
+                        <div class="t-panel-icon-small">
+                            {% icon name="map-pin" %}
+                        </div>
+                        <div class="meta-parts">
+                                 <span class="meta-part">
+                                     {% translate "Linked Stations: " %}
+                                 </span>
+                            <span class="meta-part">
+                                     {{ network_connection.station_links.count }}
+                                 </span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
             <div id="t-timeline-{{ network_connection.id }}"></div>
             <script>
                 new StationsActivityTimeline({
