@@ -151,7 +151,6 @@ class Plugin(Instance):
         return latest_observation_time
     
     def run_process(self, network_connection):
-        from .tasks import perform_hourly_aggregation
         
         station_links = network_connection.station_links.all()
         
@@ -169,10 +168,6 @@ class Plugin(Instance):
             saved_obs_records_count = self.process_station(station_link)
             
             all_saved_records_count[station_link.station.id] = saved_obs_records_count
-            
-            # if we have some data, run aggregate hourly task asynchronously
-            if saved_obs_records_count > 0:
-                perform_hourly_aggregation.delay(network_connection.id)
         
         return all_saved_records_count
     

@@ -28,6 +28,7 @@ def run_network_plugin(self, network_id):
     
     batch_size = network_connection.batch_size or 10
     
+    # only process enabled station links
     station_link_ids = network_connection.station_links.filter(enabled=True).values_list("id", flat=True)
     for batch in chunked(station_link_ids, batch_size):
         process_station_link_batch_task.delay(network_id, batch)
@@ -76,6 +77,11 @@ def process_station_link_batch_task(self, network_id, station_link_ids):
             
             log.success = True
             log.records_count = saved_records_count
+            
+            if saved_records_count > 0:
+                logger.info(f"Processed {saved_records_count} records for station link {station_link_id}")
+                perform_hourly_aggregation.delay(station_link.network_connection.id)
+        
         except Exception as e:
             log.success = False
             log.message = str(e)
