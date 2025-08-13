@@ -3,8 +3,6 @@ from datetime import timezone
 from django.contrib.gis.db import models
 from django.core.exceptions import ValidationError, ObjectDoesNotExist
 from django.core.validators import MaxValueValidator, MinValueValidator
-from django.db.models.signals import post_save
-from django.dispatch import receiver
 from django.utils import timezone as dj_timezone
 from django.utils.translation import gettext_lazy as _
 from django_countries.fields import CountryField
@@ -25,7 +23,6 @@ from wagtailgeowidget.panels import LeafletPanel
 from adl.core.registries import plugin_registry
 from .dispatchers import get_dispatch_channel_data
 from .dispatchers.wis2box import upload_to_wis2box
-from .tasks import create_or_update_aggregation_periodic_tasks
 from .units import units, validate_unit, TEMPERATURE_UNITS
 from .utils import (
     validate_as_integer,
@@ -496,41 +493,40 @@ class ObservationRecord(TimescaleModel, ClusterableModel):
         return f"{self.station.name} - {self.utc_time} - {self.parameter.name} - {self.value}"
 
 
-class AggregatedObservationRecord(TimescaleModel, ClusterableModel):
-    # time field is inherited from TimescaleModel. We use it to store the observation time of the data
-    created_at = models.DateTimeField(auto_now_add=True)
-    modified_at = models.DateTimeField(auto_now=True)
-    station = models.ForeignKey(Station, on_delete=models.CASCADE, verbose_name=_("Station"))
-    parameter = models.ForeignKey(DataParameter, on_delete=models.CASCADE, verbose_name=_("Parameter"))
-    min_value = models.FloatField(verbose_name=_("Min Value"))
-    max_value = models.FloatField(verbose_name=_("Max Value"))
-    avg_value = models.FloatField(verbose_name=_("Avg Value"))
-    sum_value = models.FloatField(verbose_name=_("Sum Value"))
-    records_count = models.PositiveIntegerField(verbose_name=_("Records Count"))
+@register_snippet
+class HourlyObsAgg(models.Model):
+    id = models.CharField(primary_key=True, max_length=32)  # md5 hex
+    station = models.ForeignKey(Station, on_delete=models.DO_NOTHING)
+    connection = models.ForeignKey(NetworkConnection, on_delete=models.DO_NOTHING)
+    parameter = models.ForeignKey(DataParameter, on_delete=models.DO_NOTHING)
+    bucket = models.DateTimeField()
     
-    def __str__(self):
-        return f"{self.station.name} - {self.time} - {self.parameter.name}"
+    min_value = models.FloatField(null=True)
+    max_value = models.FloatField(null=True)
+    avg_value = models.FloatField(null=True)
+    sum_value = models.FloatField(null=True)
+    records_count = models.IntegerField()
     
     class Meta:
-        abstract = True
-
-
-@register_snippet
-class HourlyAggregatedObservationRecord(AggregatedObservationRecord):
-    connection = models.ForeignKey(NetworkConnection, on_delete=models.CASCADE, verbose_name=_("Network Connection"),
-                                   related_name="hourly_aggregated_observation_records")
-
-
-@register_snippet
-class DailyAggregatedObservationRecord(AggregatedObservationRecord):
-    connection = models.ForeignKey(NetworkConnection, on_delete=models.CASCADE, verbose_name=_("Network Connection"),
-                                   related_name="daily_aggregated_observation_records")
+        managed = False
+        ordering = ['-bucket', 'station']
+        db_table = 'obs_agg_1h_v'
+        indexes = [
+            models.Index(fields=['station', 'connection', 'parameter', 'bucket']),
+        ]
+    
+    def __str__(self):
+        return f"{self.station.name} - {self.parameter.name} - {self.bucket} ({self.records_count} records)"
+    
+    @property
+    def time(self):
+        return self.bucket
 
 
 class DispatchChannel(PolymorphicModel, ClusterableModel):
     AGGREGATION_PERIOD_CHOICES = (
         ("hourly", _("Hourly")),
-        ("daily", _("Daily")),
+        # ("daily", _("Daily")),
     )
     
     name = models.CharField(max_length=255, verbose_name=_("Name"))
@@ -665,8 +661,3 @@ class StationChannelDispatchStatus(models.Model):
     
     def __str__(self):
         return f"{self.station.name} - {self.channel.name} - {self.last_sent_obs_time}"
-
-
-@receiver(post_save, sender=AdlSettings)
-def update_aggregation_period_tasks(sender, instance, **kwargs):
-    create_or_update_aggregation_periodic_tasks(instance)

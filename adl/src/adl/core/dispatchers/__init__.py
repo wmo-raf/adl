@@ -13,8 +13,7 @@ def get_station_channel_records(dispatch_channel, station_id):
     from adl.core.models import (
         StationChannelDispatchStatus,
         ObservationRecord,
-        HourlyAggregatedObservationRecord,
-        DailyAggregatedObservationRecord
+        HourlyObsAgg
     )
     
     connection = dispatch_channel.network_connection
@@ -23,18 +22,18 @@ def get_station_channel_records(dispatch_channel, station_id):
     start_date = dispatch_channel.start_date
     
     records_model = ObservationRecord
+    time_field = "time"
     
     if send_agg_data and aggregation_period:
         if aggregation_period == "hourly":
-            records_model = HourlyAggregatedObservationRecord
-        elif aggregation_period == "daily":
-            records_model = DailyAggregatedObservationRecord
+            records_model = HourlyObsAgg
+            time_field = "bucket"
     
     # get all records for the channel connection and station
     obs_records = records_model.objects.filter(connection_id=connection.id, station_id=station_id)
     
     if start_date:
-        obs_records = obs_records.filter(time__gte=start_date)
+        obs_records = obs_records.filter(**{f"{time_field}__gte": start_date})
     
     # filter by last upload time
     station_dispatch_status = get_object_or_none(StationChannelDispatchStatus, station_id=station_id,
@@ -46,11 +45,12 @@ def get_station_channel_records(dispatch_channel, station_id):
     
     if last_sent_obs_time:
         logger.debug(f"[DISPATCH] Getting dispatch records for station {station_id} after {last_sent_obs_time}")
-        obs_records = obs_records.filter(time__gt=station_dispatch_status.last_sent_obs_time)
+        obs_records = obs_records.filter(**{f"{time_field}__gt": last_sent_obs_time})
+    
     else:
         logger.debug(f"[DISPATCH] Getting all dispatch records for station {station_id}")
     
-    return obs_records.order_by("time")
+    return obs_records.order_by(time_field)
 
 
 def get_dispatch_channel_data(dispatch_channel):

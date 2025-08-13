@@ -7,8 +7,7 @@ from celery.signals import worker_ready
 from celery_singleton import Singleton, clear_locks
 from django.core.cache import cache
 from django.utils import timezone as dj_timezone
-from django.utils.dateparse import parse_time
-from django_celery_beat.models import IntervalSchedule, PeriodicTask, CrontabSchedule
+from django_celery_beat.models import IntervalSchedule, PeriodicTask
 from more_itertools import chunked
 
 from adl.config.celery import app
@@ -81,7 +80,6 @@ def process_station_link_batch_task(self, network_id, station_link_ids):
             
             if saved_records_count > 0:
                 logger.info(f"Processed {saved_records_count} records for station link {station_link_id}")
-                perform_hourly_aggregation.delay(station_link.network_connection.id)
         
         except Exception as e:
             log.success = False
@@ -144,60 +142,6 @@ def create_or_update_network_plugin_periodic_tasks(network_connection):
 
 def update_network_plugin_periodic_task(sender, instance, **kwargs):
     create_or_update_network_plugin_periodic_tasks(instance)
-
-
-@app.task(
-    base=Singleton,
-    bind=True
-)
-def perform_daily_aggregation(self):
-    from .aggregation import aggregate_daily
-    aggregate_daily()
-
-
-@app.task(
-    base=Singleton,
-    bind=True
-)
-def perform_hourly_aggregation(self, network_connection_id):
-    from .aggregation import aggregate_hourly_network_connection
-    aggregate_hourly_network_connection(network_connection_id)
-
-
-def create_or_update_aggregation_periodic_tasks(settings):
-    if not settings.daily_aggregation_time:
-        logger.error("Daily aggregation time is not set. Skipping...")
-        return
-    
-    daily_aggregation_time = settings.daily_aggregation_time
-    
-    # Parse the daily aggregation time if it is a string
-    # This is used before the settings are updated/saved for the first time
-    if isinstance(daily_aggregation_time, str):
-        daily_aggregation_time = parse_time(daily_aggregation_time)
-    
-    sig_daily = perform_daily_aggregation.s()
-    name_daily = repr(sig_daily)
-    
-    # Create or update the periodic task
-    
-    daily_schedule, _ = CrontabSchedule.objects.get_or_create(
-        minute=daily_aggregation_time.minute,
-        hour=daily_aggregation_time.hour,
-        day_of_week='*',
-        day_of_month='*',
-        month_of_year='*',
-        timezone=dj_timezone.get_current_timezone()
-    )
-    
-    PeriodicTask.objects.update_or_create(
-        name=name_daily,
-        defaults={
-            'crontab': daily_schedule,
-            'task': sig_daily.name,
-            'enabled': True,
-        }
-    )
 
 
 @app.task(
