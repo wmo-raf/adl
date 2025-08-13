@@ -98,7 +98,13 @@ def aggregate_hourly_network_connection(network_connection_id):
                              f"station: {aggregation['station_id']}, " f"parameter: {aggregation['parameter_id']}, "
                              f"connection: {aggregation['connection_id']}")
                 
-                HourlyAggregatedObservationRecord.objects.update_or_create(**aggregation)
+                try:
+                    HourlyAggregatedObservationRecord.objects.update_or_create(**aggregation)
+                except Exception as e:
+                    error = f"[HOURLY_AGGREGATE] Error saving aggregation record for time: {aggregation['time']}"
+                    print(error)
+                    logger.error(error)
+                    raise e
             
             aggregation_records_count += len(aggregations)
             
