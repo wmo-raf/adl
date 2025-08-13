@@ -54,8 +54,8 @@ def aggregate_hourly_network_connection(network_connection_id):
         to_date = dj_timezone.localtime()
         
         # reset to beginning of the hour
-        from_date = from_date.replace(minute=0, second=0)
-        to_date = to_date.replace(minute=0, second=0)
+        from_date = from_date.replace(minute=0, second=0, microsecond=0)
+        to_date = to_date.replace(minute=0, second=0, microsecond=0)
         
         # minus one hour  from the to_date, to make sure we don't include the current hour
         # since we are not sure that all the data for this current has been collected
