@@ -12,6 +12,7 @@ from django_celery_beat.models import IntervalSchedule, PeriodicTask, CrontabSch
 from more_itertools import chunked
 
 from adl.config.celery import app
+from .dispatchers import run_dispatch_channel
 from .utils import get_object_or_none
 
 logger = logging.getLogger(__name__)
@@ -212,7 +213,7 @@ def perform_channel_dispatch(self, channel_id):
         logger.error(message)
         raise ValueError(message)
     
-    num_of_sent_records = channel.dispatch()
+    num_of_sent_records = run_dispatch_channel(channel.id)
     
     return {"records_count": num_of_sent_records}
 

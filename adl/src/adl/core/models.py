@@ -575,19 +575,12 @@ class DispatchChannel(PolymorphicModel, ClusterableModel):
     def __str__(self):
         return f"{self.name} - {self.network_connection.name}"
     
-    def send_data(self, data_records):
-        raise NotImplementedError("Method send_data must be implemented in the subclass")
+    def send_station_data(self, station_link, station_data_records):
+        raise NotImplementedError("Method send_station_data must be implemented in the subclass")
     
-    def get_data_records(self):
-        data_records = get_dispatch_channel_data(self)
-        
-        return data_records
-    
-    def dispatch(self):
-        data_records = self.get_data_records()
-        if not data_records:
-            return
-        return self.send_data(data_records)
+    def get_data_records_by_station(self):
+        data_records_by_station = get_dispatch_channel_data(self)
+        return data_records_by_station
 
 
 class DispatchChannelParameterMapping(Orderable):
@@ -639,7 +632,7 @@ class Wis2BoxUpload(DispatchChannel):
         verbose_name = _("WIS2BOX Upload")
         verbose_name_plural = _("WIS2BOX Uploads")
     
-    def send_data(self, data_records):
+    def send_station_data(self, station_link, data_records):
         return upload_to_wis2box(self, data_records)
     
     def connection_details(self):

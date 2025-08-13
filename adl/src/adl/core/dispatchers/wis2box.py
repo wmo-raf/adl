@@ -202,8 +202,6 @@ def channel_record_to_wis2box_csv(record):
 
 
 def upload_to_wis2box(channel, data_records, overwrite=False):
-    from adl.core.models import StationChannelDispatchStatus
-    
     minio_client = get_minio_client(
         endpoint=channel.storage_endpoint,
         access_key=channel.storage_username,
@@ -212,6 +210,7 @@ def upload_to_wis2box(channel, data_records, overwrite=False):
     )
     
     uploaded_records_count = 0
+    last_sent_obs_time = None
     
     for record in data_records:
         csv_content, filename = channel_record_to_wis2box_csv(record)
@@ -240,24 +239,8 @@ def upload_to_wis2box(channel, data_records, overwrite=False):
             logger.debug(f"Updating last sent observation time for "
                          f"station {record.get('station_id')} and channel {channel.name}")
             
-            station_id = record.get("station_id")
-            
-            station_dispatch_status = get_object_or_none(
-                StationChannelDispatchStatus,
-                channel_id=channel.id,
-                station_id=station_id
-            )
-            
-            if station_dispatch_status:
-                station_dispatch_status.last_sent_obs_time = record.get("timestamp")
-                station_dispatch_status.save()
-            else:
-                StationChannelDispatchStatus.objects.create(
-                    channel_id=channel.id,
-                    station_id=station_id,
-                    last_sent_obs_time=record.get("timestamp")
-                )
-            
+            # Update the last sent observation time
+            last_sent_obs_time = record.get("timestamp")
             uploaded_records_count += 1
         
         except S3Error as e:
@@ -266,4 +249,4 @@ def upload_to_wis2box(channel, data_records, overwrite=False):
     
     logger.info(f"Uploaded {uploaded_records_count} records to {channel.name}")
     
-    return uploaded_records_count
+    return uploaded_records_count, last_sent_obs_time
