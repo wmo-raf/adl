@@ -84,3 +84,32 @@ class CreatePredefinedDataParametersForm(forms.Form):
     create_conversion_units = forms.BooleanField(label=_("Create optional conversion Units"),
                                                  required=False,
                                                  initial=True)
+
+
+class StationIncludeForm(forms.Form):
+    """
+    Checked = included (no DB row).
+    Unchecked = excluded (persist a DispatchChannelStationLink row with disabled=True).
+    """
+    included_ids = forms.MultipleChoiceField(
+        required=False,
+        widget=forms.CheckboxSelectMultiple
+    )
+    
+    def __init__(self, *args, station_links_qs=None, excluded_ids=None, **kwargs):
+        """
+        station_links_qs: queryset limited to the CURRENT PAGE
+        excluded_ids: a set of station_link IDs already excluded (all pages)
+        """
+        super().__init__(*args, **kwargs)
+        station_links_qs = station_links_qs or []
+        excluded_ids = excluded_ids or set()
+        
+        # Build choices for the current page
+        self.fields["included_ids"].choices = [
+            (str(sl.id), sl.station.name) for sl in station_links_qs
+        ]
+        
+        # Default checked (included) = all on this page that are NOT in excluded_ids
+        initial_included = [str(sl.id) for sl in station_links_qs if sl.id not in excluded_ids]
+        self.initial["included_ids"] = initial_included

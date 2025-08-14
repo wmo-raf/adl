@@ -577,6 +577,11 @@ class DispatchChannel(PolymorphicModel, ClusterableModel):
     def get_data_records_by_station(self):
         data_records_by_station = get_dispatch_channel_data(self)
         return data_records_by_station
+    
+    def stations_allowed_to_send(self):
+        disabled_station_link_ids = self.station_links.filter(disabled=True).values_list('station_link_id', flat=True)
+        allowed_station_links = self.network_connection.station_links.exclude(id__in=disabled_station_link_ids)
+        return allowed_station_links
 
 
 class DispatchChannelParameterMapping(Orderable):
@@ -604,6 +609,19 @@ class DispatchChannelParameterMapping(Orderable):
     
     def __str__(self):
         return f"{self.dispatch_channel.name} - {self.parameter.name}"
+
+
+class DispatchChannelStationLink(Orderable):
+    dispatch_channel = ParentalKey(DispatchChannel, on_delete=models.CASCADE, related_name="station_links")
+    station_link = models.ForeignKey(StationLink, on_delete=models.CASCADE, verbose_name=_("Station Link"),
+                                     related_name="dispatch_channel_links")
+    disabled = models.BooleanField(default=False, verbose_name=_("Disabled"))
+    
+    class Meta:
+        unique_together = ['dispatch_channel', 'station_link']
+    
+    def __str__(self):
+        return f"{self.dispatch_channel.name} - {self.station_link.station.name}"
 
 
 class Wis2BoxUpload(DispatchChannel):

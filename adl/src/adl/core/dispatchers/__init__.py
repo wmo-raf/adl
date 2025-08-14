@@ -78,8 +78,8 @@ def get_dispatch_channel_data(dispatch_channel):
         } for pm in parameter_mappings
     }
     
-    # get all station links for the connection
-    station_links = connection.station_links.all()
+    # get station links for the dispatch channel that are enabled to send data
+    station_links = dispatch_channel.stations_allowed_to_send()
     
     # group by station and by time
     by_station_by_time = {}

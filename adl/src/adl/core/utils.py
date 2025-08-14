@@ -224,7 +224,7 @@ def import_class_by_string_label(class_path):
     return getattr(module, class_name)
 
 
-def make_registrable_viewset(model_cls, icon="snippet", list_display=None, list_filter=None):
+def make_registrable_viewset(model_cls, icon="snippet", list_display=None, list_filter=None, index_view_class=None):
     from adl.core.viewsets import AdletViewSet, AdletIndexView
     
     model_name = model_cls._meta.model_name
@@ -235,7 +235,7 @@ def make_registrable_viewset(model_cls, icon="snippet", list_display=None, list_
         "add_to_admin_menu": False,
         "type": model_name,
         "icon": icon,
-        "index_view_class": AdletIndexView,
+        "index_view_class": index_view_class or AdletIndexView,
     }
     
     if list_display:

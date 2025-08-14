@@ -37,9 +37,10 @@ from .views import (
     dispatch_channels_list,
     dispatch_channel_add_select,
     create_predefined_data_parameters,
-    get_plugin_list
+    get_plugin_list,
+    dispatch_channel_station_links
 )
-from .viewsets import admin_viewsets
+from .viewsets import admin_viewsets, DispatchChannelIndexView
 
 adl_register_plugin_menu_items_hook_name = "register_adl_plugin_menu_items"
 
@@ -56,6 +57,8 @@ def urlconf_adl():
         path('connections/select/', connection_add_select, name="connections_add_select"),
         path('dispatch-channels/', dispatch_channels_list, name="dispatch_channels_list"),
         path('dispatch-channels/select/', dispatch_channel_add_select, name="dispatch_channel_add_select"),
+        path('dispatch-channel/<int:channel_id>/station-links', dispatch_channel_station_links,
+             name="dispatch_channel_station_links"),
         path('plugins/', get_plugin_list, name="plugins_list"),
     ]
 
@@ -96,7 +99,7 @@ def get_dispatch_channels_viewsets():
     viewsets = []
     
     for model_cls in dispatch_channels_model_cls:
-        viewset = make_registrable_viewset(model_cls)
+        viewset = make_registrable_viewset(model_cls, index_view_class=DispatchChannelIndexView)
         
         # add this viewset to a local registry so that
         # we can refer to it later
