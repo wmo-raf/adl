@@ -1,312 +1,321 @@
-function formatToLocalTime(utcString) {
-    // Parse the UTC date string
-    const utcDate = new Date(utcString);
-
-    // Get local date components
-    const day = utcDate.getDate();
-    const month = utcDate.toLocaleString('en-US', {month: 'short'}); // Get short month name (e.g., "Jan")
-
-    // Format hours and minutes with AM/PM
-    let hours = utcDate.getHours();
-    const minutes = String(utcDate.getMinutes()).padStart(2, '0');
-    const ampm = hours >= 12 ? 'PM' : 'AM';
-
-    hours = hours % 12 || 12; // Convert 24h to 12h format
-
-    // Construct formatted date string
-    return `${day} ${month}, ${hours}:${minutes} ${ampm}`;
-}
-
-class PanelMonitor {
-    constructor({connectionId, panelId, chartContainerId, apiBaseUrl}) {
-        this.panelEl = document.getElementById(panelId);
-
-        this.chartContainerId = chartContainerId;
-
-        this.apiBaseUrl = apiBaseUrl;
-        this.connectionId = connectionId;
-
-        this.fetchData().then(res => {
-            this.renderLatest(res.latest_record)
-            this.renderChart(res.data);
-        });
-    }
-
-    async fetchData() {
-        const today = new Date();
-        const date = dateFns.format(today, 'yyyy-MM-dd');
-
-        const urlWithDate = `${this.apiBaseUrl}/${this.connectionId}/${date}/`;
-
-        const response = await fetch(urlWithDate);
-
-        return await response.json();
-    }
-
-
-    createCard(label, value) {
-        const card = document.createElement('div');
-        card.classList.add('m-panel-latest-card');
-
-        const cardLabel = document.createElement('div');
-        cardLabel.classList.add('m-panel-latest-card-label');
-        cardLabel.innerText = label;
-
-        const cardValue = document.createElement('div');
-        cardValue.classList.add('m-panel-latest-card-value');
-        cardValue.innerText = value;
-
-        card.appendChild(cardLabel);
-        card.appendChild(cardValue);
-
-        return card;
-    }
-
-
-    renderLatest(latestRecord) {
-        const container = this.panelEl.querySelector('.m-panel-latest-cards');
-
-        if (container && latestRecord) {
-            const info = {
-                "date": formatToLocalTime(latestRecord.date_done),
-                "processedRecords": latestRecord.result?.saved_records_count,
-                "stations": latestRecord.result?.total_stations_count
-            }
-
-            const dateCard = this.createCard('Time', info.date);
-            container.appendChild(dateCard);
-
-            const stationsCard = this.createCard('Stations Reporting', info.stations);
-            container.appendChild(stationsCard);
-
-            const processedRecordsCard = this.createCard('Processed Records', info.processedRecords);
-            container.appendChild(processedRecordsCard);
-        }
-    }
-
-    renderChart(data) {
-        this.chart = Highcharts.chart(this.chartContainerId, {
-            time: {
-                timezone: Intl.DateTimeFormat().resolvedOptions().timeZone // Detects the user's timezone
-            },
-            title: {
-                text: 'Data Processing',
-                align: 'left'
-            },
-            yAxis: {
-                title: {
-                    text: 'Count'
-                }
-            },
-            xAxis: {
-                type: 'datetime',
-                title: {
-                    text: 'Date'
-                }
-            },
-            tooltip: {
-                xDateFormat: '%b %e, %Y %I:%M %p' // Jan 31, 2025 10:10 AM
-            },
-            series: [
-                {
-                    name: 'Processed Records',
-                    type: "spline",
-                    data: [],
-                    plotOptions: {
-                        series: {
-                            marker: {
-                                symbol: 'circle',
-                                fillColor: '#FFFFFF',
-                                enabled: true,
-                                radius: 2.5,
-                                lineWidth: 1,
-                                lineColor: null
-                            }
-                        }
-                    },
-                },
-                {
-                    name: 'Stations',
-                    type: "column",
-                    data: [],
-                }
-            ],
-            responsive: {
-                rules: [{
-                    condition: {
-                        maxWidth: 500
-                    },
-                }]
-            }
-        });
-
-
-        const recordsData = data.reduce((acc, record) => {
-            acc.push([
-                Date.parse(record.date_done),
-                record.result?.saved_records_count
-            ]);
-
-            return acc;
-
-        }, []);
-
-        this.chart.series[0].setData(recordsData);
-
-
-        const stationsData = data.reduce((acc, record) => {
-            acc.push([
-                Date.parse(record.date_done),
-                record.result?.total_stations_count
-            ]);
-
-            return acc;
-
-        }, []);
-
-        this.chart.series[1].setData(stationsData);
-
-
-    }
-}
-
 class StationsActivityTimeline {
-    constructor({connectionId, timelineElId, apiBaseUrl}) {
+    constructor({connectionId, timelineElId, apiBaseUrl, defaultDirection = "pull"}) {
         this.timelineEl = document.getElementById(timelineElId);
-        this.apiBaseUrl = apiBaseUrl;
+        this.apiBaseUrl = apiBaseUrl.replace(/\/$/, "");
         this.connectionId = connectionId;
+        this.direction = defaultDirection;
+        this.channelId = "";
+
+        // Data stores
+        this.groups = new vis.DataSet([]);
+        this.items = new vis.DataSet([], {queue: true}); // queue for batch add
+        this.timeline = null;
+
+        // Cache fetched “tiles” by day (YYYY-MM-DD)
+        this.dayCache = new Map();  // key -> Promise<void> to dedupe inflight
+
+        // Bounds
+        const now = new Date();
+        this.max = new Date(now.getTime() + 24 * 3600 * 1000); // +1 day
+        this.min = new Date(now.getTime() - 30 * 24 * 3600 * 1000); // 30 days back
+
+        // Today in local time
+        const todayStart = new Date();
+        todayStart.setHours(0, 0, 0, 0);
+        const todayEnd = new Date(todayStart.getTime() + 24 * 3600 * 1000);
+
+        // Initial window shows the whole of today (forward focus),
+        // but we'll only fetch data up to "now".
+        this.initialStart = todayStart;
+        this.initialEnd = todayEnd;
+        this._nowAtInit = now; // freeze "now" for the first fetch
+
+        this.bootstrap();
+    }
+
+    // ---- Helpers ----
+    iso(d) {
+        return new Date(d).toISOString();
+    }
+
+// LOCAL day key: YYYY-MM-DD from local clock
+    dayKeyLocal(d) {
+        const y = d.getFullYear();
+        const m = String(d.getMonth() + 1).padStart(2, "0");
+        const dd = String(d.getDate()).padStart(2, "0");
+        return `${y}-${m}-${dd}`;
+    }
+
+// Split [start,end) by LOCAL midnights
+    daysInRange(start, end) {
+        const out = [];
+        const d = new Date(start);
+        d.setHours(0, 0, 0, 0);
+        const last = new Date(end);
+        last.setHours(0, 0, 0, 0);
+        while (d <= last) {
+            out.push(this.dayKeyLocal(d));
+            d.setDate(d.getDate() + 1);
+        }
+        return out;
+    }
 
 
-        this.fetchData().then(data => {
-            this.renderTimeline(data);
+    // Fetch a concrete [start, end) window. Optionally include stations if first load.
+    async fetchRange(start, end, {includeStations = false} = {}) {
+        // Clamp to [this.min, this.max] and (on first load) avoid asking past "now"
+        const hardEnd = this.timeline ? end : this._nowAtInit || end;
+        const s = new Date(Math.max(+start, +this.min));
+        const e = new Date(Math.min(+hardEnd, +this.max));
+
+        if (e <= s) return;
+
+        const tiles = this.daysInRange(s, e);
+        const jobs = tiles.map(day => {
+            if (!this.dayCache.has(day)) {
+                const [Y, M, D] = day.split("-").map(Number);
+                const dayStart = new Date(Y, M - 1, D, 0, 0, 0, 0);         // local 00:00
+                const dayEnd = new Date(dayStart.getTime() + 24 * 3600 * 1000); // +24h
+                const p = this._fetchAndIngest(dayStart, dayEnd, includeStations)
+                    .catch(err => console.error("Tile fetch failed", day, err));
+                this.dayCache.set(day, p);
+            }
+            return this.dayCache.get(day);
+        });
+
+        this.showLoading(true);
+        await Promise.all(jobs);
+        this.showLoading(false);
+    }
+
+    _populateChannels(channels) {
+        const sel = this._getChannelSelect();
+        if (!sel) return;
+        // Preserve current value if possible
+        const curr = sel.value;
+        sel.innerHTML = `<option value="">All channels</option>` +
+            channels.map(c => `<option value="${c.id}">${c.name}</option>`).join("");
+        if (Array.from(sel.options).some(o => o.value === curr)) {
+            sel.value = curr;
+        }
+    }
+
+    _getChannelSelect() {
+        // find the select next to this timeline
+        const panel = this.timelineEl.closest(".station-activity-panel");
+        return panel ? panel.querySelector('select[id^="t-channel-"]') : null;
+    }
+
+    async _fetchAndIngest(start, end, includeStations) {
+        const params = new URLSearchParams({
+            start: this.iso(start),
+            end: this.iso(end),
+            include_stations: includeStations ? "true" : "false",
+            direction: this.direction
+        });
+
+        // include push-only params
+        if (this.direction === "push") {
+            if (this.channelId) params.set("dispatch_channel_id", this.channelId);
+            // on first time we switch to push, ask for channels list to populate dropdown
+            if (includeStations) params.set("include_channels", "true");
+        }
+
+        const url = `${this.apiBaseUrl}/${this.connectionId}/?${params.toString()}`;
+        const r = await fetch(url, {headers: {"Accept": "application/json"}});
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        const data = await r.json();
+
+        // Seed groups once
+        if (includeStations && Array.isArray(data.stations)) {
+            const groupObjs = data.stations.map(s => ({id: s, content: s, className: "station-group"}));
+            this.groups.update(groupObjs);
+        }
+
+        // Populate channels dropdown if present
+        if (Array.isArray(data.dispatch_channels)) {
+            this._populateChannels(data.dispatch_channels);
+        }
+
+        const items = (data.activity_log || []).map(this._toVisItem);
+        this.items.update(items);
+        this.items.flush();
+        if (this.view) this.view.refresh();
+        if (data.hard_min) this.min = new Date(data.hard_min);
+        if (data.hard_max) this.max = new Date(data.hard_max);
+    }
+
+
+    _toVisItem = (log) => {
+        const start = log.start_date;
+        let end = log.end_date || (typeof log.duration_ms === "number"
+            ? new Date(new Date(start).getTime() + log.duration_ms).toISOString()
+            : new Date(new Date(start).getTime() + 60 * 1000).toISOString());
+
+        const success = !!log.success;
+        const cls = success
+            ? ((log.records_count || 0) > 0 ? "success-with-records" : "success-no-records")
+            : (log.message ? "error-with-message" : "error-no-message");
+
+        const fmt = (d) => new Date(d).toLocaleString(undefined, {hour12: false});
+        const dirLabel = log.direction === "pull" ? "⬇ Pull" : "⬆ Push";
+        const recs = log.records_count != null ? ` • ${log.records_count} recs` : "";
+        const status = success ? "success" : "error";
+        const duration = typeof log.duration_ms === "number" ? ` • ${Math.round(log.duration_ms / 1000)}s` : "";
+        const msg = log.message ? `\n${log.message}` : "";
+
+        const channelTag = (log.dispatch_channel && log.dispatch_channel.name)
+            ? ` • ch: ${log.dispatch_channel.name}` : "";
+
+        return {
+            id: log.id,
+            group: log.station,
+            content: log.direction === "push" && log.dispatch_channel?.name
+                ? `${dirLabel} · ${log.dispatch_channel.name}` : dirLabel,
+            start, end,
+            className: cls,
+            title: `${log.station} • ${dirLabel}${channelTag} • ${status}${recs}${duration}\n${fmt(start)} → ${fmt(end)}${msg}`,
+            status,
+            direction: log.direction,
+            task_id: log.task_id || null,
+            dispatch_channel_id: log.dispatch_channel?.id || null
+        };
+    };
+
+    async setDirection(dir) {
+        if (dir !== "pull" && dir !== "push") return;
+        if (dir === this.direction) return;
+        this.direction = dir;
+
+        // Enable/disable the channel dropdown
+        const sel = this._getChannelSelect();
+        if (sel) sel.disabled = (dir !== "push");
+
+        // Reset cache + items, keep groups
+        this.dayCache.clear();
+        this.items.clear();
+
+        // Window to (re)load
+        let start = this.initialStart;
+        let end = this.initialEnd;
+        if (this.timeline) {
+            const range = this.timeline.getWindow();
+            start = new Date(range.start);
+            end = new Date(range.end);
+        }
+        await this.fetchRange(start, end, {includeStations: true /* also fetch channels on first push */});
+    }
+
+    async setChannel(channelId) {
+        // Only relevant on push
+        this.channelId = channelId || "";
+        if (this.direction !== "push") return;
+
+        // Clear only items (keep cache if you prefer; simplest is full clear)
+        this.dayCache.clear();
+        this.items.clear();
+
+        // Re-fetch current window
+        if (this.timeline) {
+            const {start, end} = this.timeline.getWindow();
+            await this.fetchRange(new Date(start), new Date(end), {includeStations: false});
+        }
+    }
+
+    showLoading(on) {
+        // Find parent panel
+        const panel = this.timelineEl.closest(".station-activity-panel") || this.timelineEl;
+
+        if (!this._overlayEl) {
+            const overlay = document.createElement("div");
+            overlay.className = "timeline-loader-overlay";
+
+            const spinner = document.createElement("div");
+            spinner.className = "timeline-loader-spinner";
+
+            const text = document.createElement("div");
+            text.textContent = "Loading activity…";
+
+            overlay.appendChild(spinner);
+            overlay.appendChild(text);
+            panel.appendChild(overlay);
+
+            this._overlayEl = overlay;
+        }
+        requestAnimationFrame(() => {
+            if (on) {
+                this._overlayEl.classList.add("visible");
+            } else {
+                this._overlayEl.classList.remove("visible");
+            }
         });
     }
 
-    async fetchData() {
-        const url = `${this.apiBaseUrl}/${this.connectionId}/`;
+    bootstrap() {
         this.timelineEl.innerHTML = "<div class='loading'>Loading activity…</div>";
-        try {
-            const r = await fetch(url, {headers: {"Accept": "application/json"}});
-            if (!r.ok) throw new Error(`HTTP ${r.status}`);
-            const data = await r.json();
-            if (!data || !data.activity_log?.length) {
-                this.timelineEl.innerHTML = "<div class='empty'>No activity in the selected period.</div>";
-                return {stations: [], activity_log: []};
-            }
-            this.timelineEl.innerHTML = "";
-            return data;
-        } catch (e) {
-            console.error("Failed to fetch timeline data:", e);
-            this.timelineEl.innerHTML = "<div class='error'>Could not load activity. Try again.</div>";
-            return {stations: [], activity_log: []};
-        }
-    }
 
-    renderTimeline(data) {
-        const {stations, activity_log} = data;
+        // Fetch only today's data up to "now"
+        this.fetchRange(this.initialStart, this._nowAtInit, {includeStations: true})
+            .then(() => {
+                this.timelineEl.innerHTML = "";
+                const options = {
+                    stack: true,
+                    orientation: "top",
+                    zoomMin: 60 * 1000,
+                    zoomMax: 30 * 24 * 3600 * 1000,
+                    zoomKey: "ctrlKey",
+                    maxHeight: "420px",
+                    minHeight: "220px",
+                    selectable: true,
+                    multiselect: false,
+                    margin: {item: 6, axis: 6},
+                    snap: (date) => {
+                        const d = new Date(date);
+                        d.setSeconds(0, 0);
+                        return d;
+                    },
+                    order: (a, b) => new Date(a.start) - new Date(b.start),
+                    groupOrder: (a, b) => String(a.id).localeCompare(String(b.id)),
+                    tooltip: {followMouse: true},
+                    // Allow panning back/forward within bounds
+                    min: this.min,
+                    max: this.max,
+                    // Optional: give vis a starting window immediately
+                    start: this.initialStart,
+                    end: this.initialEnd
+                };
 
-        if (!Array.isArray(stations) || !Array.isArray(activity_log)) {
-            console.error("Bad payload for timeline", data);
-            this.timelineEl.innerHTML = "<div class='empty'>No activity found</div>";
-            return;
-        }
+                this.timeline = new vis.Timeline(this.timelineEl, this.items, this.groups, options);
 
-        // Groups: one per station
-        const groups = new vis.DataSet(
-            stations.map(station => ({id: station, content: station, className: 'station-group'}))
-        );
+                // Ensure the initial window shows all of today (forward focus)
+                this.timeline.setWindow(this.initialStart, this.initialEnd, {animation: false});
 
-        // Status -> CSS class
-        const statusClass = ({success, records_count, message}) => {
-            if (success) return (records_count || 0) > 0 ? "success-with-records" : "success-no-records";
-            return message ? "error-with-message" : "error-no-message";
-        };
-
-        // Make human tooltips
-        const fmt = (d) =>
-            new Date(d).toLocaleString(undefined, {hour12: false}); // local time; switch to UTC if you prefer
-
-        const dataset = activity_log.map(log => {
-            const start = log.start_date;
-            let end = log.end_date;
-
-            // Derive end if missing
-            if (!end) {
-                if (typeof log.duration_ms === "number") {
-                    end = new Date(new Date(start).getTime() + log.duration_ms).toISOString();
-                } else {
-                    // tiny bar so it’s visible
-                    end = new Date(new Date(start).getTime() + 60 * 1000).toISOString();
-                }
-            }
-
-            const cls = statusClass({
-                success: !!log.success,
-                records_count: log.records_count || 0,
-                message: log.message || ""
+                // Debounced incremental loading while user pans/zooms
+                let loadTimer = null;
+                const debouncedLoad = (props) => {
+                    clearTimeout(loadTimer);
+                    loadTimer = setTimeout(() => this.onRangeChanged(props), 200);
+                };
+                this.timeline.on("rangechanged", debouncedLoad);
+            })
+            .catch(err => {
+                console.error(err);
+                this.timelineEl.innerHTML = "<div class='error'>Could not load activity. Try again.</div>";
             });
-
-            const dirLabel = log.direction === "pull" ? "⬇ Pull" : "⬆ Push";
-            const recs = log.records_count != null ? ` • ${log.records_count} recs` : "";
-            const status = log.success ? "success" : "error";
-            const duration =
-                typeof log.duration_ms === "number"
-                    ? ` • ${Math.round(log.duration_ms / 1000)}s`
-                    : "";
-
-            return {
-                id: log.id,
-                group: log.station,
-                content: dirLabel,
-                start,
-                end,
-                className: cls,
-                // Native tooltip
-                title: `${log.station} • ${dirLabel} • ${status}${recs}${duration}\n${fmt(start)} → ${fmt(end)}${log.message ? `\n${log.message}` : ""}`,
-                // Helpful for later interactions
-                status: status,
-                direction: log.direction,
-                task_id: log.task_id || null
-            };
-        });
-
-        const items = new vis.DataSet(dataset);
-
-        const options = {
-            stack: true,
-            stackSubgroups: true,
-            orientation: "top",
-            zoomMin: 60 * 1000,            // 1 minute minimum zoom level
-            zoomMax: 30 * 24 * 60 * 60 * 1000, // 30 days maximum zoom level
-            zoomKey: "ctrlKey",
-            maxHeight: "420px",
-            minHeight: "220px",
-            selectable: true,
-            multiselect: false,
-            // keep labels readable when many items overlap
-            margin: {item: 6, axis: 6},
-            // snap to minutes when dragging (optional)
-            snap: (date /* Date */, scale /* string */, step /* number */) => {
-                const d = new Date(date);
-                d.setSeconds(0, 0);
-                return d;
-            },
-            // order items by start time inside a group
-            order: (a, b) => new Date(a.start) - new Date(b.start),
-            // keep stations sorted lexicographically
-            groupOrder: (a, b) => String(a.id).localeCompare(String(b.id)),
-            tooltip: {followMouse: true}
-        };
-
-        const timeline = new vis.Timeline(this.timelineEl, items, groups, options);
-
-        // Optional: click to drill down to your log viewer
-        timeline.on("itemclick", (props) => {
-            const item = items.get(props.item);
-            if (item?.task_id) {
-                window.open(`/logs/tasks/${item.task_id}`, "_blank");
-            }
-        });
     }
 
+    async onRangeChanged(props) {
+        const start = new Date(props.start);
+        const end = new Date(props.end);
+
+        const neededDays = this.daysInRange(start, end).filter(day => !this.dayCache.has(day));
+        if (neededDays.length === 0) return;
+
+        const [Y1, M1, D1] = neededDays[0].split("-").map(Number);
+        const [Y2, M2, D2] = neededDays[neededDays.length - 1].split("-").map(Number);
+        const rangeStart = new Date(Y1, M1 - 1, D1, 0, 0, 0, 0);
+        const rangeEnd = new Date(Y2, M2 - 1, D2, 24, 0, 0, 0);
+
+        await this.fetchRange(rangeStart, rangeEnd, {includeStations: false});
+    }
 }

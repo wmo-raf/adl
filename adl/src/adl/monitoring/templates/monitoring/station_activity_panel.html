@@ -9,6 +9,7 @@
     }
 
     .station-activity-panel {
+        position: relative;
         padding: 32px;
         min-height: 420px;
         box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1), 0 1px 3px rgba(0, 0, 0, 0.06);
@@ -88,6 +89,79 @@
     }
 
 
+    /* Chip bar */
+    .t-filter-chips {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+        padding: 8px 0;
+    }
+
+    .t-filter-chips .chip {
+        appearance: none;
+        border: 1px solid #e5e7eb;
+        background: #fff;
+        color: #111827;
+        border-radius: 999px;
+        padding: 6px 12px;
+        font-size: 13px;
+        line-height: 18px;
+        cursor: pointer;
+        transition: background .15s ease, border-color .15s ease, color .15s ease;
+    }
+
+    .t-filter-chips .chip:hover {
+        border-color: #cbd5e1;
+        background: #f8fafc;
+    }
+
+    .t-filter-chips .chip.active {
+        background: #111827;
+        color: #fff;
+        border-color: #111827;
+    }
+
+
+    .timeline-loader-overlay {
+        position: absolute;
+        inset: 0;
+        background: rgba(255, 255, 255, 0.75);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 9999999;
+        font-size: 14px;
+        color: #111827;
+        font-weight: 500;
+
+        /* Start hidden */
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity 0.2s ease-in-out;
+    }
+
+    .timeline-loader-overlay.visible {
+        opacity: 1;
+        pointer-events: auto;
+    }
+
+    .timeline-loader-spinner {
+        border: 3px solid rgba(0, 0, 0, 0.1);
+        border-top: 3px solid #111827;
+        border-radius: 50%;
+        width: 24px;
+        height: 24px;
+        animation: spin 0.8s linear infinite;
+        margin-right: 8px;
+    }
+
+    @keyframes spin {
+        to {
+            transform: rotate(360deg);
+        }
+    }
+
+
     /* Vis Timeline */
     .vis-item .vis-item-content {
         color: #fff;
@@ -145,64 +219,105 @@
                             <div class="t-panel-icon-small" style="color: var(--w-color-positive-100)">
                                 {% icon name="circle-check" %}
                             </div>
-                            <div>
-                                {% translate "Enabled" %}
-                            </div>
+                            <div>{% translate "Enabled" %}</div>
                         </div>
-
                     {% else %}
                         <div class="t-panel-meta-item">
                             <div class="t-panel-icon-small" style="color: var(--w-color-critical-200)">
                                 {% icon name="error" %}
                             </div>
-                            <div>
-                                {% translate "Disabled" %}
-                            </div>
+                            <div>{% translate "Disabled" %}</div>
                         </div>
                     {% endif %}
                     <div class="t-panel-meta-item">
-                        <div class="t-panel-icon-small">
-                            {% icon name="time" %}
-                        </div>
+                        <div class="t-panel-icon-small">{% icon name="time" %}</div>
                         <div class="meta-parts">
-                                 <span class="meta-part">
-                                     {% translate "Processing interval: " %}
-                                 </span>
-                            <span class="meta-part">
-                                     {{ network_connection.plugin_processing_interval }}
-                                 </span>
-                            <span class="meta-part">
-                                     {% translate "minutes" %}
-                                 </span>
+                            <span class="meta-part">{% translate "Processing interval: " %}</span>
+                            <span class="meta-part">{{ network_connection.plugin_processing_interval }}</span>
+                            <span class="meta-part">{% translate "minutes" %}</span>
                         </div>
                     </div>
-
                     <div class="t-panel-meta-item">
-                        <div class="t-panel-icon-small">
-                            {% icon name="map-pin" %}
-                        </div>
+                        <div class="t-panel-icon-small">{% icon name="map-pin" %}</div>
                         <div class="meta-parts">
-                                 <span class="meta-part">
-                                     {% translate "Linked Stations: " %}
-                                 </span>
-                            <span class="meta-part">
-                                     {{ network_connection.station_links.count }}
-                                 </span>
+                            <span class="meta-part">{% translate "Linked Stations: " %}</span>
+                            <span class="meta-part">{{ network_connection.station_links.count }}</span>
                         </div>
                     </div>
                 </div>
+                {#                <!-- Chips -->#}
+                {#                <div class="t-filter-chips" id="t-chips-{{ network_connection.id }}">#}
+                {#                    <button class="chip active" data-dir="pull">Pulls</button>#}
+                {#                    <button class="chip" data-dir="push">Pushes</button>#}
+                {#                </div>#}
+
+                {#                <div class="t-channel-filter" style="display: none">#}
+                {#                    <label>#}
+                {#                        <span>Channel:</span>#}
+                {#                        <select id="t-channel-{{ network_connection.id }}" disabled>#}
+                {#                            <option value="">All channels</option>#}
+                {#                            {% for ch in network_connection.dispatch_channels.all %}#}
+                {#                                {% if ch.enabled %}#}
+                {#                                    <option value="{{ ch.id }}">{{ ch.name }}</option>#}
+                {#                                {% endif %}#}
+                {#                            {% endfor %}#}
+                {#                        </select>#}
+                {#                    </label>#}
+                {#                </div>#}
             </div>
 
             <div id="t-timeline-{{ network_connection.id }}"></div>
             <script>
-                new StationsActivityTimeline({
+                window.activityTimelines = window.activityTimelines || {};
+
+                const tl_{{ network_connection.id|slugify|default:network_connection.id }} = new StationsActivityTimeline({
                     connectionId: "{{ network_connection.id }}",
                     timelineElId: "t-timeline-{{ network_connection.id }}",
                     apiBaseUrl: "{{ data_api_base_url }}",
+                    defaultDirection: "pull"
                 });
+
+                window.activityTimelines["{{ network_connection.id }}"] = tl_{{ network_connection.id|slugify|default:network_connection.id }};
+
+                (function () {
+                    const wrap = document.getElementById("t-chips-{{ network_connection.id }}");
+                    const sel = document.getElementById("t-channel-{{ network_connection.id }}");
+
+                    if (wrap) {
+                        wrap.addEventListener("click", async (e) => {
+                            const btn = e.target.closest("button.chip");
+                            if (!btn) return;
+
+                            if (btn.dataset.dir) {
+                                wrap.querySelectorAll("button.chip[data-dir]")
+                                    .forEach(b => b.classList.toggle("active", b === btn));
+                                await window.activityTimelines["{{ network_connection.id }}"].setDirection(btn.dataset.dir);
+                                // Enable/disable select based on direction
+                                if (sel) sel.disabled = (btn.dataset.dir !== "push");
+                                return;
+                            }
+
+                            if (btn.dataset.action === "hide-errors") {
+                                const next = btn.getAttribute("aria-pressed") !== "true";
+                                btn.setAttribute("aria-pressed", String(next));
+                                btn.classList.toggle("active", next);
+                                window.activityTimelines["{{ network_connection.id }}"].setHideErrors(next);
+                            }
+                        });
+                    }
+
+
+                    if (sel) {
+                        sel.addEventListener("change", async () => {
+                            await window.activityTimelines["{{ network_connection.id }}"].setChannel(sel.value);
+                        });
+                    }
+                })();
             </script>
+
         </div>
     {% endfor %}
 </div>
+
 
 

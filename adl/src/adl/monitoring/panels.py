@@ -44,7 +44,7 @@ class StationActivityPanel(Component):
         context = super().get_context_data(parent_context)
         
         network_connections = NetworkConnection.objects.all().order_by("network_id")
-        context["network_connections"] = network_connections
+        context["network_connections"] = network_connections[1:2]
         
         context["data_api_base_url"] = "/monitoring/station-activity"
         return context

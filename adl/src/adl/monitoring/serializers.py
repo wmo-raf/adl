@@ -25,37 +25,55 @@ class TaskResultSerializer(serializers.ModelSerializer):
 
 class StationLinkActivityLogSerializer(serializers.ModelSerializer):
     station = serializers.SerializerMethodField()
-    start_date = serializers.DateTimeField(source='time', format="%Y-%m-%dT%H:%M:%S.%fZ", read_only=True)
+    # Force UTC "Z" format for start_date
+    start_date = serializers.SerializerMethodField()
     end_date = serializers.SerializerMethodField()
+    dispatch_channel = serializers.SerializerMethodField()
+    
+    # Optional: include a stable station id
+    # station_id = serializers.SerializerMethodField()
     
     class Meta:
         model = StationLinkActivityLog
         fields = (
             "id",
             "station",
+            # "station_id",  # optional
             "direction",
             "success",
             "message",
             "duration_ms",
             "records_count",
             "messages_count",
-            "message",
             "start_date",
             "end_date",
-            # Assuming 'time' is the inherited field from TimescaleModel
+            "dispatch_channel",
         )
-        read_only_fields = ("id", "time",)
+        read_only_fields = ("id",)
+    
+    def _to_utc_z(self, dt):
+        if dt is None:
+            return None
+        return dt.strftime("%Y-%m-%dT%H:%M:%S.%fZ")
     
     def get_station(self, obj):
         return obj.station_link.station.name
     
+    # Optional
+    # def get_station_id(self, obj):
+    #     return obj.station_link.station_id
+    
+    def get_start_date(self, obj):
+        return self._to_utc_z(obj.time)
+    
     def get_end_date(self, obj):
-        start_date = obj.time
-        duration_ms = obj.duration_ms
-        
-        if start_date and duration_ms is not None:
-            end_date = start_date + timedelta(milliseconds=duration_ms)
-            
-            return end_date.isoformat()
-        
+        if obj.time and obj.duration_ms is not None:
+            end_dt = obj.time + timedelta(milliseconds=obj.duration_ms)
+            return self._to_utc_z(end_dt)
         return None
+    
+    def get_dispatch_channel(self, obj):
+        dc = obj.dispatch_channel
+        if not dc:
+            return None
+        return {"id": str(dc.id), "name": dc.name, "public_url": dc.public_url}
