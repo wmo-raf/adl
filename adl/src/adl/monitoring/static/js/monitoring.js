@@ -1,10 +1,10 @@
 class StationsActivityTimeline {
-    constructor({connectionId, timelineElId, apiBaseUrl, defaultDirection = "pull"}) {
+    constructor({connectionId, timelineElId, apiBaseUrl, defaultDirection = "pull", channelId = null}) {
         this.timelineEl = document.getElementById(timelineElId);
         this.apiBaseUrl = apiBaseUrl.replace(/\/$/, "");
         this.connectionId = connectionId;
         this.direction = defaultDirection;
-        this.channelId = "";
+        this.channelId = channelId;
 
         // Data stores
         this.groups = new vis.DataSet([]);
@@ -88,24 +88,6 @@ class StationsActivityTimeline {
         this.showLoading(false);
     }
 
-    _populateChannels(channels) {
-        const sel = this._getChannelSelect();
-        if (!sel) return;
-        // Preserve current value if possible
-        const curr = sel.value;
-        sel.innerHTML = `<option value="">All channels</option>` +
-            channels.map(c => `<option value="${c.id}">${c.name}</option>`).join("");
-        if (Array.from(sel.options).some(o => o.value === curr)) {
-            sel.value = curr;
-        }
-    }
-
-    _getChannelSelect() {
-        // find the select next to this timeline
-        const panel = this.timelineEl.closest(".station-activity-panel");
-        return panel ? panel.querySelector('select[id^="t-channel-"]') : null;
-    }
-
     async _fetchAndIngest(start, end, includeStations) {
         const params = new URLSearchParams({
             start: this.iso(start),
@@ -117,8 +99,6 @@ class StationsActivityTimeline {
         // include push-only params
         if (this.direction === "push") {
             if (this.channelId) params.set("dispatch_channel_id", this.channelId);
-            // on first time we switch to push, ask for channels list to populate dropdown
-            if (includeStations) params.set("include_channels", "true");
         }
 
         const url = `${this.apiBaseUrl}/${this.connectionId}/?${params.toString()}`;
@@ -130,11 +110,6 @@ class StationsActivityTimeline {
         if (includeStations && Array.isArray(data.stations)) {
             const groupObjs = data.stations.map(s => ({id: s, content: s, className: "station-group"}));
             this.groups.update(groupObjs);
-        }
-
-        // Populate channels dropdown if present
-        if (Array.isArray(data.dispatch_channels)) {
-            this._populateChannels(data.dispatch_channels);
         }
 
         const items = (data.activity_log || []).map(this._toVisItem);
@@ -182,46 +157,6 @@ class StationsActivityTimeline {
         };
     };
 
-    async setDirection(dir) {
-        if (dir !== "pull" && dir !== "push") return;
-        if (dir === this.direction) return;
-        this.direction = dir;
-
-        // Enable/disable the channel dropdown
-        const sel = this._getChannelSelect();
-        if (sel) sel.disabled = (dir !== "push");
-
-        // Reset cache + items, keep groups
-        this.dayCache.clear();
-        this.items.clear();
-
-        // Window to (re)load
-        let start = this.initialStart;
-        let end = this.initialEnd;
-        if (this.timeline) {
-            const range = this.timeline.getWindow();
-            start = new Date(range.start);
-            end = new Date(range.end);
-        }
-        await this.fetchRange(start, end, {includeStations: true /* also fetch channels on first push */});
-    }
-
-    async setChannel(channelId) {
-        // Only relevant on push
-        this.channelId = channelId || "";
-        if (this.direction !== "push") return;
-
-        // Clear only items (keep cache if you prefer; simplest is full clear)
-        this.dayCache.clear();
-        this.items.clear();
-
-        // Re-fetch current window
-        if (this.timeline) {
-            const {start, end} = this.timeline.getWindow();
-            await this.fetchRange(new Date(start), new Date(end), {includeStations: false});
-        }
-    }
-
     showLoading(on) {
         // Find parent panel
         const panel = this.timelineEl.closest(".station-activity-panel") || this.timelineEl;
@@ -242,6 +177,7 @@ class StationsActivityTimeline {
 
             this._overlayEl = overlay;
         }
+
         requestAnimationFrame(() => {
             if (on) {
                 this._overlayEl.classList.add("visible");

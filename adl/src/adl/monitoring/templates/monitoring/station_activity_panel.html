@@ -200,6 +200,29 @@
         font-size: 14px;
     }
 
+    .station-push-panel {
+        margin-top: 20px;
+    }
+
+    .station-push-panel .w-tabs__list, .station-push-panel .w-tabs .tab-content {
+        padding-inline-end: 0;
+        padding-inline-start: 0;
+    }
+
+    .channels-title {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 14px;
+        font-weight: 600;
+        padding: 16px 0;
+        border-bottom: 1px solid #e2e8f0;
+    }
+
+    .channels-title .t-icon-large svg {
+        height: 20px;
+        width: 20px;
+    }
 
 </style>
 
@@ -245,76 +268,104 @@
                         </div>
                     </div>
                 </div>
-                {#                <!-- Chips -->#}
-                {#                <div class="t-filter-chips" id="t-chips-{{ network_connection.id }}">#}
-                {#                    <button class="chip active" data-dir="pull">Pulls</button>#}
-                {#                    <button class="chip" data-dir="push">Pushes</button>#}
-                {#                </div>#}
-
-                {#                <div class="t-channel-filter" style="display: none">#}
-                {#                    <label>#}
-                {#                        <span>Channel:</span>#}
-                {#                        <select id="t-channel-{{ network_connection.id }}" disabled>#}
-                {#                            <option value="">All channels</option>#}
-                {#                            {% for ch in network_connection.dispatch_channels.all %}#}
-                {#                                {% if ch.enabled %}#}
-                {#                                    <option value="{{ ch.id }}">{{ ch.name }}</option>#}
-                {#                                {% endif %}#}
-                {#                            {% endfor %}#}
-                {#                        </select>#}
-                {#                    </label>#}
-                {#                </div>#}
             </div>
-
             <div id="t-timeline-{{ network_connection.id }}"></div>
             <script>
-                window.activityTimelines = window.activityTimelines || {};
-
-                const tl_{{ network_connection.id|slugify|default:network_connection.id }} = new StationsActivityTimeline({
+                new StationsActivityTimeline({
                     connectionId: "{{ network_connection.id }}",
                     timelineElId: "t-timeline-{{ network_connection.id }}",
                     apiBaseUrl: "{{ data_api_base_url }}",
                     defaultDirection: "pull"
                 });
-
-                window.activityTimelines["{{ network_connection.id }}"] = tl_{{ network_connection.id|slugify|default:network_connection.id }};
-
-                (function () {
-                    const wrap = document.getElementById("t-chips-{{ network_connection.id }}");
-                    const sel = document.getElementById("t-channel-{{ network_connection.id }}");
-
-                    if (wrap) {
-                        wrap.addEventListener("click", async (e) => {
-                            const btn = e.target.closest("button.chip");
-                            if (!btn) return;
-
-                            if (btn.dataset.dir) {
-                                wrap.querySelectorAll("button.chip[data-dir]")
-                                    .forEach(b => b.classList.toggle("active", b === btn));
-                                await window.activityTimelines["{{ network_connection.id }}"].setDirection(btn.dataset.dir);
-                                // Enable/disable select based on direction
-                                if (sel) sel.disabled = (btn.dataset.dir !== "push");
-                                return;
-                            }
-
-                            if (btn.dataset.action === "hide-errors") {
-                                const next = btn.getAttribute("aria-pressed") !== "true";
-                                btn.setAttribute("aria-pressed", String(next));
-                                btn.classList.toggle("active", next);
-                                window.activityTimelines["{{ network_connection.id }}"].setHideErrors(next);
-                            }
-                        });
-                    }
-
-
-                    if (sel) {
-                        sel.addEventListener("change", async () => {
-                            await window.activityTimelines["{{ network_connection.id }}"].setChannel(sel.value);
-                        });
-                    }
-                })();
             </script>
+            {% if network_connection.dispatch_channels.all %}
+                <div class="station-push-panel">
+                    <div class="channels-title">
+                        <div class="t-icon-large">
+                            {% icon name="resubmit" classname="..." title="..." %}
+                        </div>
+                        Dispatch Channels
+                    </div>
+                    <div class="w-tabs" data-tabs>
+                        <div class="w-tabs__wrapper">
+                            <div role="tablist" class="w-tabs__list">
+                                {% for channel in network_connection.dispatch_channels.all %}
+                                    <a id="tab-label-{{ channel.id }}" href="#tab-channel-{{ channel.id }}"
+                                       class="w-tabs__tab "
+                                       role="tab"
+                                       aria-selected="false"
+                                       aria-controls="tab-channel-{{ channel.id }}">
+                                        {{ channel.name }}
+                                    </a>
+                                {% endfor %}
+                            </div>
+                        </div>
+                        <div class="tab-content">
+                            {% for channel in network_connection.dispatch_channels.all %}
+                                <section id="tab-channel-{{ channel.id }}"
+                                         class="w-tabs__panel"
+                                         role="tabpanel"
+                                         aria-labelledby="tab-label-{{ channel.id }}"
+                                         hidden
+                                >
+                                    <div class="channel-activity-panel">
+                                        <div class="t-panel-meta" style="margin-bottom: 20px;background: none">
+                                            {% if channel.enabled %}
+                                                <div class="t-panel-meta-item">
+                                                    <div class="t-panel-icon-small"
+                                                         style="color: var(--w-color-positive-100)">
+                                                        {% icon name="circle-check" %}
+                                                    </div>
+                                                    <div>{% translate "Enabled" %}</div>
+                                                </div>
+                                            {% else %}
+                                                <div class="t-panel-meta-item">
+                                                    <div class="t-panel-icon-small"
+                                                         style="color: var(--w-color-critical-200)">
+                                                        {% icon name="error" %}
+                                                    </div>
+                                                    <div>{% translate "Disabled" %}</div>
+                                                </div>
+                                            {% endif %}
+                                            <div class="t-panel-meta-item">
+                                                <div class="t-panel-icon-small">{% icon name="time" %}</div>
+                                                <div class="meta-parts">
+                                                    <span class="meta-part">{% translate "Data Check interval: " %}</span>
+                                                    <span class="meta-part">{{ channel.data_check_interval }}</span>
+                                                    <span class="meta-part">{% translate "minutes" %}</span>
+                                                </div>
+                                            </div>
+                                            {% if channel.public_url %}
+                                                <div class="t-panel-meta-item">
+                                                    <div class="t-panel-icon-small">{% icon name="link-external" %}</div>
+                                                    <div class="meta-parts">
+                                                        <span class="meta-part">{% translate "Public Url: " %}</span>
+                                                        <a href="{{ channel.public_url }}" target="_blank">
+                                                            <span class="meta-part">{{ channel.public_url }}</span>
+                                                        </a>
 
+                                                    </div>
+                                                </div>
+                                            {% endif %}
+                                        </div>
+                                        <div id="p-channel-timeline-{{ channel.id }}"></div>
+                                        <script>
+                                            new StationsActivityTimeline({
+                                                connectionId: "{{ network_connection.id }}",
+                                                timelineElId: "p-channel-timeline-{{ channel.id }}",
+                                                apiBaseUrl: "{{ data_api_base_url }}",
+                                                defaultDirection: "push",
+                                                channelId: "{{ channel.id }}"
+                                            });
+                                        </script>
+                                    </div>
+                                </section>
+                            {% endfor %}
+                        </div>
+                    </div>
+
+                </div>
+            {% endif %}
         </div>
     {% endfor %}
 </div>
