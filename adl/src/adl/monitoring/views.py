@@ -1,17 +1,20 @@
 from datetime import timedelta
 
+from adl.core.models import NetworkConnection, DispatchChannel
+from adl.core.utils import get_object_or_none
+from django.shortcuts import render, get_object_or_404
+from django.urls import reverse_lazy
 from django.utils import timezone as dj_timezone
 from django.utils.dateparse import parse_datetime
+from django.utils.translation import gettext as _
 from django_celery_results.models import TaskResult
+from rest_framework import status
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
-from rest_framework import status
 
-from adl.core.models import NetworkConnection
 from .constants import NETWORK_PLUGIN_TASK_NAME
 from .models import StationLinkActivityLog
 from .serializers import TaskResultSerializer, StationLinkActivityLogSerializer
-from ..core.utils import get_object_or_none
 
 
 @api_view()
@@ -177,3 +180,41 @@ def get_station_activity_log(request, connection_id):
         ]
     
     return Response(payload, status=status.HTTP_200_OK)
+
+
+def network_connection_monitoring(request, connection_id):
+    connection = get_object_or_404(NetworkConnection, id=connection_id)
+    
+    breadcrumbs_items = [
+        {"url": reverse_lazy("wagtailadmin_home"), "label": _("Home")},
+        {"url": reverse_lazy("connections_list"), "label": _("Network Connections")},
+        {"url": "", "label": _("Network Monitoring")},
+    ]
+    
+    context = {
+        "page_title": _("Network Monitoring"),
+        "breadcrumbs_items": breadcrumbs_items,
+        "network_connection": connection,
+        "data_api_base_url": "/monitoring/station-activity"
+    }
+    
+    return render(request, "monitoring/network_monitoring.html", context)
+
+
+def dispatch_channel_monitoring(request, channel_id):
+    channel = get_object_or_404(DispatchChannel, id=channel_id)
+    
+    breadcrumbs_items = [
+        {"url": reverse_lazy("wagtailadmin_home"), "label": _("Home")},
+        {"url": reverse_lazy("dispatch_channels_list"), "label": _("Dispatch Channels")},
+        {"url": "", "label": _("Dispatch Channel Monitoring")},
+    ]
+    
+    context = {
+        "page_title": _("Dispatch Channel Monitoring"),
+        "breadcrumbs_items": breadcrumbs_items,
+        "channel": channel,
+        "data_api_base_url": "/monitoring/station-activity"
+    }
+    
+    return render(request, "monitoring/dispatch_channel_monitoring.html", context)

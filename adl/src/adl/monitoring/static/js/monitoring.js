@@ -4,6 +4,7 @@ class StationsActivityTimeline {
                     timelineElId,
                     apiBaseUrl,
                     defaultDirection = "pull",
+                    maxHeight = 420,
                     channelId = null,
                     controlsElId = null
                 }) {
@@ -13,7 +14,7 @@ class StationsActivityTimeline {
         this.direction = defaultDirection;
         this.channelId = channelId;
         this.controlsElId = controlsElId;
-
+        this.maxHeight = maxHeight;
 
         // Data stores
         this.groups = new vis.DataSet([]);
@@ -210,13 +211,16 @@ class StationsActivityTimeline {
         const container = document.getElementById(this.controlsElId);
         if (!container) return;
 
-        container.innerHTML = `
-           <div class="t-controls">
+        const btnControls = document.createElement("div");
+        btnControls.className = "t-controls";
+        btnControls.innerHTML = `
              <button type="button" class="button button-small t-refresh-now">
                 Refresh now
              </button>
-           </div>
          `;
+
+
+        container.append(btnControls);
 
         const btn = container.querySelector(".t-refresh-now");
         btn.addEventListener("click", () => this.refreshNow());
@@ -250,7 +254,6 @@ class StationsActivityTimeline {
                     zoomMin: 60 * 1000,
                     zoomMax: 30 * 24 * 3600 * 1000,
                     zoomKey: "ctrlKey",
-                    maxHeight: "420px",
                     minHeight: "220px",
                     selectable: true,
                     multiselect: false,
@@ -270,6 +273,10 @@ class StationsActivityTimeline {
                     start: this.initialStart,
                     end: this.initialEnd
                 };
+
+                if (this.maxHeight) {
+                    options.maxHeight = this.maxHeight;
+                }
 
                 this.timeline = new vis.Timeline(this.timelineEl, this.items, this.groups, options);
 

@@ -228,6 +228,13 @@
         width: 20px;
     }
 
+    .t-controls-container {
+        display: flex;
+        justify-content: flex-end;
+        align-items: center;
+        gap: 8px;
+    }
+
     .t-controls {
         display: flex;
         justify-content: flex-end;
@@ -294,7 +301,17 @@
                 </div>
             </div>
             <div class="t-wrapper">
-                <div id="t-controls-{{ network_connection.id }}"></div>
+                <div id="t-controls-{{ network_connection.id }}" class="t-controls-container">
+                    <a href="{% url 'network_connection_monitoring' network_connection.id %}"
+                       class="button button-small bicolor button--icon button-secondary" target="_blank">
+                        <span class="icon-wrapper">
+                            <svg class="icon icon-link-external icon" aria-hidden="true">
+                                <use href="#icon-link-external"></use>
+                            </svg>
+                        </span>
+                        Open
+                    </a>
+                </div>
                 <div id="t-timeline-{{ network_connection.id }}"></div>
             </div>
             <script>
@@ -377,7 +394,19 @@
                                             {% endif %}
                                         </div>
                                         <div class="t-wrapper">
-                                            <div id="p-controls-{{ channel.id }}"></div>
+                                            <div id="p-controls-{{ channel.id }}" class="t-controls-container">
+                                                <a href="{% url 'dispatch_channel_monitoring' channel.id %}"
+                                                   class="button button-small bicolor button--icon button-secondary"
+                                                   target="_blank">
+                                                               <span class="icon-wrapper">
+                                                                   <svg class="icon icon-link-external icon"
+                                                                        aria-hidden="true">
+                                                                       <use href="#icon-link-external"></use>
+                                                                   </svg>
+                                                               </span>
+                                                    Open
+                                                </a>
+                                            </div>
                                             <div id="p-channel-timeline-{{ channel.id }}"></div>
                                         </div>
                                         <script>
