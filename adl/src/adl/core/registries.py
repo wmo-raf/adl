@@ -205,6 +205,10 @@ class Plugin(Instance):
         if end_date == start_date:
             end_date += timedelta(hours=1)
         
+        # Ensure both dates are timezone-aware in the station's timezone
+        start_date = dj_timezone.localtime(start_date, timezone=station_link.timezone)
+        end_date = dj_timezone.localtime(end_date, timezone=station_link.timezone)
+        
         return start_date, end_date
     
     def process_station(self, station_link):
