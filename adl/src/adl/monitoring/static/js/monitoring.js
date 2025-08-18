@@ -1,10 +1,19 @@
 class StationsActivityTimeline {
-    constructor({connectionId, timelineElId, apiBaseUrl, defaultDirection = "pull", channelId = null}) {
+    constructor({
+                    connectionId,
+                    timelineElId,
+                    apiBaseUrl,
+                    defaultDirection = "pull",
+                    channelId = null,
+                    controlsElId = null
+                }) {
         this.timelineEl = document.getElementById(timelineElId);
         this.apiBaseUrl = apiBaseUrl.replace(/\/$/, "");
         this.connectionId = connectionId;
         this.direction = defaultDirection;
         this.channelId = channelId;
+        this.controlsElId = controlsElId;
+
 
         // Data stores
         this.groups = new vis.DataSet([]);
@@ -60,9 +69,16 @@ class StationsActivityTimeline {
         return out;
     }
 
+    // Visual feedback hook
+    _flashRefreshed() {
+        const el = this.timelineEl.closest(".t-wrapper") || this.timelineEl;
+        el.classList.add("just-refreshed");
+        setTimeout(() => el.classList.remove("just-refreshed"), 500);
+    }
+
 
     // Fetch a concrete [start, end) window. Optionally include stations if first load.
-    async fetchRange(start, end, {includeStations = false} = {}) {
+    async fetchRange(start, end, {includeStations = false, force = false} = {}) {
         // Clamp to [this.min, this.max] and (on first load) avoid asking past "now"
         const hardEnd = this.timeline ? end : this._nowAtInit || end;
         const s = new Date(Math.max(+start, +this.min));
@@ -72,6 +88,8 @@ class StationsActivityTimeline {
 
         const tiles = this.daysInRange(s, e);
         const jobs = tiles.map(day => {
+            if (force) this.dayCache.delete(day);
+
             if (!this.dayCache.has(day)) {
                 const [Y, M, D] = day.split("-").map(Number);
                 const dayStart = new Date(Y, M - 1, D, 0, 0, 0, 0);         // local 00:00
@@ -187,6 +205,38 @@ class StationsActivityTimeline {
         });
     }
 
+    _mountControls() {
+        if (!this.controlsElId) return;
+        const container = document.getElementById(this.controlsElId);
+        if (!container) return;
+
+        container.innerHTML = `
+           <div class="t-controls">
+             <button type="button" class="button button-small t-refresh-now">
+                Refresh now
+             </button>
+           </div>
+         `;
+
+        const btn = container.querySelector(".t-refresh-now");
+        btn.addEventListener("click", () => this.refreshNow());
+    }
+
+
+    // Public: Refresh now ALWAYS refetches today's data up to now and resets the view
+    async refreshNow() {
+        if (!this.timeline) return;
+
+        const now = new Date();
+        const todayStart = new Date();
+        todayStart.setHours(0, 0, 0, 0);
+        const todayEnd = new Date(todayStart.getTime() + 24 * 3600 * 1000);
+
+        await this.fetchRange(todayStart, now, {includeStations: false, force: true});
+        this.timeline.setWindow(todayStart, todayEnd, {animation: false});
+        this._flashRefreshed();
+    }
+
     bootstrap() {
         this.timelineEl.innerHTML = "<div class='loading'>Loading activity…</div>";
 
@@ -233,6 +283,9 @@ class StationsActivityTimeline {
                     loadTimer = setTimeout(() => this.onRangeChanged(props), 200);
                 };
                 this.timeline.on("rangechanged", debouncedLoad);
+
+                // Mount the single Refresh button (if a controls container was provided)
+                this._mountControls();
             })
             .catch(err => {
                 console.error(err);

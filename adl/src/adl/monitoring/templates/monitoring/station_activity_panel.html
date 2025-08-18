@@ -228,6 +228,26 @@
         width: 20px;
     }
 
+    .t-controls {
+        display: flex;
+        justify-content: flex-end;
+        padding: 8px 0;
+    }
+
+    .t-refresh-now {
+    }
+
+    .t-refresh-now:hover {
+        opacity: .9;
+    }
+
+    .t-wrapper.just-refreshed {
+        outline: 2px solid var(--w-color-surface-button-default);
+        outline-offset: 2px;
+        transition: outline .2s ease;
+    }
+
+
 </style>
 
 <div class="station-activity-container">
@@ -274,6 +294,7 @@
                 </div>
             </div>
             <div class="t-wrapper">
+                <div id="t-controls-{{ network_connection.id }}"></div>
                 <div id="t-timeline-{{ network_connection.id }}"></div>
             </div>
             <script>
@@ -281,7 +302,8 @@
                     connectionId: "{{ network_connection.id }}",
                     timelineElId: "t-timeline-{{ network_connection.id }}",
                     apiBaseUrl: "{{ data_api_base_url }}",
-                    defaultDirection: "pull"
+                    defaultDirection: "pull",
+                    controlsElId: "t-controls-{{ network_connection.id }}",
                 });
             </script>
             {% if network_connection.dispatch_channels.all %}
@@ -355,6 +377,7 @@
                                             {% endif %}
                                         </div>
                                         <div class="t-wrapper">
+                                            <div id="p-controls-{{ channel.id }}"></div>
                                             <div id="p-channel-timeline-{{ channel.id }}"></div>
                                         </div>
                                         <script>
@@ -363,7 +386,8 @@
                                                 timelineElId: "p-channel-timeline-{{ channel.id }}",
                                                 apiBaseUrl: "{{ data_api_base_url }}",
                                                 defaultDirection: "push",
-                                                channelId: "{{ channel.id }}"
+                                                channelId: "{{ channel.id }}",
+                                                controlsElId: "p-controls-{{ channel.id }}",
                                             });
                                         </script>
                                     </div>
