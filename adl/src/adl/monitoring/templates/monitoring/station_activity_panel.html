@@ -269,7 +269,9 @@
                     </div>
                 </div>
             </div>
-            <div id="t-timeline-{{ network_connection.id }}"></div>
+            <div class="t-wrapper">
+                <div id="t-timeline-{{ network_connection.id }}"></div>
+            </div>
             <script>
                 new StationsActivityTimeline({
                     connectionId: "{{ network_connection.id }}",
@@ -348,7 +350,9 @@
                                                 </div>
                                             {% endif %}
                                         </div>
-                                        <div id="p-channel-timeline-{{ channel.id }}"></div>
+                                        <div class="t-wrapper">
+                                            <div id="p-channel-timeline-{{ channel.id }}"></div>
+                                        </div>
                                         <script>
                                             new StationsActivityTimeline({
                                                 connectionId: "{{ network_connection.id }}",

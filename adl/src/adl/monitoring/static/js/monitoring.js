@@ -159,7 +159,7 @@ class StationsActivityTimeline {
 
     showLoading(on) {
         // Find parent panel
-        const panel = this.timelineEl.closest(".station-activity-panel") || this.timelineEl;
+        const panel = this.timelineEl.closest(".t-wrapper") || this.timelineEl;
 
         if (!this._overlayEl) {
             const overlay = document.createElement("div");
