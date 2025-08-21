@@ -1,0 +1,122 @@
+{# templates/core/dispatch_channel_station_links.html #}
+{% extends "wagtailadmin/generic/base.html" %}
+{% load i18n wagtailadmin_tags static wagtailiconchooser_tags %}
+
+{% block main_content %}
+    <div style="margin-top: 40px">
+        <h1 class="w-text-h2">{% trans "Dispatch Channel Station Links" %} — {{ channel.name }}</h1>
+
+        <div class="help-block help-info">
+
+            <svg class="icon icon-help icon" aria-hidden="true">
+                <use href="#icon-help"></use>
+            </svg>
+            <p style="color:#666;">
+                {% trans "Checked = included (sent). Unchecked = excluded" %}
+            </p>
+        </div>
+
+
+        <form method="post" action="?page={{ page_obj.number }}">
+            {% csrf_token %}
+            {{ form.non_field_errors }}
+
+            <table class="listing">
+                <thead>
+                <tr>
+                    <th style="width:44px;">
+                        <input
+                                type="checkbox"
+                                id="toggle-all"
+                                aria-label="{% trans 'Toggle all on this page' %}"
+                        >
+                    </th>
+                    <th style="font-weight: bold;font-size: 14px">{% trans "Station Link" %}</th>
+                </tr>
+                </thead>
+                <tbody>
+
+                {# We render manually to keep the table layout, but still post into the Form's included_ids field #}
+                {% for sl in page_obj.object_list %}
+                    <tr>
+                        <td>
+                            <input type="checkbox"
+                                   name="included_ids"
+                                   value="{{ sl.id }}"
+                                   class="sl-checkbox"
+                                   id="sl-{{ sl.id }}"
+                                   {% if sl.id|stringformat:"s" in form.initial.included_ids %}checked{% endif %}
+                            >
+                        </td>
+                        <td class="title">
+                            <label for="sl-{{ sl.id }}">
+                                {{ sl.station.name }}
+                            </label>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="3" style="text-align:center;color:#666;">
+                            {% trans "No station links found for this connection." %}
+                        </td>
+                    </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+
+            <div style="margin-top:16px;">
+                <button type="submit" class="button button-longrunning">
+                    {% if paginator.num_pages > 1 %}
+                        {% trans "Save Changes on this Page" %}
+                    {% else %}
+                        {% trans "Save Changes" %}
+                    {% endif %}
+                </button>
+            </div>
+        </form>
+
+        {# Pagination controls #}
+        {% if paginator.num_pages > 1 %}
+            <div style="margin-top:40px;">
+                {% include "wagtailadmin/shared/pagination_nav.html" with items=page_obj %}
+            </div>
+
+        {% endif %}
+    </div>
+
+    <script>
+        (function () {
+            const boxes = Array.from(document.querySelectorAll('.sl-checkbox'));
+            const toggleAll = document.getElementById('toggle-all');
+
+            function refreshHeaderState() {
+                const total = boxes.length;
+                const checked = boxes.filter(b => b.checked).length;
+
+                if (total === 0) {
+                    toggleAll.checked = false;
+                    toggleAll.indeterminate = false;
+                    return;
+                }
+                toggleAll.checked = (checked === total);
+                toggleAll.indeterminate = (checked > 0 && checked < total);
+            }
+
+            // Initialize header checkbox state on load
+            refreshHeaderState();
+
+            // Clicking the header checkbox toggles all on this page
+            if (toggleAll) {
+                toggleAll.addEventListener('change', () => {
+                    boxes.forEach(b => {
+                        b.checked = toggleAll.checked;
+                    });
+                    refreshHeaderState();
+                });
+            }
+
+            // When any row checkbox changes, update the header’s indeterminate/checked state
+            boxes.forEach(b => b.addEventListener('change', refreshHeaderState));
+        })();
+    </script>
+{% endblock %}

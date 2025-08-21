@@ -9,6 +9,7 @@ from rest_framework_simplejwt.views import (
 from wagtail.admin import urls as wagtailadmin_urls
 
 from adl.api import urls as api_urls
+from wagtail.documents import urls as wagtaildocs_urls
 
 urlpatterns = [
     # path("django-admin/", admin.site.urls),
@@ -17,7 +18,7 @@ urlpatterns = [
     path('api/token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
     path("api/", include(api_urls), name="adl_api"),
     path("debug/django-admin/", admin.site.urls),
-    # path("documents/", include(wagtaildocs_urls)),
+    path("documents/", include(wagtaildocs_urls)),
     
     # API schema
     path("api/schema/", SpectacularAPIView.as_view(), name="schema"),

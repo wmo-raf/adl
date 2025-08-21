@@ -1,25 +1,46 @@
 import json
 import logging
+import time
 
+from celery import shared_task
 from celery.signals import worker_ready
 from celery_singleton import Singleton, clear_locks
+from django.core.cache import cache
 from django.utils import timezone as dj_timezone
-from django.utils.dateparse import parse_time
-from django_celery_beat.models import IntervalSchedule, PeriodicTask, CrontabSchedule
+from django_celery_beat.models import IntervalSchedule, PeriodicTask
+from more_itertools import chunked
 
 from adl.config.celery import app
+from .dispatchers import run_dispatch_channel
 from .utils import get_object_or_none
 
 logger = logging.getLogger(__name__)
 
 
-@app.task(
-    base=Singleton,
-    bind=True
-)
+@shared_task(bind=True)
 def run_network_plugin(self, network_id):
+    from .models import NetworkConnection
+    network_connection = get_object_or_none(NetworkConnection, id=network_id)
+    
+    if not network_connection:
+        logger.error(f"Network Connection with id {network_id} does not exist. Skipping...")
+        return
+    
+    batch_size = network_connection.batch_size or 10
+    
+    # only process enabled station links
+    station_link_ids = network_connection.station_links.filter(enabled=True).values_list("id", flat=True)
+    for batch in chunked(station_link_ids, batch_size):
+        process_station_link_batch_task.delay(network_id, batch)
+
+
+@shared_task(bind=True)
+def process_station_link_batch_task(self, network_id, station_link_ids):
     from adl.core.registries import plugin_registry
     from .models import NetworkConnection
+    from .models import StationLink
+    from adl.monitoring.models import StationLinkActivityLog
+    
     network_connection = get_object_or_none(NetworkConnection, id=network_id)
     
     if not network_connection:
@@ -29,37 +50,48 @@ def run_network_plugin(self, network_id):
     network_plugin_type = network_connection.plugin
     plugin = plugin_registry.get(network_plugin_type)
     
-    if plugin:
-        plugin_processing_enabled = network_connection.plugin_processing_enabled
-        plugin_label = plugin.label or plugin.type
+    for station_link_id in station_link_ids:
+        station_link = get_object_or_none(StationLink, id=station_link_id)
         
-        if not plugin_processing_enabled:
-            logger.info(f"Network plugin processing is disabled for network {network_connection.name}. Skipping...")
-            return
+        if not station_link:
+            logger.error(f"Station link with id {station_link_id} does not exist. Skipping...")
+            continue
         
-        logger.info(f"Starting plugin processing '{plugin_label}' for network {network_connection.name}...")
+        lock_key = f"lock:station:{station_link_id}"
         
-        saved_stations_records_count = plugin.run_process(network_connection)
+        lock_acquired = cache.add(lock_key, "locked", timeout=None)
         
-        if saved_stations_records_count:
-            total_stations_count = len(saved_stations_records_count.keys())
-            saved_records_count = sum(saved_stations_records_count.values())
+        if not lock_acquired:
+            logger.warning(f"Station link {station_link_id} is still processing. Skipping...")
+            continue
+        
+        start = time.monotonic()
+        log = StationLinkActivityLog.objects.create(
+            time=dj_timezone.now(),
+            station_link=station_link,
+            direction='pull',
+        )
+        
+        try:
+            saved_records_count = plugin.process_station(station_link)
             
-            logger.info(
-                f"Plugin processing '{plugin_label}' for network {network_connection.name} finished."
-                f"Processed {saved_records_count} records from {total_stations_count} stations.")
+            log.success = True
+            log.records_count = saved_records_count
             
-            return {
-                "saved_records_count": saved_records_count,
-                "total_stations_count": total_stations_count,
-                "station_records": saved_stations_records_count
-            }
+            if saved_records_count > 0:
+                logger.info(f"Processed {saved_records_count} records for station link {station_link_id}")
         
-        else:
-            logger.info(f"Plugin processing '{plugin_label}' for network {network_connection.name} finished. "
-                        f"No records processed.")
-        
-        return {"saved_records_count": 0, "total_stations_count": 0, "station_records": {}}
+        except Exception as e:
+            log.success = False
+            log.message = str(e)
+            logger.error(f"Error processing station link {station_link_id}: {e}")
+        finally:
+            
+            log.duration_ms = (time.monotonic() - start) * 1000
+            log.save()
+            
+            # Release the lock after processing
+            cache.delete(lock_key)
 
 
 @app.on_after_finalize.connect
@@ -74,6 +106,15 @@ def setup_network_plugin_processing_tasks(sender, **kwargs):
 @worker_ready.connect
 def unlock_all(**kwargs):
     clear_locks(app)
+    
+    # get lock keys
+    cache_lock_keys = cache.keys("lock:station:*")
+    
+    # clear all locks
+    if cache_lock_keys:
+        logger.info(f"Unlocking all station links: {len(cache_lock_keys)}...")
+        for cache_lock_key in cache_lock_keys:
+            cache.delete(cache_lock_key)
 
 
 def create_or_update_network_plugin_periodic_tasks(network_connection):
@@ -107,60 +148,6 @@ def update_network_plugin_periodic_task(sender, instance, **kwargs):
     base=Singleton,
     bind=True
 )
-def perform_daily_aggregation(self):
-    from .aggregation import aggregate_daily
-    aggregate_daily()
-
-
-@app.task(
-    base=Singleton,
-    bind=True
-)
-def perform_hourly_aggregation(self, network_connection_id):
-    from .aggregation import aggregate_hourly_network_connection
-    aggregate_hourly_network_connection(network_connection_id)
-
-
-def create_or_update_aggregation_periodic_tasks(settings):
-    if not settings.daily_aggregation_time:
-        logger.error("Daily aggregation time is not set. Skipping...")
-        return
-    
-    daily_aggregation_time = settings.daily_aggregation_time
-    
-    # Parse the daily aggregation time if it is a string
-    # This is used before the settings are updated/saved for the first time
-    if isinstance(daily_aggregation_time, str):
-        daily_aggregation_time = parse_time(daily_aggregation_time)
-    
-    sig_daily = perform_daily_aggregation.s()
-    name_daily = repr(sig_daily)
-    
-    # Create or update the periodic task
-    
-    daily_schedule, _ = CrontabSchedule.objects.get_or_create(
-        minute=daily_aggregation_time.minute,
-        hour=daily_aggregation_time.hour,
-        day_of_week='*',
-        day_of_month='*',
-        month_of_year='*',
-        timezone=dj_timezone.get_current_timezone()
-    )
-    
-    PeriodicTask.objects.update_or_create(
-        name=name_daily,
-        defaults={
-            'crontab': daily_schedule,
-            'task': sig_daily.name,
-            'enabled': True,
-        }
-    )
-
-
-@app.task(
-    base=Singleton,
-    bind=True
-)
 def perform_channel_dispatch(self, channel_id):
     from .models import DispatchChannel
     channel = get_object_or_none(DispatchChannel, id=channel_id)
@@ -170,7 +157,7 @@ def perform_channel_dispatch(self, channel_id):
         logger.error(message)
         raise ValueError(message)
     
-    num_of_sent_records = channel.dispatch()
+    num_of_sent_records = run_dispatch_channel(channel.id)
     
     return {"records_count": num_of_sent_records}
 

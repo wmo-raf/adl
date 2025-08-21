@@ -5,7 +5,7 @@ from wagtail.admin.ui.tables import BulkActionsCheckboxColumn
 from wagtail.admin.views import generic
 from wagtail.admin.viewsets.chooser import ChooserViewSet
 from wagtail.admin.viewsets.model import ModelViewSet
-from wagtail.admin.widgets import HeaderButton
+from wagtail.admin.widgets import HeaderButton, ListingButton
 
 from .constants import PREDEFINED_DATA_PARAMETERS
 from .models import (
@@ -42,6 +42,27 @@ class AdletIndexView(generic.IndexView):
         ]
         
         return columns
+
+
+class DispatchChannelIndexView(AdletIndexView):
+    def get_list_more_buttons(self, instance):
+        buttons = super().get_list_more_buttons(instance)
+        
+        label = _("Station Links")
+        url = reverse("dispatch_channel_station_links", args=[instance.id])
+        icon_name = "map-pin"
+        attrs = {"target": "_blank"}
+        if label and url:
+            buttons.append(
+                ListingButton(
+                    label,
+                    url=url,
+                    icon_name=icon_name,
+                    attrs=attrs,
+                )
+            )
+        
+        return buttons
 
 
 class NetworkViewSet(AdletViewSet):

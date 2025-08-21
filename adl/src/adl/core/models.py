@@ -3,8 +3,6 @@ from datetime import timezone
 from django.contrib.gis.db import models
 from django.core.exceptions import ValidationError, ObjectDoesNotExist
 from django.core.validators import MaxValueValidator, MinValueValidator
-from django.db.models.signals import post_save
-from django.dispatch import receiver
 from django.utils import timezone as dj_timezone
 from django.utils.translation import gettext_lazy as _
 from django_countries.fields import CountryField
@@ -25,7 +23,6 @@ from wagtailgeowidget.panels import LeafletPanel
 from adl.core.registries import plugin_registry
 from .dispatchers import get_dispatch_channel_data
 from .dispatchers.wis2box import upload_to_wis2box
-from .tasks import create_or_update_aggregation_periodic_tasks
 from .units import units, validate_unit, TEMPERATURE_UNITS
 from .utils import (
     validate_as_integer,
@@ -133,9 +130,6 @@ class Station(models.Model):
                                                                   "the number of minutes since a significant change "
                                                                   "occuring in the preceeding 10 minutes."))
     
-    timezone = TimeZoneField(default='UTC', verbose_name=_("Station Timezone"),
-                             help_text=_("Timezone used by the station for recording observations"))
-    
     basic_info_panels = [
         FieldPanel("station_id"),
         FieldPanel("name"),
@@ -162,7 +156,6 @@ class Station(models.Model):
         FieldPanel("method_of_ground_state_measurement"),
         FieldPanel("method_of_snow_depth_measurement"),
         FieldPanel("time_period_of_wind"),
-        FieldPanel("timezone"),
     ]
     
     edit_handler = TabbedInterface([
@@ -346,16 +339,22 @@ class NetworkConnection(PolymorphicModel, ClusterableModel):
                                                                  MaxValueValidator(30),
                                                                  MinValueValidator(1)
                                                              ])
+    stations_timezone = TimeZoneField(default='UTC', verbose_name=_("Stations Timezone"),
+                                      help_text=_("Default Timezone of the stations in this network connection"))
+    batch_size = models.PositiveIntegerField(default=10, verbose_name=_("Processing Batch Size"),
+                                             help_text=_("Number of stations to process in a single batch"))
     is_daily_data = models.BooleanField(default=False, verbose_name=_("Is Daily Data"),
                                         help_text=_("Check to mark data from this connection as daily data"))
     
     panels = [
         FieldPanel("name"),
         FieldPanel("network"),
+        FieldPanel("stations_timezone"),
         MultiFieldPanel([
             FieldPanel('plugin', widget=PluginSelectWidget),
             FieldPanel("plugin_processing_enabled"),
             FieldPanel("plugin_processing_interval"),
+            FieldPanel("batch_size"),
         ], heading=_("Plugin Configuration")),
         FieldPanel("is_daily_data"),
     ]
@@ -387,16 +386,24 @@ class StationLink(PolymorphicModel, ClusterableModel):
     
     enabled = models.BooleanField(default=True, verbose_name=_("Enabled"),
                                   help_text=_("If unchecked, this station  will not be processed"))
+    use_connection_timezone = models.BooleanField(default=True,
+                                                  verbose_name=_("Use Connection Timezone"),
+                                                  help_text=_("If checked, the station will use the timezone from the "
+                                                              "network connection. If unchecked, it will use the "
+                                                              "station's set timezone that will be appear below"))
+    timezone_info = TimeZoneField(default='UTC', verbose_name=_("Station Timezone"),
+                                  help_text=_("Timezone used by the station for recording observations"))
     
     aggregate_from_date = models.DateTimeField(blank=True, null=True, verbose_name=_("Aggregation Start Date"),
                                                help_text=_("Date to start aggregation from. "
                                                            "Leave empty to use the current date and time"))
-    
     panels = [
         MultiFieldPanel([
             FieldPanel("network_connection"),
             FieldPanel("station"),
             FieldPanel("enabled"),
+            FieldPanel("use_connection_timezone"),
+            FieldPanel("timezone_info"),
         ], heading=_("Base"))
     ]
     
@@ -407,8 +414,52 @@ class StationLink(PolymorphicModel, ClusterableModel):
     class Meta:
         unique_together = ['network_connection', 'station']
     
+    @property
+    def timezone(self):
+        """
+        Returns the timezone for the station link.
+        If use_connection_timezone is True, it returns the timezone from the network connection.
+        Otherwise, it returns the station's timezone.
+        """
+        if self.use_connection_timezone:
+            return self.network_connection.stations_timezone
+        return self.timezone_info
+    
+    def get_variable_mappings(self):
+        """
+        Returns the variable mappings for the station link.
+        This method should be overridden in subclasses to provide specific mappings.
+        """
+        return []
+    
+    def get_first_collection_date(self):
+        """
+        Returns the first collection date for the station link.
+        This method should be overridden in subclasses to provide specific logic.
+        """
+        return None
+    
     def get_extra_model_admin_buttons(self, classname=None):
         return []
+    
+    def fetch_latest_data(self):
+        """
+        Fetches latest data for the station link using the network connection's plugin.
+        """
+        # get plugin
+        plugin = self.network_connection.get_plugin()
+        
+        # get latest date
+        start_date, end_date = plugin.get_dates_for_station(self, latest=True)
+        
+        # get data records, using the latest dates
+        data_records = plugin.get_station_data(self, start_date=start_date, end_date=end_date)
+        
+        return {
+            "start_date": start_date,
+            "end_date": end_date,
+            "data_records": data_records
+        }
 
 
 @register_snippet
@@ -442,41 +493,40 @@ class ObservationRecord(TimescaleModel, ClusterableModel):
         return f"{self.station.name} - {self.utc_time} - {self.parameter.name} - {self.value}"
 
 
-class AggregatedObservationRecord(TimescaleModel, ClusterableModel):
-    # time field is inherited from TimescaleModel. We use it to store the observation time of the data
-    created_at = models.DateTimeField(auto_now_add=True)
-    modified_at = models.DateTimeField(auto_now=True)
-    station = models.ForeignKey(Station, on_delete=models.CASCADE, verbose_name=_("Station"))
-    parameter = models.ForeignKey(DataParameter, on_delete=models.CASCADE, verbose_name=_("Parameter"))
-    min_value = models.FloatField(verbose_name=_("Min Value"))
-    max_value = models.FloatField(verbose_name=_("Max Value"))
-    avg_value = models.FloatField(verbose_name=_("Avg Value"))
-    sum_value = models.FloatField(verbose_name=_("Sum Value"))
-    records_count = models.PositiveIntegerField(verbose_name=_("Records Count"))
+@register_snippet
+class HourlyObsAgg(models.Model):
+    id = models.CharField(primary_key=True, max_length=32)  # md5 hex
+    station = models.ForeignKey(Station, on_delete=models.DO_NOTHING)
+    connection = models.ForeignKey(NetworkConnection, on_delete=models.DO_NOTHING)
+    parameter = models.ForeignKey(DataParameter, on_delete=models.DO_NOTHING)
+    bucket = models.DateTimeField()
     
-    def __str__(self):
-        return f"{self.station.name} - {self.time} - {self.parameter.name}"
+    min_value = models.FloatField(null=True)
+    max_value = models.FloatField(null=True)
+    avg_value = models.FloatField(null=True)
+    sum_value = models.FloatField(null=True)
+    records_count = models.IntegerField()
     
     class Meta:
-        abstract = True
-
-
-@register_snippet
-class HourlyAggregatedObservationRecord(AggregatedObservationRecord):
-    connection = models.ForeignKey(NetworkConnection, on_delete=models.CASCADE, verbose_name=_("Network Connection"),
-                                   related_name="hourly_aggregated_observation_records")
-
-
-@register_snippet
-class DailyAggregatedObservationRecord(AggregatedObservationRecord):
-    connection = models.ForeignKey(NetworkConnection, on_delete=models.CASCADE, verbose_name=_("Network Connection"),
-                                   related_name="daily_aggregated_observation_records")
+        managed = False
+        ordering = ['-bucket', 'station']
+        db_table = 'obs_agg_1h_v'
+        indexes = [
+            models.Index(fields=['station', 'connection', 'parameter', 'bucket']),
+        ]
+    
+    def __str__(self):
+        return f"{self.station.name} - {self.parameter.name} - {self.bucket} ({self.records_count} records)"
+    
+    @property
+    def time(self):
+        return self.bucket
 
 
 class DispatchChannel(PolymorphicModel, ClusterableModel):
     AGGREGATION_PERIOD_CHOICES = (
         ("hourly", _("Hourly")),
-        ("daily", _("Daily")),
+        # ("daily", _("Daily")),
     )
     
     name = models.CharField(max_length=255, verbose_name=_("Name"))
@@ -521,19 +571,17 @@ class DispatchChannel(PolymorphicModel, ClusterableModel):
     def __str__(self):
         return f"{self.name} - {self.network_connection.name}"
     
-    def send_data(self, data_records):
-        raise NotImplementedError("Method send_data must be implemented in the subclass")
+    def send_station_data(self, station_link, station_data_records):
+        raise NotImplementedError("Method send_station_data must be implemented in the subclass")
     
-    def get_data_records(self):
-        data_records = get_dispatch_channel_data(self)
-        
-        return data_records
+    def get_data_records_by_station(self):
+        data_records_by_station = get_dispatch_channel_data(self)
+        return data_records_by_station
     
-    def dispatch(self):
-        data_records = self.get_data_records()
-        if not data_records:
-            return
-        return self.send_data(data_records)
+    def stations_allowed_to_send(self):
+        disabled_station_link_ids = self.station_links.filter(disabled=True).values_list('station_link_id', flat=True)
+        allowed_station_links = self.network_connection.station_links.exclude(id__in=disabled_station_link_ids)
+        return allowed_station_links
 
 
 class DispatchChannelParameterMapping(Orderable):
@@ -563,6 +611,19 @@ class DispatchChannelParameterMapping(Orderable):
         return f"{self.dispatch_channel.name} - {self.parameter.name}"
 
 
+class DispatchChannelStationLink(Orderable):
+    dispatch_channel = ParentalKey(DispatchChannel, on_delete=models.CASCADE, related_name="station_links")
+    station_link = models.ForeignKey(StationLink, on_delete=models.CASCADE, verbose_name=_("Station Link"),
+                                     related_name="dispatch_channel_links")
+    disabled = models.BooleanField(default=False, verbose_name=_("Disabled"))
+    
+    class Meta:
+        unique_together = ['dispatch_channel', 'station_link']
+    
+    def __str__(self):
+        return f"{self.dispatch_channel.name} - {self.station_link.station.name}"
+
+
 class Wis2BoxUpload(DispatchChannel):
     storage_endpoint = models.CharField(max_length=255, verbose_name=_("Storage Endpoint"))
     storage_username = models.CharField(max_length=255, verbose_name=_("Storage Username"))
@@ -585,7 +646,7 @@ class Wis2BoxUpload(DispatchChannel):
         verbose_name = _("WIS2BOX Upload")
         verbose_name_plural = _("WIS2BOX Uploads")
     
-    def send_data(self, data_records):
+    def send_station_data(self, station_link, data_records):
         return upload_to_wis2box(self, data_records)
     
     def connection_details(self):
@@ -618,8 +679,3 @@ class StationChannelDispatchStatus(models.Model):
     
     def __str__(self):
         return f"{self.station.name} - {self.channel.name} - {self.last_sent_obs_time}"
-
-
-@receiver(post_save, sender=AdlSettings)
-def update_aggregation_period_tasks(sender, instance, **kwargs):
-    create_or_update_aggregation_periodic_tasks(instance)

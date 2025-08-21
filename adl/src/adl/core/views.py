@@ -5,21 +5,25 @@ from django.contrib.gis.geos import Point
 from django.core.cache import cache
 from django.core.paginator import Paginator, InvalidPage
 from django.db import transaction
-from django.shortcuts import render, redirect
+from django.shortcuts import render, redirect, get_object_or_404
 from django.urls import reverse_lazy, reverse
 from django.utils.translation import gettext as _
 from wagtail.admin import messages
+from wagtail.admin.paginator import WagtailPaginator
 from wagtail.admin.ui.tables import Table, TitleColumn
 from wagtail.admin.widgets import HeaderButton
 
 from .constants import OSCAR_SURFACE_REQUIRED_CSV_COLUMNS, PREDEFINED_DATA_PARAMETERS
-from .forms import StationLoaderForm, OSCARStationImportForm, CreatePredefinedDataParametersForm
+from .forms import StationLoaderForm, OSCARStationImportForm, CreatePredefinedDataParametersForm, StationIncludeForm
 from .models import (
     Station,
     AdlSettings,
     OscarSurfaceStationLocal,
     NetworkConnection,
-    DispatchChannel, DataParameter, Unit
+    DispatchChannel,
+    DataParameter,
+    Unit,
+    DispatchChannelStationLink
 )
 from .plugin_utils import get_plugin_metadata
 from .registries import dispatch_channel_viewset_registry, connection_viewset_registry, plugin_registry
@@ -625,3 +629,85 @@ def create_predefined_data_parameters(request):
     }
     
     return render(request, "core/create_predefined_data_parameters.html", context=context)
+
+
+def dispatch_channel_station_links(request, channel_id):
+    channel = get_object_or_404(DispatchChannel, pk=channel_id)
+    
+    breadcrumbs_items = [
+        {"url": reverse_lazy("wagtailadmin_home"), "label": _("Home")},
+        {"url": reverse_lazy("dispatch_channels_list"), "label": _("Dispatch Channels")},
+        {"url": "", "label": channel.name},
+    ]
+    
+    # Base queryset (order by Station name for stable paging)
+    all_station_links_qs = (
+        channel.network_connection.station_links
+        .select_related("station")
+        .order_by("station__name")
+    )
+    
+    # Current exclusions across ALL pages (rows exist for excluded)
+    existing_excluded_ids = set(
+        DispatchChannelStationLink.objects
+        .filter(dispatch_channel=channel)
+        .values_list("station_link_id", flat=True)
+    )
+    
+    # Pagination
+    page_number = request.GET.get("p", 1)
+    paginator = WagtailPaginator(all_station_links_qs, 25)  # 25 rows per page (adjust as you like)
+    page_obj = paginator.get_page(page_number)
+    page_ids = set(page_obj.object_list.values_list("id", flat=True))
+    
+    if request.method == "POST":
+        form = StationIncludeForm(
+            request.POST,
+            station_links_qs=page_obj.object_list,
+            excluded_ids=existing_excluded_ids,
+        )
+        if form.is_valid():
+            included_ids = set(map(int, form.cleaned_data.get("included_ids", [])))
+            # Only compute diffs for the CURRENT PAGE
+            new_excluded_ids_page = page_ids - included_ids
+            
+            to_create = new_excluded_ids_page - existing_excluded_ids
+            to_delete = (existing_excluded_ids & page_ids) - new_excluded_ids_page
+            
+            with transaction.atomic():
+                if to_create:
+                    DispatchChannelStationLink.objects.bulk_create([
+                        DispatchChannelStationLink(
+                            dispatch_channel=channel,
+                            station_link_id=sl_id,
+                            disabled=True,
+                        ) for sl_id in to_create
+                    ], ignore_conflicts=True)
+                
+                if to_delete:
+                    DispatchChannelStationLink.objects.filter(
+                        dispatch_channel=channel,
+                        station_link_id__in=to_delete
+                    ).delete()
+            
+            messages.success(request, _("Saved changes for this page."))
+            # Stay on the same page after save
+            return redirect(f"{reverse('dispatch_channel_station_links', args=[channel.id])}?page={page_obj.number}")
+    else:
+        form = StationIncludeForm(
+            station_links_qs=page_obj.object_list,
+            excluded_ids=existing_excluded_ids,
+        )
+    
+    elided_page_range = paginator.get_elided_page_range(page_number)
+    
+    context = {
+        "breadcrumbs_items": breadcrumbs_items,
+        "channel": channel,
+        "form": form,
+        "page_obj": page_obj,
+        "paginator": paginator,
+        "elided_page_range": elided_page_range,
+        "page_title": _("Dispatch Channel Station Links"),
+    }
+    return render(request, "core/dispatch_channel_station_links.html", context=context)

@@ -102,17 +102,48 @@ if [[ "$exclusive_flag_count" -gt "1" ]]; then
     exit 1;
 fi
 
-# --git was provided, download the plugin using git..
+# --git was provided, support either plain repo or a GitHub repo with #TAG (via Releases)
 if [[ -n "$git" ]]; then
-    log "Downloading plugin from git repo at $git."
+    log "Processing --git source: $git"
     temp_work_dir=$(mktemp -d)
-    cd "$temp_work_dir"
-    git clone "$git" .
 
+    # Split URL and optional #tag
+    repo_url="${git%%#*}"
+    tag=""
+    if [[ "$git" == *"#"* ]]; then
+        tag="${git##*#}"
+    fi
+
+    if [[ "$repo_url" == https://github.com/* ]]; then
+        # Parse owner/repo from GitHub URL, strip optional .git
+        gh_path="${repo_url#https://github.com/}"
+        gh_path="${gh_path%.git}"
+        gh_owner="${gh_path%%/*}"
+        gh_repo="${gh_path#*/}"
+
+        if [[ -n "$tag" ]]; then
+            # Use the GitHub Releases "Source code (tar.gz)" link for the given tag
+            # This URL lives under /archive/refs/tags and redirects appropriately.
+            archive_url="https://github.com/$gh_owner/$gh_repo/archive/refs/tags/$tag.tar.gz"
+            log "Downloading GitHub release source tarball: $gh_owner/$gh_repo@$tag"
+            # -f: fail on HTTP errors; -L: follow redirects; -sS: silent but show errors
+            curl -fLsS "$archive_url" | tar xz --strip-components=1 -C "$temp_work_dir"
+        else
+            # No tag: shallow clone default branch for speed
+            log "Cloning Git repo (no tag): $repo_url"
+            git clone --depth 1 "$repo_url" "$temp_work_dir"
+        fi
+    else
+        # Non-GitHub repos: just clone
+        log "Cloning non-GitHub repo: $repo_url"
+        git clone "$repo_url" "$temp_work_dir"
+    fi
+
+    # Expect exactly one plugin directory at plugins/*
     dirs=("$temp_work_dir"/plugins/*/)
     num_dirs=${#dirs[@]}
     if [[ "$num_dirs" -ne 1 ]]; then
-        error "$git does not look like an ADL plugin. The plugins/ subdirectory in the repo must contain exactly one sub-directory."
+        error "$git does not look like an ADL plugin. The plugins/ subdirectory must contain exactly one sub-directory."
         exit 1;
     fi
     folder=${dirs[0]}
