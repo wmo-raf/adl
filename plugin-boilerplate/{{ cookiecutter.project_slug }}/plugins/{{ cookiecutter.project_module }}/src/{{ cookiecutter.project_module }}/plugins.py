@@ -8,5 +8,5 @@ class PluginNamePlugin(Plugin):
     def get_urls(self):
         return []
     
-    def get_station_data(self):
+    def get_station_data(self, station_link, start_date=None, end_date=None):
         return []
