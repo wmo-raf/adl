@@ -25,10 +25,11 @@ pandas==2.2.3
 python-dateutil==2.9.0.post0
 wagtailgeowidget==8.2.1
 wagtail-modeladmin==2.0.0
-django-polymorphic==3.1.0
+django-polymorphic==4.1.0
 djangorestframework-api-key==3.0.0
 djangorestframework-simplejwt>=5.5.0
 django-vue-utils==0.1.7
 django-deep-translator==1.4.0
 drf-spectacular
 more-itertools==10.7.0
+pydantic==2.11.7
