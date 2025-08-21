@@ -160,5 +160,7 @@ You control everything with `docker compose up`, and configure via the **Wagtail
 
 ---
 
-> **TL;DR**: *Your plugin fetches raw rows for a time window. ADL handles the windowing, timezone normalization, unit
+```{note}
+**TL;DR**: *Your plugin fetches raw rows for a time window. ADL handles the windowing, timezone normalization, unit
 conversion, and saving.*
+```
