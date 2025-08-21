@@ -8,8 +8,7 @@ plugins to get inspiration from.
 maxdepth: 1
 ---
 plugin_overview
-plugin_installation
 plugin_structure
-plugin_boilerplate
 plugin_implementation
+plugin_installation
 ```

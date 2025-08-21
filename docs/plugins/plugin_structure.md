@@ -12,6 +12,9 @@ The plugin template is a [cookiecutter](https://cookiecutter.readthedocs.io/en/s
 generates a plugin with the required structure and files. This ensures that the plugin follows the expected structure
 and can be easily installed into the adl core application.
 
+With the plugin boilerplate you can easily create a new plugin and setup a docker development environment that installs
+ADL as a dependency. This can easily be installed via cookiecutter.
+
 To instantiate the template, execute the following commands from the directory where you want to create the plugin:
 
 ```sh
