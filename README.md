@@ -25,6 +25,22 @@ different receiving systems.
 | 14  | 🇪🇹 [Ethiopia](https://www.ethiomet.gov.et)        | [ADL ADCON DB Plugin](https://github.com/wmo-raf/adl-adcon-db-plugin)                                                                                                                                                    | Ethiomet Wis2box                                            | ⏳ In Progress |
 | 15  | 🇸🇳 [Senegal](https://anacim.sn)                   | ADCON, [ADL Pulsonic Plugin](https://github.com/wmo-raf/adl-pulsoweb-plugin)                                                                                                                                             | Senegal Wis2box                                             | ⏳ In Progress |
 | 16  | 🇰🇪 [Kenya](https://meteo.go.ke)                   | Campbell Scientific, Sutron, Microstep, ADCON, Vaisala, Pulsonic, Seba, TAHMO                                                                                                                                            | Kenya wis2box                                               | ⏳ In Progress |
+| 17  | 🇨🇮 Côte d'Ivoire                                  |                                                                                                                                                                                                                          |                                                             | ⏳ In Progress |
+| 18  | 🇸🇩 [Sudan](https://meteosudan.sd)                 | ADL CIMAWebDrops Plugin                                                                                                                                                                                                  |                                                             | ⏳ In Progress |
+
+## List of Plugins
+
+Below is a list of currently available plugins for the Automated Data Loader (ADL). Each plugin is designed to collect
+data from specific data sources or systems.
+
+| Plugin Name             | Description                                              | Link                                                                          |
+|-------------------------|----------------------------------------------------------|-------------------------------------------------------------------------------|
+| ADL FTP Plugin          | Collecting data from FTP storages                        | [adl-ftp-plugin](https://github.com/wmo-raf/adl-ftp-plugin)                   |
+| ADL ADCON DB Plugin     | Collecting data from an ADCON Postgres database          | [adl-adcon-db-plugin](https://github.com/wmo-raf/adl-adcon-db-plugin)         |
+| ADL TAHMO Plugin        | Collecting  data from TAHMO API                          | [adl-tahmo-plugin](https://github.com/wmo-raf/adl-tahmo-plugin)               |
+| ADL PulsoWeb Plugin     | Collecting data from Pulsonic's Pulsoweb API             | [adl-pulsoweb-plugin](https://github.com/wmo-raf/adl-pulsoweb-plugin)         |
+| ADL WeatherLink Plugin  | Collecting data from Davis Instruments's WeatherLink API | [adl-weatherlink-plugin](https://github.com/wmo-raf/adl-weatherlink-plugin)   |
+| ADL CIMAWebDrops Plugin | Collecting data from CIMA's WebDrops API                 | [adl-cimawebdrops-plugin](https://github.com/wmo-raf/adl-cimawebdrops-plugin) |
 
 ## Features
 
