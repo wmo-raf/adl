@@ -177,3 +177,5 @@ docker-compose.override.yml
 
 adl/src/adl/static
 adl/src/adl/media
+
+backup/
