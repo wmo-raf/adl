@@ -1,0 +1,30 @@
+
+# .coveragerc
+[run]
+branch = True
+source =
+    adl
+omit =
+    */migrations/*
+    */tests/*
+    */settings/*
+    */wsgi.py
+    */asgi.py
+    */manage.py
+    */venv/*
+    */.venv/*
+
+[report]
+show_missing = True
+skip_covered = True
+precision = 1
+exclude_lines =
+    pragma: no cover
+    if TYPE_CHECKING:
+    if __name__ == .__main__.:
+    @abstractmethod
+    raise NotImplementedError
+
+[html]
+directory = htmlcov
+title = ADL Coverage Report

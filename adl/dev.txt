@@ -1,0 +1,6 @@
+pytest==8.4.1
+pytest-django==4.11.1
+factory_boy==3.3.3
+pytest-cov==6.2.1
+coverage==7.10.4
+freezegun==1.5.5
