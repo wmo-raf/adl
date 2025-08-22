@@ -31,6 +31,7 @@ Index
    background
    architecture
    technology
+   core_concepts
    installation
    environmental_variables
    user_guide/index
