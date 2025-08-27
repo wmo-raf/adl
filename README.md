@@ -27,6 +27,7 @@ different receiving systems.
 | 16  | 🇰🇪 [Kenya](https://meteo.go.ke)                   | ADL FTP Plugin, Sutron, Microstep, ADCON, Vaisala, Pulsonic, Seba, TAHMO | Kenya wis2box                                               | ⏳ In Progress |
 | 17  | 🇨🇮 Côte d'Ivoire                                  | ADL PulsoWeb Plugin                                                      |                                                             | ⏳ In Progress |
 | 18  | 🇸🇩 [Sudan](https://meteosudan.sd)                 | ADL CIMAWebDrops Plugin                                                  |                                                             | ⏳ In Progress |
+| 19  | 🇧🇮 [Burundi](https://www.igebu.bi)                | ADL ADCON Plugin                                                         | Igebu Wis2box                                               | ⏳ In Progress |
 
 ## List of Plugins
 
