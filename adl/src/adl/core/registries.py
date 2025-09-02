@@ -178,10 +178,8 @@ class Plugin(Instance):
         
         for record in (station_records or []):
             try:
-                rec = StationRecordModel(
-                    observation_time=record.get("observation_time"),
-                    values={k: v for k, v in record.items() if k != "observation_time"}
-                )
+                rec = StationRecordModel(observation_time=record.get("observation_time"),
+                                         values={k: v for k, v in record.items() if k != "observation_time"})
             except Exception as e:
                 logger.warning("[%s] Bad record for station %s: %s", self.label, station.name, e)
                 continue
@@ -218,6 +216,9 @@ class Plugin(Instance):
                         bool(adl_param), bool(src_name), bool(src_unit),
                     )
                     continue
+                
+                # convert to string for consistency
+                src_name = str(src_name)
                 
                 if src_name not in rec.values:
                     # Fine to skip silently; use debug
