@@ -257,6 +257,8 @@ def get_station_link_timeseries_data(request, station_link_id):
     
     category = request.GET.get('category', None)
     
+    paginate = request.GET.get('paginate', 'false').lower() != 'false'
+    
     if start_date or end_date:
         try:
             start_date = validate_iso_datetime('start_date', start_date)
@@ -301,6 +303,9 @@ def get_station_link_timeseries_data(request, station_link_id):
     
     # Group records by time
     grouped_data = _group_records_by_time(records, station_id, connection_id)
+    
+    if not paginate:
+        return Response({"results": grouped_data})
     
     paginator = StandardResultsSetPagination()
     paginated = paginator.paginate_queryset(grouped_data, request)

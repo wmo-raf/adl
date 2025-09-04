@@ -19,7 +19,12 @@ export const useStationTimeseriesDataStore = defineStore('stationTimeseriesData'
             this.loading = true
             this.error = null
             try {
-                const response = await fetchStationLinkTimeseriesData(this.axios, stationId, page, category, startDate, endDate)
+                const response = await fetchStationLinkTimeseriesData(this.axios, stationId, {
+                    page,
+                    category,
+                    startDate,
+                    endDate
+                })
                 const {data} = response
 
                 const uniqueParameters = new Set()

@@ -19,6 +19,8 @@ export const useStationChartStore = defineStore('stationChart', {
                 connectionId: null,
                 stationId: null,
                 stationDetail: null,
+                startDate: null,
+                endDate: null,
                 dataParameterId: null,
                 timeseriesData: null,
                 loading: false,
@@ -46,7 +48,26 @@ export const useStationChartStore = defineStore('stationChart', {
             const chart = this.charts[chartId]
             if (!chart) return
 
+            const {data_dates} = data
+
             chart.stationDetail = data
+
+            if (data_dates.earliest_time && data_dates.latest_time) {
+                const {earliest_time, latest_time} = data_dates
+
+                const end = new Date(latest_time)
+
+                // Default to 1 day before the end date, or the earliest date if less than 1 day of data
+                let start = new Date(end)
+                start.setDate(end.getDate() - 1)
+
+                if (start < new Date(earliest_time)) {
+                    start = new Date(earliest_time)
+                }
+                chart.startDate = start
+                chart.endDate = end
+            }
+
 
         },
         async loadChartData(id) {
@@ -54,11 +75,25 @@ export const useStationChartStore = defineStore('stationChart', {
 
             if (!chart || !chart.stationId || !chart.dataParameterId) return
 
+
             chart.loading = true
             chart.error = null
 
+            const startDate = chart.startDate
+            const endDate = chart.endDate
+
+            if (!startDate || !endDate) {
+                chart.error = "Start date and end date must be set"
+                chart.loading = false
+                return
+            }
+
             try {
-                const response = await fetchStationLinkTimeseriesData(this.axios, chart.stationId, 1)
+                const response = await fetchStationLinkTimeseriesData(this.axios, chart.stationId, {
+                    startDate,
+                    endDate,
+                    paginate: 'false'
+                })
                 const {data} = response
                 chart.timeseriesData = data.results
             } catch (err) {
