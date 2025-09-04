@@ -233,9 +233,9 @@ def get_station_link_latest_data(request, station_link_id):
     ),
     parameters=[
         OpenApiParameter(name="station_link_id", type=int, location=OpenApiParameter.PATH),
-        OpenApiParameter(name="start_time", required=False, type=str, location=OpenApiParameter.QUERY,
+        OpenApiParameter(name="start_date", required=False, type=str, location=OpenApiParameter.QUERY,
                          description="Start datetime (ISO 8601 format)"),
-        OpenApiParameter(name="end_time", required=False, type=str, location=OpenApiParameter.QUERY,
+        OpenApiParameter(name="end_date", required=False, type=str, location=OpenApiParameter.QUERY,
                          description="End datetime (ISO 8601 format)"),
         OpenApiParameter(name="category", required=False, type=str, location=OpenApiParameter.QUERY,
                          description="Parameter category to filter by"),
@@ -252,43 +252,44 @@ def get_station_link_timeseries_data(request, station_link_id):
     station_id = station_link.station_id
     
     # Get query parameters for time range (optional)
-    start_time = request.GET.get('start_time', None)
-    end_time = request.GET.get('end_time', None)
+    start_date = request.GET.get('start_date', None)
+    end_date = request.GET.get('end_date', None)
     
     category = request.GET.get('category', None)
     
-    if start_time or end_time:
+    if start_date or end_date:
         try:
-            start_time = validate_iso_datetime('start_time', start_time)
-            end_time = validate_iso_datetime('end_time', end_time)
+            start_date = validate_iso_datetime('start_date', start_date)
+            end_date = validate_iso_datetime('end_date', end_date)
+        
         except ValueError as e:
             return Response({"error": str(e)}, status=400)
     
-    if not start_time:
+    if not start_date:
         # get the last 24 hours of data if no start_time is provided
-        start_time = (dj_timezone.now() - timedelta(hours=24)).replace(minute=0, second=0, microsecond=0)
+        start_date = (dj_timezone.now() - timedelta(hours=24)).replace(minute=0, second=0, microsecond=0)
     
     # Initialize the base query
     query = ObservationRecord.objects.filter(
         connection_id=connection_id,
         station_id=station_id,
-        time__gte=start_time,
+        time__gte=start_date,
     )
     
     if category:
         # Filter by parameter category if provided
         query = query.filter(parameter__category=category)
     
-    if not end_time:
+    if not end_date:
         # set end_time to 30 days from start_time if not provided
-        end_time = start_time + timedelta(days=30)
+        end_date = start_date + timedelta(days=30)
     
     # Ensure end_time is not in the future
-    if end_time > dj_timezone.now():
-        end_time = None
+    if end_date > dj_timezone.now():
+        end_date = None
     
-    if end_time:
-        query = query.filter(time__lte=end_time)
+    if end_date:
+        query = query.filter(time__lte=end_date)
     
     # Fetch the records ordered by time
     records = query.order_by('-time')
