@@ -18,11 +18,13 @@ export const fetchStationLinkLatestData = (axios, stationLinkId) => {
     return axios.get(`/data/latest/${stationLinkId}/`)
 }
 
-export const fetchStationLinkTimeseriesData = (axios, stationLinkId, page = 1, category) => {
+export const fetchStationLinkTimeseriesData = (axios, stationLinkId, page = 1, category, startDate, endDate) => {
     return axios.get(`/data/timeseries/${stationLinkId}/`, {
         params: {
             page: page,
-            category: category
+            category: category,
+            start_date: startDate,
+            end_date: endDate
         }
     })
 }

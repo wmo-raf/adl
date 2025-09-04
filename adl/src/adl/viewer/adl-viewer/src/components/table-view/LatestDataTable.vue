@@ -24,7 +24,6 @@ const filteredData = computed(() => {
   const data = stationLatestDataStore.selectedStationLatestData;
 
   if (selectedCategoryId) {
-    console.log(data, selectedCategoryId)
     return data.filter((item) => item.parameterCategory === selectedCategoryId);
   }
 

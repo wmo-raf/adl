@@ -12,8 +12,6 @@ Array.prototype.replace_data = function (position, replacements) {
 function generateSelectInput(selectId, options, position) {
     const select = document.getElementById(selectId);
 
-    console.log(options)
-
     while (select.firstChild) {
         select.removeChild(select.lastChild)
     }

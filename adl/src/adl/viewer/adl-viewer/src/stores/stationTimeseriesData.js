@@ -8,16 +8,18 @@ export const useStationTimeseriesDataStore = defineStore('stationTimeseriesData'
     state: () => ({
         selectedStationTimeseriesData: null,
         selectedDataCategoryId: null,
+        startDate: null,
+        endDate: null,
         loading: false,
         error: null
     }),
     actions: {
-        async loadStationLinkTimeseriesData(stationId, {page = 1, category} = {}) {
+        async loadStationLinkTimeseriesData(stationId, {page = 1, category, startDate, endDate} = {}) {
             const dataParameterStore = useDataParameterStore()
             this.loading = true
             this.error = null
             try {
-                const response = await fetchStationLinkTimeseriesData(this.axios, stationId, page, category)
+                const response = await fetchStationLinkTimeseriesData(this.axios, stationId, page, category, startDate, endDate)
                 const {data} = response
 
                 const uniqueParameters = new Set()
@@ -54,5 +56,11 @@ export const useStationTimeseriesDataStore = defineStore('stationTimeseriesData'
         selectDataCategoryId(dataCategoryId) {
             this.selectedDataCategoryId = dataCategoryId
         },
+        setStartDate(date) {
+            this.startDate = date
+        },
+        setEndDate(date) {
+            this.endDate = date
+        }
     },
 })
