@@ -1,12 +1,13 @@
 from collections import defaultdict
-from datetime import datetime
+
+from dateutil import parser as dateparser
 
 
 # Helper function to validate ISO datetime format
 def validate_iso_datetime(param_name, value):
     if value:
         try:
-            return datetime.fromisoformat(value)
+            return dateparser.isoparse(value)
         except ValueError:
             raise ValueError(f"Invalid {param_name} date format. Use ISO format (e.g., 2023-10-01T00:00:00Z).")
     return None
