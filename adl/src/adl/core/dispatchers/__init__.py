@@ -24,13 +24,25 @@ def get_station_channel_records(dispatch_channel, station_id):
     records_model = ObservationRecord
     time_field = "time"
     
+    filters = {
+        "connection_id": connection.id,
+        "station_id": station_id
+    }
+    
     if send_agg_data and aggregation_period:
         if aggregation_period == "hourly":
             records_model = HourlyObsAgg
             time_field = "bucket"
+            # Skip if record time is today and record hour is equal to the current hour
+            # we want to aggregate data from full hours. If record hour is equal to the current hour,
+            # we do not know if we have all the data for the current hour
+            current_top_of_hour = dj_timezone.localtime().replace(minute=0, second=0, microsecond=0)
+            filters.update({
+                f"{time_field}__lt": current_top_of_hour
+            })
     
     # get all records for the channel connection and station
-    obs_records = records_model.objects.filter(connection_id=connection.id, station_id=station_id)
+    obs_records = records_model.objects.filter(**filters)
     
     if start_date:
         obs_records = obs_records.filter(**{f"{time_field}__gte": start_date})
