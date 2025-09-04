@@ -12,7 +12,6 @@ import TabPanel from 'primevue/tabpanel';
 import NetworkConnectionSelect from "@/components/table-view/NetworkConnectionSelect.vue";
 import StationSelect from "@/components/table-view/StationSelect.vue";
 import StationLinkDetail from "@/components/table-view/StationLinkDetail.vue";
-import LatestDataTable from "@/components/table-view/LatestDataTable.vue";
 import TimeSeriesDataTable from "@/components/table-view/TimeSeriesDataTable.vue";
 
 import {useDataParameterStore} from "@/stores/dataParameter.js";
@@ -54,32 +53,22 @@ onMounted(() => {
 
 
   <section class="data-section" v-if="stationStore.selectedStationId">
-    <Tabs value="latest-values" lazy>
+    <Tabs value="historical" lazy>
       <TabList>
-        <Tab value="latest-values">
-          <div class="tab-title">
-            <i class="pi pi-clock"/>
-            <span>Latest Values</span>
-          </div>
-        </Tab>
         <Tab value="historical">
           <div class="tab-title">
-            <i class="pi pi-chart-line"/>
-            <span>Historical Data</span>
+            <i class="pi pi-database"/>
+            <span>Station Data</span>
           </div>
         </Tab>
       </TabList>
       <TabPanels>
-        <TabPanel value="latest-values">
-          <LatestDataTable/>
-        </TabPanel>
         <TabPanel value="historical">
           <TimeSeriesDataTable/>
         </TabPanel>
       </TabPanels>
     </Tabs>
   </section>
-
 
 </template>
 
