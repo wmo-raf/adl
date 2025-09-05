@@ -288,7 +288,7 @@ def get_station_link_timeseries_data(request, station_link_id):
     
     # Ensure end_time is not in the future
     if end_date > dj_timezone.now():
-        end_date = None
+        end_date = dj_timezone.now()
     
     if end_date:
         query = query.filter(time__lte=end_date)

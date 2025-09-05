@@ -47,6 +47,9 @@ const onParameterChange = () => {
 }
 
 const onStartDateChange = (date) => {
+  // set start of day
+  date.setHours(0, 0, 0, 0)
+
   chartStore.updateChartConfig(props.chartId, {
     startDate: date,
   })
@@ -55,6 +58,9 @@ const onStartDateChange = (date) => {
 }
 
 const onEndDateChange = (date) => {
+  // set end of day
+  date.setHours(23, 59, 59, 999);
+
   chartStore.updateChartConfig(props.chartId, {
     endDate: date,
   })

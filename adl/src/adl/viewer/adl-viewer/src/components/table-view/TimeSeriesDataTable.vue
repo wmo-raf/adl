@@ -74,6 +74,10 @@ watch(
     ({stationId, categoryId, startDate, endDate}) => {
       if (stationId && categoryId && startDate && endDate) {
         stationTimeseriesDataStore.clearData()
+
+        startDate.setHours(0, 0, 0, 0)
+        endDate.setHours(23, 59, 59, 999);
+
         stationTimeseriesDataStore.loadStationLinkTimeseriesData(stationId, {
           page: 1,
           category: categoryId,

@@ -56,10 +56,13 @@ export const useStationChartStore = defineStore('stationChart', {
                 const {earliest_time, latest_time} = data_dates
 
                 const end = new Date(latest_time)
+                // Set to end of day
+                end.setHours(23, 59, 59, 999);
 
                 // Default to 1 day before the end date, or the earliest date if less than 1 day of data
                 let start = new Date(end)
                 start.setDate(end.getDate() - 1)
+                start.setHours(0, 0, 0, 0);
 
                 if (start < new Date(earliest_time)) {
                     start = new Date(earliest_time)
