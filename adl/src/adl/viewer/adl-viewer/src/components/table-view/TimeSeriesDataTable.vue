@@ -21,12 +21,20 @@ const exportCSV = () => {
 const onPage = (event) => {
   const page = event.page + 1 // PrimeVue is 0-based, backend is 1-based
   const category = stationTimeseriesDataStore.selectedDataCategoryId
+  const startDate = stationTimeseriesDataStore.startDate
+  const endDate = stationTimeseriesDataStore.endDate
+
+  const options = {
+    page,
+    startDate,
+    endDate,
+  }
 
   if (category) {
-    stationTimeseriesDataStore.loadStationLinkTimeseriesData(stationStore.selectedStationId, {page, category})
-  } else {
-    stationTimeseriesDataStore.loadStationLinkTimeseriesData(stationStore.selectedStationId, {page})
+    options.category = category
   }
+
+  stationTimeseriesDataStore.loadStationLinkTimeseriesData(stationStore.selectedStationId, {...options})
 }
 
 const dataCategories = computed(() => {
