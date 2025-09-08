@@ -278,6 +278,16 @@ class Plugin(Instance):
         # get the station data
         station_records = self.get_station_data(station_link, start_date=start_date, end_date=end_date)
         
+        if not station_records:
+            logger.info("[%s] No new data for %s.", self.label, station_link)
+            return 0
+        
+        earliest = min(station_records, key=lambda r: r["observation_time"])["observation_time"]
+        latest = max(station_records, key=lambda r: r["observation_time"])["observation_time"]
+        
+        logger.info("[%s] Fetched %d records for %s from %s to %s.",
+                    self.label, len(station_records), station_link, earliest, latest)
+        
         # save the records to the database
         saved_obs_records = self.save_records(station_link, station_records)
         
