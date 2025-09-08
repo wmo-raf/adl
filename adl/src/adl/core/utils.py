@@ -287,7 +287,8 @@ def make_registrable_connection_viewset(model_cls, icon="snippet", station_link_
             station_link_url = obj.get_station_link_url()
         else:
             station_link_viewset = station_link_viewset_registry.get(station_link_model._meta.model_name)
-            station_link_url = reverse(station_link_viewset.get_url_name("index"))
+            conn_filter_param = f"network_connection={obj.id}"
+            station_link_url = reverse(station_link_viewset.get_url_name("index")) + f"?{conn_filter_param}"
         
         return station_link_url
     
