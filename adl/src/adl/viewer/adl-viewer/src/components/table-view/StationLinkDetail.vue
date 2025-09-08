@@ -35,6 +35,18 @@ watch(() => stationStore.selectedStationId, (newStationId) => {
       </div>
     </div>
     <div class="station-meta-item">
+      <div class="meta-label"> Station Link ID:</div>
+      <div class="meta-value">
+        {{ stationStore.selectedStationLinkDetail.id }}
+      </div>
+    </div>
+    <div class="station-meta-item">
+      <div class="meta-label"> Connection ID:</div>
+      <div class="meta-value">
+        {{ stationStore.selectedStationLinkDetail.network_connection }}
+      </div>
+    </div>
+    <div class="station-meta-item">
       <div class="meta-label"> Network:</div>
       <div class="meta-value">
         {{ stationStore.selectedStationLinkDetail.station.network.name }}
