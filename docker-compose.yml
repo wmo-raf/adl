@@ -37,7 +37,7 @@ services:
   adl_db:
     container_name: adl_db
     image: timescale/timescaledb-ha:pg15
-    restart: unless-stopped
+    restart: always
     command: postgres -c max_connections=${POSTGRES_MAX_CONNECTIONS:-300} -c shared_buffers=${POSTGRES_SHARED_BUFFERS:-2GB}
     environment:
       - POSTGRES_USER=${ADL_DB_USER:-?}
@@ -51,7 +51,7 @@ services:
   adl_redis:
     image: redis:alpine
     container_name: adl_redis
-    restart: unless-stopped
+    restart: always
 
   adl:
     container_name: adl
@@ -63,7 +63,7 @@ services:
         - UID=${UID}
         - GID=${GID}
         - DOCKER_COMPOSE_WAIT_PLATFORM_SUFFIX=${DOCKER_COMPOSE_WAIT_PLATFORM_SUFFIX:-}
-    restart: unless-stopped
+    restart: always
     command: gunicorn wsgi
     environment:
       <<: *backend-variables
@@ -89,7 +89,7 @@ services:
         - UID=${UID}
         - GID=${GID}
         - DOCKER_COMPOSE_WAIT_PLATFORM_SUFFIX=${DOCKER_COMPOSE_WAIT_PLATFORM_SUFFIX:-}
-    restart: unless-stopped
+    restart: always
     init: true
     command: celery-worker
     environment:
@@ -113,7 +113,7 @@ services:
         - UID=${UID}
         - GID=${GID}
         - DOCKER_COMPOSE_WAIT_PLATFORM_SUFFIX=${DOCKER_COMPOSE_WAIT_PLATFORM_SUFFIX:-}
-    restart: unless-stopped
+    restart: always
     init: true
     command: celery-beat
     environment:
@@ -130,7 +130,7 @@ services:
   adl_web_proxy:
     container_name: adl_web_proxy
     image: nginx:1.20.2-alpine
-    restart: unless-stopped
+    restart: always
     volumes:
       - ${ADL_STATIC_VOLUME:-./docker/static}:/wagtail_static
       - ${ADL_MEDIA_VOLUME:-./docker/media}:/wagtail_media
