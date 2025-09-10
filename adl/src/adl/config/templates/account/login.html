@@ -1,0 +1,84 @@
+{% extends "wagtailadmin/admin_base.html" %}
+{% load i18n static allauth account wagtailadmin_tags adl_tags %}
+
+{% block titletag %}{% trans "Sign in" %}{% endblock %}
+{% block bodyclass %}login{% endblock %}
+
+{# You can also override branding via the same blocks Wagtail uses #}
+{% block furniture %}
+    <main class="content-wrapper" id="main">
+        <h1>
+            {% if 'WAGTAIL_SITE_NAME'|django_settings %}
+                Sign in to {{ 'WAGTAIL_SITE_NAME'|django_settings }}
+            {% else %}
+                Sign in
+            {% endif %}
+        </h1>
+
+        <div class="messages" role="status">
+            {# Always show messages div so it can be appended to by JS #}
+            {% if messages or form.errors %}
+                <ul>
+                    {% if form.errors %}
+                        {% for error in form.non_field_errors %}
+                            <li class="error">{{ error }}</li>
+                        {% endfor %}
+                        {# Field errors #}
+                        {% for field in form %}
+                            {% for error in field.errors %}
+                                <li class="error">{{ error }}</li>
+                            {% endfor %}
+                        {% endfor %}
+                    {% endif %}
+                    {% for message in messages %}
+                        <li class="{{ message.tags }}">{{ message }}</li>
+                    {% endfor %}
+                </ul>
+            {% endif %}
+        </div>
+
+        {% block above_login %}{% endblock %}
+
+        {% url 'account_login' as login_url %}
+
+        <form class="login-form" action="{{ login_url }}" method="post" autocomplete="off" novalidate>
+            {% csrf_token %}
+            {{ redirect_field }}
+            <div class="fields">
+                {% formattedfield form.login %}
+                {% formattedfield form.password %}
+                <label class="w-flex w-items-center remember-me">
+                    <input type="checkbox" name="remember">
+                    Remember me
+                </label>
+
+                {# Extra fields (e.g., 2FA, passkeys) if present #}
+                {% if form.extra_fields %}
+                    {% for field_name, field in form.extra_fields %}
+                        {% formattedfield field %}
+                    {% endfor %}
+                {% endif %}
+            </div>
+            <footer class="form-actions">
+                <button
+                        type="submit"
+                        class="button button-longrunning"
+                        data-controller="w-progress"
+                        data-action="w-progress#activate"
+                        data-w-progress-active-value="{% trans 'Signing in…' %}"
+                >
+                    {% icon name="spinner" %}
+                    <em data-w-progress-target="label">{% trans "Sign in" %}</em>
+                </button>
+            </footer>
+        </form>
+        {% block branding_logo %}
+            <div class="login-logo">
+                <figure style="max-height: 70px;max-width: 70px;">
+                    <img src="{% static 'images/adl_black.png' %}" alt="ADL Logo"
+                         style="height: 100%;width: 100%;object-fit: contain"/>
+                </figure>
+            </div>
+        {% endblock %}
+    </main>
+{% endblock %}

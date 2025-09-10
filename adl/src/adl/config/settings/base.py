@@ -47,6 +47,8 @@ INSTALLED_APPS = [
     "django_celery_results",
     'polymorphic',
     "wagtailiconchooser",
+    "allauth",
+    "allauth.account",
     
     "wagtail.contrib.forms",
     "wagtail.contrib.redirects",
@@ -67,8 +69,6 @@ INSTALLED_APPS = [
     "wagtailfontawesomesvg",
     "wagtailgeowidget",
     "wagtail_modeladmin",
-    "allauth",
-    "allauth.account",
     "oauth2_provider",
     "rest_framework",
     "rest_framework_api_key",
@@ -371,6 +371,8 @@ VUE_FRONTEND_USE_DEV_SERVER = DEBUG
 VUE_FRONTEND_DEV_SERVER_URL = 'http://localhost:5173'
 VUE_FRONTEND_DEV_SERVER_PATH = '/static/vue/src'
 VUE_FRONTEND_STATIC_PATH = 'vue'
+
+ACCOUNT_ALLOW_REGISTRATION = False
 
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': (
