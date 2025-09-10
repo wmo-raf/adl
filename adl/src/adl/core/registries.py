@@ -173,7 +173,7 @@ class Plugin(Instance):
             logger.warning("[%s] No variable mappings for station %s.", self.label, station.name)
             return None
         
-        observation_records: List[ObservationRecord] = []
+        observation_records = {}
         tz = station_link.timezone
         
         for record in (station_records or []):
@@ -245,23 +245,31 @@ class Plugin(Instance):
                     )
                     continue
                 
-                observation_records.append(
-                    ObservationRecord(
-                        station=station,
-                        parameter=adl_param,
-                        time=obs_time,
-                        value=value,
-                        connection=station_link.network_connection,
-                        is_daily=station_link.network_connection.is_daily_data
+                # Use a dict key to deduplicate in case of multiple records for same time/param
+                key = f"{obs_time.isoformat()}_{adl_param.id}"
+                if key in observation_records:
+                    logger.info(
+                        "[%s] Duplicate observation for station %s, time %s, parameter %s. Overwriting previous value.",
+                        self.label, station.name, obs_time, adl_param.name
                     )
+                
+                observation_records[key] = ObservationRecord(
+                    station=station,
+                    parameter=adl_param,
+                    time=obs_time,
+                    value=value,
+                    connection=station_link.network_connection,
+                    is_daily=station_link.network_connection.is_daily_data
                 )
         
-        if not observation_records:
+        observation_records_list = list(observation_records.values())
+        
+        if not observation_records_list:
             logger.warning("[%s] No valid observation records for station %s.", self.label, station.name)
             return None
         
         return ObservationRecord.objects.bulk_create(
-            observation_records,
+            observation_records_list,
             update_conflicts=True,
             update_fields=["value", "is_daily"],
             unique_fields=["time", "station", "connection", "parameter"],
