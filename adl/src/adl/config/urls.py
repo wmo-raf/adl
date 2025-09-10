@@ -20,12 +20,16 @@ urlpatterns = [
     path("debug/django-admin/", admin.site.urls),
     path("documents/", include(wagtaildocs_urls)),
     
+    path("o/", include("oauth2_provider.urls", namespace="oauth2_provider")),
+    
     # API schema
     path("api/schema/", SpectacularAPIView.as_view(), name="schema"),
     # Swagger UI
     path("api/docs/swagger/", SpectacularSwaggerView.as_view(url_name="schema"), name="swagger-ui"),
     # ReDoc UI
     path("api/docs/redoc/", SpectacularRedocView.as_view(url_name="schema"), name="redoc"),
+    
+    path("accounts/", include("allauth.urls")),
     
     path("", include(wagtailadmin_urls)),
 ]

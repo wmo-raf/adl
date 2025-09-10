@@ -33,3 +33,5 @@ django-deep-translator==1.4.0
 drf-spectacular
 more-itertools==10.7.0
 pydantic==2.11.7
+django-oauth-toolkit
+django-allauth
