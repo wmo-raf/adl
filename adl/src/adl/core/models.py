@@ -414,6 +414,9 @@ class StationLink(PolymorphicModel, ClusterableModel):
     class Meta:
         unique_together = ['network_connection', 'station']
     
+    def __str__(self):
+        return f"{self.station.name} - {self.network_connection.name}"
+    
     @property
     def timezone(self):
         """
