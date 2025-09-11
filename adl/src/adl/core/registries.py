@@ -61,6 +61,17 @@ class Plugin(Instance):
         
         return []
     
+    def after_save_records(self, station_link, station_records, saved_records: List[Any]) -> None:
+        """
+        Hook called after saving ObservationRecord instances for a station.
+        Can be overridden by child plugins if needed.
+        
+        :param station_link: The StationLink instance for which records were saved.
+        :param station_records: List of raw station records that were processed.
+        :param saved_records: List of saved ObservationRecord instances.
+        """
+        pass
+    
     # ---------- Data collection (abstract) ----------
     def get_station_data(
             self,
@@ -155,7 +166,7 @@ class Plugin(Instance):
         return start_date, end_date
     
     # ---------- Persistence ----------
-    def save_records(self, station_link, station_records: Iterable[Dict[str, Any]]):
+    def save_records(self, station_link, station_records: Iterable[Dict[str, Any]]) -> Optional[List[Any]]:
         """
         Normalize and upsert observations into ObservationRecord.
         
@@ -163,6 +174,7 @@ class Plugin(Instance):
          - "observation_time": datetime
          - zero or more source parameter fields named exactly as in variable_mappings'
            `source_parameter_name`.
+        Returns list of saved ObservationRecord instances, or None if none saved.
        """
         
         from adl.core.models import ObservationRecord
@@ -268,13 +280,24 @@ class Plugin(Instance):
             logger.warning("[%s] No valid observation records for station %s.", self.label, station.name)
             return None
         
-        return ObservationRecord.objects.bulk_create(
+        saved_records = ObservationRecord.objects.bulk_create(
             observation_records_list,
             update_conflicts=True,
             update_fields=["value", "is_daily"],
             unique_fields=["time", "station", "connection", "parameter"],
             batch_size=1000
         )
+        
+        if saved_records and self.after_save_records:
+            try:
+                self.after_save_records(station_link, station_records, saved_records)
+            except Exception as e:
+                logger.error(
+                    "[%s] after_save_records hook failed for station %s: %s",
+                    self.label, station.name, e
+                )
+        
+        return saved_records
     
     # ---------- Orchestration ----------
     def process_station(self, station_link) -> int:

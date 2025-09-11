@@ -42,12 +42,13 @@ DEBUG = env('DEBUG', False)
 
 # Application definition
 INSTALLED_APPS = [
-    
     "django_countries",
     "django_celery_beat",
     "django_celery_results",
     'polymorphic',
     "wagtailiconchooser",
+    "allauth",
+    "allauth.account",
     
     "wagtail.contrib.forms",
     "wagtail.contrib.redirects",
@@ -68,6 +69,7 @@ INSTALLED_APPS = [
     "wagtailfontawesomesvg",
     "wagtailgeowidget",
     "wagtail_modeladmin",
+    "oauth2_provider",
     "rest_framework",
     "rest_framework_api_key",
     "rest_framework_simplejwt",
@@ -90,6 +92,12 @@ INSTALLED_APPS = [
     "adl.api",
     "adl.monitoring",
     "adl.viewer",
+]
+
+AUTHENTICATION_BACKENDS = [
+    'django.contrib.auth.backends.ModelBackend',
+    
+    'allauth.account.auth_backends.AuthenticationBackend',
 ]
 
 ADL_PLUGIN_DIRS = env.list("ADL_PLUGIN_DIRS", default=["/adl/plugins", ])
@@ -116,6 +124,9 @@ MIDDLEWARE = [
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
     "django.middleware.security.SecurityMiddleware",
     "wagtail.contrib.redirects.middleware.RedirectMiddleware",
+    
+    "allauth.account.middleware.AccountMiddleware",
+    "oauth2_provider.middleware.OAuth2TokenMiddleware",
 ]
 
 ROOT_URLCONF = "adl.config.urls"
@@ -361,12 +372,28 @@ VUE_FRONTEND_DEV_SERVER_URL = 'http://localhost:5173'
 VUE_FRONTEND_DEV_SERVER_PATH = '/static/vue/src'
 VUE_FRONTEND_STATIC_PATH = 'vue'
 
+ACCOUNT_ALLOW_REGISTRATION = False
+
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': (
         'rest_framework.authentication.SessionAuthentication',
+        "oauth2_provider.contrib.rest_framework.OAuth2Authentication",
         'rest_framework_simplejwt.authentication.JWTAuthentication',
     ),
     'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
+    "DEFAULT_PERMISSION_CLASSES": [
+        "rest_framework.permissions.IsAuthenticated",
+    ],
+}
+
+OAUTH2_PROVIDER = {
+    "OAUTH2_BACKEND_CLASS": "oauth2_provider.oauth2_backends.OAuthLibCore",
+    "PKCE_REQUIRED": True,  # force PKCE for public (mobile) clients
+    "ACCESS_TOKEN_EXPIRE_SECONDS": 600,  # 10 minutes
+    "REFRESH_TOKEN_EXPIRE_SECONDS": 30 * 24 * 3600,
+    "ROTATE_REFRESH_TOKEN": True,  # rotate & revoke on reuse
+    "SCOPES": {"adl.read": "Read", "adl.write": "Write"},
+    "ALLOWED_REDIRECT_URI_SCHEMES": ["http", "https", "com.climtech.adlcollector"],
 }
 
 SPECTACULAR_SETTINGS = {
