@@ -2,14 +2,12 @@
 
 # use osgeo gdal ubuntu small 3.7 image.
 # pre-installed with GDAL 3.7.0 and Python 3.10.6
-FROM ghcr.io/osgeo/gdal:ubuntu-small-3.7.0 as base
+FROM erickotenyo/adl-base:latest as base
 
 ARG UID
 ENV UID=${UID:-9999}
 ARG GID
 ENV GID=${GID:-9999}
-
-SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
 # Create or rename group to adl_docker_group with desired GID
 RUN if getent group $GID > /dev/null; then \
@@ -22,30 +20,6 @@ RUN if getent group $GID > /dev/null; then \
     fi
 RUN useradd --shell /bin/bash -u $UID -g $GID -o -c "" -m adl_docker_user -l || exit 0
 ENV DOCKER_USER=adl_docker_user
-
-ENV POSTGRES_VERSION=15
-
-# install dependencies
-RUN apt-get update && apt-get install -y \
-    build-essential \
-    lsb-release \
-    ca-certificates \
-    curl \
-    libgeos-dev \
-    libpq-dev \
-    python3-pip --fix-missing \
-    gosu \
-    git \
-    && echo "deb http://apt.postgresql.org/pub/repos/apt/ $(lsb_release -cs)-pgdg main" > /etc/apt/sources.list.d/pgdg.list \
-    && curl --silent https://www.postgresql.org/media/keys/ACCC4CF8.asc | apt-key add - \
-    && apt-get update \
-    && apt-get install -y postgresql-client-$POSTGRES_VERSION \
-    python3-dev \
-    python3-venv \
-    && apt-get autoclean \
-    && apt-get clean \
-    && apt-get autoremove \
-    && rm -rf /var/lib/apt/lists/*
 
 # install docker-compose wait
 ARG DOCKER_COMPOSE_WAIT_VERSION
