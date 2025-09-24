@@ -1,4 +1,5 @@
 from datetime import timezone
+from enum import IntFlag, auto
 
 from django.contrib.gis.db import models
 from django.core.exceptions import ValidationError, ObjectDoesNotExist
@@ -7,6 +8,7 @@ from django.utils import timezone as dj_timezone
 from django.utils.translation import gettext_lazy as _
 from django_countries.fields import CountryField
 from django_countries.widgets import CountrySelectWidget
+from enum_intflagfield import IntFlagField
 from modelcluster.fields import ParentalKey
 from modelcluster.models import ClusterableModel
 from polymorphic.models import PolymorphicModel
@@ -16,11 +18,13 @@ from wagtail.admin.panels import FieldPanel, TabbedInterface, ObjectList, Inline
 from wagtail.admin.panels import MultiFieldPanel
 from wagtail.contrib.settings.models import BaseSiteSetting
 from wagtail.contrib.settings.registry import register_setting
+from wagtail.fields import StreamField
 from wagtail.models import Orderable
 from wagtail.snippets.models import register_snippet
 from wagtailgeowidget.panels import LeafletPanel
 
 from adl.core.registries import plugin_registry
+from .blocks import QCChecksStreamBlock
 from .dispatchers import get_dispatch_channel_data
 from .dispatchers.wis2box import upload_to_wis2box
 from .units import units, validate_unit, TEMPERATURE_UNITS
@@ -211,7 +215,7 @@ class Unit(models.Model):
     get_registry_unit.short_description = _("Unit Registry")
 
 
-class DataParameter(models.Model):
+class DataParameter(ClusterableModel):
     CATEGORY_CHOICES = [
         ("meteorological", _("Meteorological")),
         ("environmental", _("Environmental")),
@@ -230,6 +234,14 @@ class DataParameter(models.Model):
                                            choices=get_custom_unit_context_entries,
                                            verbose_name=_("Custom Unit Conversion Context"),
                                            help_text=_("Context of the unit"))
+    modified_at = models.DateTimeField(auto_now=True)
+    qc_checks = StreamField(
+        QCChecksStreamBlock(),
+        null=True,
+        blank=True,
+        verbose_name=_("Quality Control Checks"),
+        help_text=_("Configure automatic data quality validation rules for this parameter.")
+    )
     
     panels = [
         FieldPanel("name"),
@@ -237,6 +249,7 @@ class DataParameter(models.Model):
         FieldPanel("description"),
         FieldPanel("category"),
         FieldPanel("custom_unit_context"),
+        FieldPanel("qc_checks"),
     ]
     
     class Meta:
@@ -306,7 +319,6 @@ class AdlSettings(ClusterableModel, BaseSiteSetting):
     
     panels = [
         FieldPanel("country", widget=CountrySelectWidget()),
-        FieldPanel("daily_aggregation_time"),
     ]
     
     class Meta:
@@ -449,20 +461,39 @@ class StationLink(PolymorphicModel, ClusterableModel):
         """
         Fetches latest data for the station link using the network connection's plugin.
         """
-        # get plugin
-        plugin = self.network_connection.get_plugin()
         
         # get latest date
-        start_date, end_date = plugin.get_dates_for_station(self, latest=True)
+        start_date, end_date = self.plugin.get_dates_for_station(self, latest=True)
         
         # get data records, using the latest dates
-        data_records = plugin.get_station_data(self, start_date=start_date, end_date=end_date)
+        data_records = self.plugin.get_station_data(self, start_date=start_date, end_date=end_date)
         
         return {
             "start_date": start_date,
             "end_date": end_date,
             "data_records": data_records
         }
+    
+    @property
+    def plugin(self):
+        return self.network_connection.get_plugin()
+
+
+class QCStatus(models.IntegerChoices):
+    PASS = 0, "Pass"
+    SUSPECT = 1, "Suspect"
+    FAIL = 2, "Fail"
+    MISSING = 3, "Missing"
+    ESTIMATED = 4, "Estimated"
+    CORRECTED = 5, "Corrected"
+    NOT_EVALUATED = 6, "Not evaluated"
+
+
+class QCBits(IntFlag):
+    RANGE = auto()
+    STEP = auto()
+    PERSISTENCE = auto()
+    SPIKE = auto()
 
 
 @register_snippet
@@ -476,6 +507,12 @@ class ObservationRecord(TimescaleModel, ClusterableModel):
     parameter = models.ForeignKey(DataParameter, on_delete=models.CASCADE, verbose_name=_("Parameter"))
     value = models.FloatField(verbose_name=_("Value"))
     is_daily = models.BooleanField(default=False, verbose_name=_("Is Daily"))
+    qc_status = models.PositiveSmallIntegerField(
+        choices=QCStatus.choices,
+        default=QCStatus.NOT_EVALUATED
+    )
+    qc_bits = IntFlagField(choices=QCBits, default=0)
+    qc_version = models.PositiveIntegerField(default=1)
     
     class Meta:
         verbose_name = _("Observation Record")
@@ -494,6 +531,23 @@ class ObservationRecord(TimescaleModel, ClusterableModel):
     
     def __str__(self):
         return f"{self.station.name} - {self.utc_time} - {self.parameter.name} - {self.value}"
+
+
+@register_snippet
+class QCMessage(models.Model):
+    obs_record_id = models.BigIntegerField(db_index=True)
+    obs_time = models.DateTimeField(db_index=True)
+    station_id = models.IntegerField()
+    parameter_id = models.IntegerField()
+    check_type = models.PositiveIntegerField(choices=[(b.value, b.name) for b in QCBits])
+    message = models.CharField(max_length=255)
+    created_at = models.DateTimeField(auto_now_add=True)
+    
+    class Meta:
+        indexes = [
+            models.Index(fields=['obs_record_id']),
+            models.Index(fields=['obs_time', 'station_id']),
+        ]
 
 
 @register_snippet
@@ -682,3 +736,9 @@ class StationChannelDispatchStatus(models.Model):
     
     def __str__(self):
         return f"{self.station.name} - {self.channel.name} - {self.last_sent_obs_time}"
+
+
+def status_from_bits(bits: QCBits) -> int:
+    if bits == QCBits(0):
+        return QCStatus.PASS
+    return QCStatus.SUSPECT

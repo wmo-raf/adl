@@ -9,6 +9,7 @@ from .registry import Registry, Instance
 from .validators import StationRecordModel
 
 logger = logging.getLogger(__name__)
+from datetime import timezone as py_tz
 
 
 class Plugin(Instance):
@@ -33,6 +34,9 @@ class Plugin(Instance):
         super().__init__()
         if not self.label:
             raise ImproperlyConfigured("The label of a plugin must be set.")
+        
+        # Initialize QC pipeline cache
+        self._qc_pipelines_cache = {}
     
     # ---------- URL exposure ----------
     def get_urls(self) -> list:
@@ -61,7 +65,7 @@ class Plugin(Instance):
         
         return []
     
-    def after_save_records(self, station_link, station_records, saved_records: List[Any]) -> None:
+    def after_save_records(self, station_link, station_records, saved_records, qc_fail_results=None) -> None:
         """
         Hook called after saving ObservationRecord instances for a station.
         Can be overridden by child plugins if needed.
@@ -69,8 +73,34 @@ class Plugin(Instance):
         :param station_link: The StationLink instance for which records were saved.
         :param station_records: List of raw station records that were processed.
         :param saved_records: List of saved ObservationRecord instances.
+        :param qc_fail_results:
         """
         pass
+    
+    def _create_qc_messages(self, saved_records, qc_results) -> None:
+        from adl.core.models import QCMessage
+        
+        qc_result_objects = []
+        for record in saved_records:
+            utc_obs_time_key = dj_timezone.localtime(record.time, timezone=py_tz.utc).isoformat()
+            record_qc_results = qc_results.get(utc_obs_time_key)
+            if record_qc_results:
+                for fail_result in record_qc_results:
+                    check_type = fail_result.get("check_type")
+                    reason = fail_result.get("reason")
+                    qc_message_data = {
+                        "obs_record_id": record.id,
+                        "obs_time": record.time,
+                        "station_id": record.station_id,
+                        "parameter_id": record.parameter_id,
+                        "check_type": check_type,
+                        "message": reason,
+                    }
+                    fail_result_obj = QCMessage(**qc_message_data)
+                    qc_result_objects.append(fail_result_obj)
+        
+        if qc_result_objects:
+            QCMessage.objects.bulk_create(qc_result_objects, batch_size=1000)
     
     # ---------- Data collection (abstract) ----------
     def get_station_data(
@@ -166,18 +196,13 @@ class Plugin(Instance):
         return start_date, end_date
     
     # ---------- Persistence ----------
+    
     def save_records(self, station_link, station_records: Iterable[Dict[str, Any]]) -> Optional[List[Any]]:
         """
-        Normalize and upsert observations into ObservationRecord.
-        
-        Expects each record to contain:
-         - "observation_time": datetime
-         - zero or more source parameter fields named exactly as in variable_mappings'
-           `source_parameter_name`.
-        Returns list of saved ObservationRecord instances, or None if none saved.
-       """
-        
+        Normalize and upsert observations into ObservationRecord using QCPipeline system.
+        """
         from adl.core.models import ObservationRecord
+        
         station = station_link.station
         variable_mappings = list(station_link.get_variable_mappings() or [])
         
@@ -187,6 +212,11 @@ class Plugin(Instance):
         
         observation_records = {}
         tz = station_link.timezone
+        qc_results = {}
+        
+        # Initialize QC pipeline cache
+        if not hasattr(self, '_qc_pipelines_cache'):
+            self._qc_pipelines_cache = {}
         
         for record in (station_records or []):
             try:
@@ -257,21 +287,39 @@ class Plugin(Instance):
                     )
                     continue
                 
+                utc_obs_key = dj_timezone.localtime(obs_time, timezone=py_tz.utc).isoformat()
+                
+                # QC PIPELINE SYSTEM: QC checks using pipeline
+                qc_bits, qc_status, qc_messages = self.perform_qc_checks_with_pipeline(
+                    value=value,
+                    adl_param=adl_param,
+                    station_link=station_link,
+                    obs_time=obs_time
+                )
+                
+                # Store QC results for message creation
+                if qc_messages:
+                    if utc_obs_key not in qc_results:
+                        qc_results[utc_obs_key] = []
+                    qc_results[utc_obs_key].extend(qc_messages)
+                
                 # Use a dict key to deduplicate in case of multiple records for same time/param
-                key = f"{obs_time.isoformat()}_{adl_param.id}"
-                if key in observation_records:
+                if utc_obs_key in observation_records:
                     logger.info(
                         "[%s] Duplicate observation for station %s, time %s, parameter %s. Overwriting previous value.",
                         self.label, station.name, obs_time, adl_param.name
                     )
                 
-                observation_records[key] = ObservationRecord(
+                observation_records[utc_obs_key] = ObservationRecord(
                     station=station,
                     parameter=adl_param,
                     time=obs_time,
                     value=value,
                     connection=station_link.network_connection,
-                    is_daily=station_link.network_connection.is_daily_data
+                    is_daily=station_link.network_connection.is_daily_data,
+                    qc_status=qc_status,
+                    qc_bits=int(qc_bits),
+                    qc_version=1,
                 )
         
         observation_records_list = list(observation_records.values())
@@ -283,12 +331,15 @@ class Plugin(Instance):
         saved_records = ObservationRecord.objects.bulk_create(
             observation_records_list,
             update_conflicts=True,
-            update_fields=["value", "is_daily"],
+            update_fields=["value", "is_daily", "qc_status", "qc_bits", "qc_version"],
             unique_fields=["time", "station", "connection", "parameter"],
             batch_size=1000
         )
         
-        if saved_records and self.after_save_records:
+        if saved_records:
+            if qc_results:
+                self._create_qc_messages(saved_records, qc_results)
+            
             try:
                 self.after_save_records(station_link, station_records, saved_records)
             except Exception as e:
@@ -344,6 +395,151 @@ class Plugin(Instance):
             results[station_link.station.id] = self.process_station(station_link)
         
         return results
+    
+    def perform_qc_checks_with_pipeline(self, value: float, adl_param, station_link, obs_time: datetime):
+        """Perform QC checks using the QCPipeline system with optimized history fetching"""
+        from adl.core.models import QCBits, QCStatus
+        from adl.core.qc.config import QCConfigConverter, build_qc_context
+        from adl.core.qc.validators import QCFlag
+        
+        if not adl_param.qc_checks:
+            return QCBits(0), QCStatus.NOT_EVALUATED, []
+        
+        # Create cache key with parameter version
+        cache_key = f"{adl_param.id}_{adl_param.modified_at.timestamp()}"
+        
+        # Get or create pipeline
+        if cache_key not in self._qc_pipelines_cache:
+            old_keys = [k for k in self._qc_pipelines_cache.keys() if k.startswith(f"{adl_param.id}_")]
+            for old_key in old_keys:
+                del self._qc_pipelines_cache[old_key]
+            
+            try:
+                pipeline = QCConfigConverter.streamfield_to_pipeline(adl_param.qc_checks)
+                self._qc_pipelines_cache[cache_key] = pipeline
+                logger.debug(f"Created QC pipeline for parameter {adl_param.name}")
+            except Exception as e:
+                logger.error(f"Error creating QC pipeline for parameter {adl_param.name}: {e}")
+                return QCBits(0), QCStatus.NOT_EVALUATED, []
+        
+        pipeline = self._qc_pipelines_cache[cache_key]
+        
+        # Determine history requirements from pipeline
+        history_requirements = self._get_pipeline_history_requirements(pipeline)
+        
+        # Only fetch history if needed
+        recent_history = []
+        if history_requirements['needed']:
+            recent_history = self._get_recent_history_for_qc(
+                station_link,
+                adl_param,
+                obs_time,
+                limit=history_requirements['limit']
+            )
+            
+            # Check if we have minimum required history
+            if len(recent_history) < history_requirements['min_required']:
+                logger.debug(f"Insufficient history for {adl_param.name}: "
+                             f"got {len(recent_history)}, need {history_requirements['min_required']}")
+        
+        # Build QC context
+        mock_observation_record = {'observation_time': obs_time}
+        context = build_qc_context(mock_observation_record, adl_param, station_link, recent_history)
+        
+        # Run the QC pipeline
+        try:
+            pipeline_result = pipeline.run_single(value, context)
+        except Exception as e:
+            logger.error(f"Error running QC pipeline for {adl_param.name}: {e}")
+            return QCBits(0), QCStatus.NOT_EVALUATED, []
+        
+        qc_bits = QCBits(0)
+        qc_messages = []
+        
+        # Map QC flags to QC bits
+        flag_to_bit_mapping = {
+            QCFlag.RANGE: QCBits.RANGE,
+            QCFlag.STEP: QCBits.STEP,
+            QCFlag.PERSISTENCE: QCBits.PERSISTENCE,
+            QCFlag.SPIKE: QCBits.SPIKE,
+        }
+        
+        # Set QC bits based on failed flags
+        for flag in pipeline_result.flags:
+            if flag in flag_to_bit_mapping:
+                qc_bits |= flag_to_bit_mapping[flag]
+        
+        # Determine QC status
+        if pipeline_result.passed:
+            qc_status = QCStatus.PASS
+        else:
+            qc_status = QCStatus.SUSPECT
+            
+            # Create QC messages for failed checks
+            failed_validators = pipeline_result.get_failed_validators()
+            summary_message = pipeline_result.get_summary_message()
+            
+            for flag in pipeline_result.flags:
+                if flag in flag_to_bit_mapping:
+                    qc_messages.append({
+                        "check_type": flag_to_bit_mapping[flag],
+                        "reason": summary_message,
+                    })
+        
+        logger.debug(f"QC result for {adl_param.name}: passed={pipeline_result.passed}, "
+                     f"confidence={pipeline_result.confidence:.2f}, flags={[f.name for f in pipeline_result.flags]}")
+        
+        return qc_bits, qc_status, qc_messages
+    
+    def _get_pipeline_history_requirements(self, pipeline) -> Dict[str, Any]:
+        """Determine history requirements for entire pipeline"""
+        if not pipeline.validators:
+            return {'needed': False, 'limit': 0, 'min_required': 0}
+        
+        needs_history = False
+        max_limit = 0
+        max_min_required = 0
+        
+        for validator_config in pipeline.validators:
+            if not validator_config.enabled:
+                continue
+            
+            requirements = validator_config.validator.get_history_requirements()
+            
+            if requirements['needed']:
+                needs_history = True
+                max_limit = max(max_limit, requirements['limit'])
+                max_min_required = max(max_min_required, requirements['min_required'])
+        
+        return {
+            'needed': needs_history,
+            'limit': max_limit,
+            'min_required': max_min_required
+        }
+    
+    def _get_recent_history_for_qc(self, station_link, adl_param, current_time: datetime, limit: int = 20):
+        """Get recent observation history for QC context"""
+        from adl.core.models import ObservationRecord
+        
+        try:
+            recent_obs = ObservationRecord.objects.filter(
+                station=station_link.station,
+                connection=station_link.network_connection,
+                parameter=adl_param,
+                time__lt=current_time
+            ).order_by('-time')[:limit]
+            
+            return [
+                {
+                    'value': obs.value,
+                    'time': obs.time,
+                    'qc_status': obs.qc_status
+                }
+                for obs in recent_obs
+            ]
+        except Exception as e:
+            logger.warning(f"Error getting recent history for QC: {e}")
+            return []
 
 
 class PluginRegistry(Registry):

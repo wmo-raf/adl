@@ -153,6 +153,8 @@ def register_icons(icons):
         'wagtailfontawesomesvg/solid/hourglass-half.svg',
         'wagtailfontawesomesvg/solid/paper-plane.svg',
         'wagtailfontawesomesvg/solid/puzzle-piece.svg',
+        'wagtailfontawesomesvg/solid/up-down.svg',
+        'wagtailfontawesomesvg/solid/plus-minus.svg',
     ]
 
 
