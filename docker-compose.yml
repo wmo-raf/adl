@@ -58,7 +58,7 @@ services:
     image: adl
     build:
       context: .
-      dockerfile: Dockerfile
+      dockerfile: ${ADL_DOCKERFILE:-Dockerfile}
       args:
         - UID=${UID}
         - GID=${GID}
@@ -84,7 +84,7 @@ services:
     image: adl
     build:
       context: .
-      dockerfile: Dockerfile
+      dockerfile: ${ADL_DOCKERFILE:-Dockerfile}
       args:
         - UID=${UID}
         - GID=${GID}
@@ -108,7 +108,7 @@ services:
     image: adl
     build:
       context: .
-      dockerfile: Dockerfile
+      dockerfile: ${ADL_DOCKERFILE:-Dockerfile}
       args:
         - UID=${UID}
         - GID=${GID}
