@@ -35,3 +35,4 @@ more-itertools==10.7.0
 pydantic==2.11.7
 django-oauth-toolkit
 django-allauth
+django-enum.IntFlag-field==0.0.4
