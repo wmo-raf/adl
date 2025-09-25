@@ -1,22 +1,20 @@
 import logging
 import time
 
-from django.utils import timezone as dj_timezone
-
 from adl.core.utils import get_object_or_none
 from adl.monitoring.models import StationLinkActivityLog
+from django.utils import timezone as dj_timezone
 
 logger = logging.getLogger(__name__)
 
 
-def get_station_channel_records(dispatch_channel, station_id):
+def get_station_channel_records(dispatch_channel, station_id, connection_id):
     from adl.core.models import (
         StationChannelDispatchStatus,
         ObservationRecord,
         HourlyObsAgg
     )
     
-    connection = dispatch_channel.network_connection
     send_agg_data = dispatch_channel.send_aggregated_data
     aggregation_period = dispatch_channel.aggregation_period
     start_date = dispatch_channel.start_date
@@ -25,7 +23,7 @@ def get_station_channel_records(dispatch_channel, station_id):
     time_field = "time"
     
     filters = {
-        "connection_id": connection.id,
+        "connection_id": connection_id,
         "station_id": station_id
     }
     
@@ -78,7 +76,12 @@ def get_dispatch_channel_data(dispatch_channel):
     
     parameter_mappings_ids = parameter_mappings.values_list("parameter_id", flat=True)
     
-    connection = dispatch_channel.network_connection
+    network_connections = dispatch_channel.network_connections.all()
+    
+    if not network_connections.exists():
+        logger.error(f"[DISPATCH] No network connections found for dispatch channel {channel_name}. Skipping...")
+        return {}
+    
     send_agg_data = dispatch_channel.send_aggregated_data
     
     parameter_channel_mapping = {
@@ -96,27 +99,36 @@ def get_dispatch_channel_data(dispatch_channel):
     # group by station and by time
     by_station_by_time = {}
     
-    logger.debug(f"[DISPATCH] Found {len(station_links)} station links for connection '{connection.name}'")
+    connection_names = ", ".join([conn.name for conn in network_connections])
+    logger.debug(f"[DISPATCH] Found {len(station_links)} station links for connections '{connection_names}'")
     
     for station_link in station_links:
-        # get all records for the station and channel
-        station_channel_records = get_station_channel_records(dispatch_channel, station_link.station_id)
-        
-        logger.debug(f"[DISPATCH] Found {station_channel_records.count()} records for "
-                     f"station {station_link.station_id} and channel '{channel_name}'")
-        
-        for obs in station_channel_records:
-            if obs.station_id not in by_station_by_time:
-                by_station_by_time[obs.station_id] = {}
-            
-            if obs.time not in by_station_by_time[obs.station_id]:
-                by_station_by_time[obs.station_id][obs.time] = {
-                    "wigos_id": station_link.station.wigos_id,
-                    "observations": []
-                }
-            
-            if obs.parameter_id in parameter_mappings_ids:
-                by_station_by_time[obs.station_id][obs.time]["observations"].append(obs)
+        # CGet records for each network connection that this station belongs to
+        for connection in network_connections:
+            # Only process if this station_link belongs to this connection
+            if station_link.network_connection_id == connection.id:
+                # get all records for the station and channel from this specific connection
+                station_channel_records = get_station_channel_records(
+                    dispatch_channel,
+                    station_link.station_id,
+                    connection.id
+                )
+                
+                logger.debug(f"[DISPATCH] Found {station_channel_records.count()} records for "
+                             f"station {station_link.station_id}, connection '{connection.name}', and channel '{channel_name}'")
+                
+                for obs in station_channel_records:
+                    if obs.station_id not in by_station_by_time:
+                        by_station_by_time[obs.station_id] = {}
+                    
+                    if obs.time not in by_station_by_time[obs.station_id]:
+                        by_station_by_time[obs.station_id][obs.time] = {
+                            "wigos_id": station_link.station.wigos_id,
+                            "observations": []
+                        }
+                    
+                    if obs.parameter_id in parameter_mappings_ids:
+                        by_station_by_time[obs.station_id][obs.time]["observations"].append(obs)
     
     station_records_by_id = {}
     for station_id, time_obs_map in by_station_by_time.items():
@@ -157,22 +169,37 @@ def get_dispatch_channel_data(dispatch_channel):
 def run_dispatch_channel(dispatcher_id):
     from adl.core.models import DispatchChannel, StationChannelDispatchStatus, StationLink
     dispatch_channel = get_object_or_none(DispatchChannel, id=dispatcher_id)
-    network_connection = dispatch_channel.network_connection
     
     if not dispatch_channel:
         logger.error(f"[DISPATCH] Dispatch channel with id {dispatcher_id} does not exist. Skipping...")
         return
     
+    network_connections = dispatch_channel.network_connections.all()
+    
+    if not network_connections.exists():
+        logger.error(
+            f"[DISPATCH] No network connections found for dispatch channel {dispatch_channel.name}. Skipping...")
+        return {"num_of_sent_records": 0}
+    
     data_records_by_station = get_dispatch_channel_data(dispatch_channel)
+    
+    if not data_records_by_station:
+        return {"num_of_sent_records": 0}
     
     total_num_of_records = 0
     
     for station_id, data_records in data_records_by_station.items():
-        station_link = get_object_or_none(StationLink, station_id=station_id, network_connection=network_connection)
+        # Find station_link across all network connections
+        station_link = None
+        for network_connection in network_connections:
+            station_link = get_object_or_none(StationLink, station_id=station_id, network_connection=network_connection)
+            if station_link:
+                break
         
         if not station_link:
-            logger.error(f"[DISPATCH] Station link for station {station_id} and connection "
-                         f"{network_connection.name} does not exist. Skipping...")
+            connection_names = ", ".join([conn.name for conn in network_connections])
+            logger.error(f"[DISPATCH] Station link for station {station_id} not found in any of the connections "
+                         f"[{connection_names}]. Skipping...")
             continue
         
         start = time.monotonic()
@@ -215,7 +242,6 @@ def run_dispatch_channel(dispatcher_id):
                 log.obs_start_time = previous_sent_obs_time
             if last_sent_obs_time:
                 log.obs_end_time = last_sent_obs_time
-        
         
         except Exception as e:
             log.success = False

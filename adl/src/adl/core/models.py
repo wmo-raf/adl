@@ -1,6 +1,7 @@
 from datetime import timezone
 from enum import IntFlag, auto
 
+from django import forms
 from django.contrib.gis.db import models
 from django.core.exceptions import ValidationError, ObjectDoesNotExist
 from django.core.validators import MaxValueValidator, MinValueValidator
@@ -589,9 +590,9 @@ class DispatchChannel(PolymorphicModel, ClusterableModel):
     )
     
     name = models.CharField(max_length=255, verbose_name=_("Name"))
-    network_connection = models.ForeignKey(NetworkConnection, on_delete=models.CASCADE,
-                                           verbose_name=_("Network Connection"),
-                                           related_name="dispatch_channels")
+    network_connections = models.ManyToManyField(NetworkConnection,
+                                                 verbose_name=_("Network Connections"),
+                                                 related_name="dispatch_channels")
     enabled = models.BooleanField(default=True, verbose_name=_("Enabled"))
     data_check_interval = models.PositiveIntegerField(default=10, verbose_name=_("Data Check Interval in Minutes"),
                                                       help_text=_(
@@ -613,7 +614,7 @@ class DispatchChannel(PolymorphicModel, ClusterableModel):
     base_panels = [
         MultiFieldPanel([
             FieldPanel("name"),
-            FieldPanel("network_connection"),
+            FieldPanel("network_connections", widget=forms.CheckboxSelectMultiple),
             FieldPanel("enabled"),
             FieldPanel("data_check_interval"),
             FieldPanel("send_aggregated_data"),
@@ -628,7 +629,7 @@ class DispatchChannel(PolymorphicModel, ClusterableModel):
     ]
     
     def __str__(self):
-        return f"{self.name} - {self.network_connection.name}"
+        return f"{self.name}"
     
     def send_station_data(self, station_link, station_data_records):
         raise NotImplementedError("Method send_station_data must be implemented in the subclass")
@@ -639,7 +640,13 @@ class DispatchChannel(PolymorphicModel, ClusterableModel):
     
     def stations_allowed_to_send(self):
         disabled_station_link_ids = self.station_links.filter(disabled=True).values_list('station_link_id', flat=True)
-        allowed_station_links = self.network_connection.station_links.exclude(id__in=disabled_station_link_ids)
+        
+        # Get station links from all connected networks
+        allowed_station_links = StationLink.objects.none()  # Start with empty queryset
+        for network_conn in self.network_connections.all():
+            network_station_links = network_conn.station_links.exclude(id__in=disabled_station_link_ids)
+            allowed_station_links = allowed_station_links.union(network_station_links)
+        
         return allowed_station_links
 
 

@@ -335,7 +335,8 @@
                         <div class="w-tabs__wrapper">
                             <div role="tablist" class="w-tabs__list">
                                 {% for channel in network_connection.dispatch_channels.all %}
-                                    <a id="tab-label-{{ channel.id }}" href="#tab-channel-{{ channel.id }}"
+                                    <a id="tab-label-{{ channel.id }}"
+                                       href="#tab-channel-{{ network_connection.id }}-{{ channel.id }}"
                                        class="w-tabs__tab "
                                        role="tab"
                                        aria-selected="false"
@@ -347,10 +348,10 @@
                         </div>
                         <div class="tab-content">
                             {% for channel in network_connection.dispatch_channels.all %}
-                                <section id="tab-channel-{{ channel.id }}"
+                                <section id="tab-channel-{{ network_connection.id }}-{{ channel.id }}"
                                          class="w-tabs__panel"
                                          role="tabpanel"
-                                         aria-labelledby="tab-label-{{ channel.id }}"
+                                         aria-labelledby="tab-label-{{ network_connection.id }}-{{ channel.id }}"
                                          hidden
                                 >
                                     <div class="channel-activity-panel">
@@ -407,12 +408,12 @@
                                                     Open
                                                 </a>
                                             </div>
-                                            <div id="p-channel-timeline-{{ channel.id }}"></div>
+                                            <div id="p-channel-timeline-{{ network_connection.id }}-{{ channel.id }}"></div>
                                         </div>
                                         <script>
                                             new StationsActivityTimeline({
                                                 connectionId: "{{ network_connection.id }}",
-                                                timelineElId: "p-channel-timeline-{{ channel.id }}",
+                                                timelineElId: "p-channel-timeline-{{ network_connection.id }}-{{ channel.id }}",
                                                 apiBaseUrl: "{{ data_api_base_url }}",
                                                 defaultDirection: "push",
                                                 channelId: "{{ channel.id }}",

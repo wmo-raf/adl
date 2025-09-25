@@ -23,7 +23,8 @@ from .models import (
     DispatchChannel,
     DataParameter,
     Unit,
-    DispatchChannelStationLink
+    DispatchChannelStationLink,
+    StationLink
 )
 from .plugin_utils import get_plugin_metadata
 from .registries import dispatch_channel_viewset_registry, connection_viewset_registry, plugin_registry
@@ -640,11 +641,20 @@ def dispatch_channel_station_links(request, channel_id):
         {"url": "", "label": channel.name},
     ]
     
-    # Base queryset (order by Station name for stable paging)
+    # Get station links from ALL network connections
+    network_connections = channel.network_connections.all()
+    
+    if not network_connections.exists():
+        messages.error(request, _("No network connections found for this dispatch channel."))
+        return redirect("dispatch_channels_list")
+    
+    # Build queryset from all network connections
+    network_connection_ids = list(network_connections.values_list('id', flat=True))
     all_station_links_qs = (
-        channel.network_connection.station_links
-        .select_related("station")
-        .order_by("station__name")
+        StationLink.objects
+        .filter(network_connection_id__in=network_connection_ids)
+        .select_related("station", "network_connection")
+        .order_by("network_connection__name", "station__name")
     )
     
     # Current exclusions across ALL pages (rows exist for excluded)
@@ -656,9 +666,22 @@ def dispatch_channel_station_links(request, channel_id):
     
     # Pagination
     page_number = request.GET.get("p", 1)
-    paginator = WagtailPaginator(all_station_links_qs, 25)  # 25 rows per page (adjust as you like)
+    paginator = WagtailPaginator(all_station_links_qs, 50)  # 50 rows per page
     page_obj = paginator.get_page(page_number)
     page_ids = set(page_obj.object_list.values_list("id", flat=True))
+    
+    #  Group station links by network connection
+    stations_by_connection = {}
+    for station_link in page_obj.object_list:
+        connection_name = station_link.network_connection.name
+        connection_id = station_link.network_connection.id
+        
+        if connection_id not in stations_by_connection:
+            stations_by_connection[connection_id] = {
+                'connection': station_link.network_connection,
+                'station_links': []
+            }
+        stations_by_connection[connection_id]['station_links'].append(station_link)
     
     if request.method == "POST":
         form = StationIncludeForm(
@@ -709,5 +732,7 @@ def dispatch_channel_station_links(request, channel_id):
         "paginator": paginator,
         "elided_page_range": elided_page_range,
         "page_title": _("Dispatch Channel Station Links"),
+        "stations_by_connection": stations_by_connection,
+        "network_connections": network_connections,
     }
     return render(request, "core/dispatch_channel_station_links.html", context=context)

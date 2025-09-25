@@ -1,4 +1,3 @@
-{# templates/core/dispatch_channel_station_links.html #}
 {% extends "wagtailadmin/generic/base.html" %}
 {% load i18n wagtailadmin_tags static wagtailiconchooser_tags %}
 
@@ -7,15 +6,13 @@
         <h1 class="w-text-h2">{% trans "Dispatch Channel Station Links" %} — {{ channel.name }}</h1>
 
         <div class="help-block help-info">
-
             <svg class="icon icon-help icon" aria-hidden="true">
                 <use href="#icon-help"></use>
             </svg>
             <p style="color:#666;">
-                {% trans "Checked = included (sent). Unchecked = excluded" %}
+                {% trans "Checked = included (sent). Unchecked = excluded. Stations are grouped by network connection." %}
             </p>
         </div>
-
 
         <form method="post" action="?page={{ page_obj.number }}">
             {% csrf_token %}
@@ -36,31 +33,61 @@
                 </thead>
                 <tbody>
 
-                {# We render manually to keep the table layout, but still post into the Form's included_ids field #}
-                {% for sl in page_obj.object_list %}
+                {#  Group stations by network connection #}
+                {% if stations_by_connection %}
+                    {% for connection_id, connection_data in stations_by_connection.items %}
+                        {# Connection header row #}
+                        <tr class="connection-header" style="background-color: #f8f9fa;">
+                            <td>
+                                <input type="checkbox"
+                                       class="connection-toggle"
+                                       data-connection="{{ connection_id }}"
+                                       aria-label="{% trans 'Toggle all stations in this connection' %}"
+                                >
+                            </td>
+                            <td style="font-weight: bold; padding: 12px 8px;display: flex;align-items: center;">
+                                <svg class="icon icon-folder-open-inverse icon net-group-icon" aria-hidden="true"
+                                     style="margin-right: 8px;">
+                                    <use href="#icon-folder-open-inverse"></use>
+                                </svg>
+                                {{ connection_data.connection.name }}
+                                <span style="color: #666; font-weight: normal; margin-left: 8px;">
+                                    ({{ connection_data.station_links|length }} station{{ connection_data.station_links|length|pluralize }})
+                                </span>
+                            </td>
+                        </tr>
+
+                        {# Station links for this connection #}
+                        {% for sl in connection_data.station_links %}
+                            <tr class="station-row" data-connection="{{ connection_id }}">
+                                <td style="padding-left: 20px;">
+                                    <input type="checkbox"
+                                           name="included_ids"
+                                           value="{{ sl.id }}"
+                                           class="sl-checkbox"
+                                           data-connection="{{ connection_id }}"
+                                           id="sl-{{ sl.id }}"
+                                           {% if sl.id|stringformat:"s" in form.initial.included_ids %}checked{% endif %}
+                                    >
+                                </td>
+                                <td class="title" style="padding-left: 20px;">
+                                    <label for="sl-{{ sl.id }}">
+                                        {{ sl.station.name }}
+                                        {% if sl.station.wigos_id %}
+                                            <span style="color: #666; font-size: 12px;">({{ sl.station.wigos_id }})</span>
+                                        {% endif %}
+                                    </label>
+                                </td>
+                            </tr>
+                        {% endfor %}
+                    {% endfor %}
+                {% else %}
                     <tr>
-                        <td>
-                            <input type="checkbox"
-                                   name="included_ids"
-                                   value="{{ sl.id }}"
-                                   class="sl-checkbox"
-                                   id="sl-{{ sl.id }}"
-                                   {% if sl.id|stringformat:"s" in form.initial.included_ids %}checked{% endif %}
-                            >
-                        </td>
-                        <td class="title">
-                            <label for="sl-{{ sl.id }}">
-                                {{ sl.station.name }}
-                            </label>
+                        <td colspan="2" style="text-align:center;color:#666;">
+                            {% trans "No station links found for any network connections." %}
                         </td>
                     </tr>
-                    {% empty %}
-                    <tr>
-                        <td colspan="3" style="text-align:center;color:#666;">
-                            {% trans "No station links found for this connection." %}
-                        </td>
-                    </tr>
-                {% endfor %}
+                {% endif %}
                 </tbody>
             </table>
 
@@ -80,7 +107,6 @@
             <div style="margin-top:40px;">
                 {% include "wagtailadmin/shared/pagination_nav.html" with items=page_obj %}
             </div>
-
         {% endif %}
     </div>
 
@@ -88,6 +114,7 @@
         (function () {
             const boxes = Array.from(document.querySelectorAll('.sl-checkbox'));
             const toggleAll = document.getElementById('toggle-all');
+            const connectionToggles = Array.from(document.querySelectorAll('.connection-toggle'));
 
             function refreshHeaderState() {
                 const total = boxes.length;
@@ -102,21 +129,86 @@
                 toggleAll.indeterminate = (checked > 0 && checked < total);
             }
 
-            // Initialize header checkbox state on load
-            refreshHeaderState();
+            function refreshConnectionState(connectionId) {
+                const connectionBoxes = boxes.filter(b => b.dataset.connection === connectionId);
+                const connectionToggle = connectionToggles.find(t => t.dataset.connection === connectionId);
 
-            // Clicking the header checkbox toggles all on this page
+                if (!connectionToggle || connectionBoxes.length === 0) return;
+
+                const checkedCount = connectionBoxes.filter(b => b.checked).length;
+                const totalCount = connectionBoxes.length;
+
+                connectionToggle.checked = (checkedCount === totalCount);
+                connectionToggle.indeterminate = (checkedCount > 0 && checkedCount < totalCount);
+            }
+
+            function refreshAllConnectionStates() {
+                connectionToggles.forEach(toggle => {
+                    refreshConnectionState(toggle.dataset.connection);
+                });
+            }
+
+            // Initialize all checkbox states on load
+            refreshHeaderState();
+            refreshAllConnectionStates();
+
+            //  Master toggle all checkbox
             if (toggleAll) {
                 toggleAll.addEventListener('change', () => {
                     boxes.forEach(b => {
                         b.checked = toggleAll.checked;
                     });
                     refreshHeaderState();
+                    refreshAllConnectionStates();
                 });
             }
 
-            // When any row checkbox changes, update the header’s indeterminate/checked state
-            boxes.forEach(b => b.addEventListener('change', refreshHeaderState));
+            // Connection-level toggle checkboxes
+            connectionToggles.forEach(connectionToggle => {
+                connectionToggle.addEventListener('change', () => {
+                    const connectionId = connectionToggle.dataset.connection;
+                    const connectionBoxes = boxes.filter(b => b.dataset.connection === connectionId);
+
+                    connectionBoxes.forEach(b => {
+                        b.checked = connectionToggle.checked;
+                    });
+
+                    refreshHeaderState();
+                    refreshConnectionState(connectionId);
+                });
+            });
+
+            // Individual station checkboxes
+            boxes.forEach(b => {
+                b.addEventListener('change', () => {
+                    refreshHeaderState();
+                    refreshConnectionState(b.dataset.connection);
+                });
+            });
         })();
     </script>
+
+    <style>
+        .connection-header td {
+            border-top: 2px solid #ddd !important;
+        }
+
+        .station-row td {
+            border-left: 3px solid #e8f4f8;
+        }
+
+        .connection-toggle {
+            background-color: #007cba;
+        }
+
+        .connection-toggle:checked {
+            background-color: #005177;
+        }
+
+        .net-group-icon {
+            height: 20px;
+            width: 20px;
+        }
+
+    </style>
 {% endblock %}

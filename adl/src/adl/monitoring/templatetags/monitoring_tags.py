@@ -11,7 +11,7 @@ register = template.Library()
 
 @register.simple_tag
 def render_network_dispatch_channel_status(network_connection_id):
-    dispatch_channels = DispatchChannel.objects.filter(network_connection_id=network_connection_id)
+    dispatch_channels = DispatchChannel.objects.filter(network_connections=network_connection_id)
     
     network_dispatch_channels_task_results = []
     
