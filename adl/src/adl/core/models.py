@@ -689,9 +689,10 @@ class DispatchChannelParameterMapping(Orderable):
     def clean(self):
         super(DispatchChannelParameterMapping, self).clean()
         
-        channel = self.dispatch_channel
-        if hasattr(channel, "clean_parameter_mapping"):
-            channel.clean_parameter_mapping(self)
+        if self.dispatch_channel_id:
+            channel = self.dispatch_channel
+            if hasattr(channel, "clean_parameter_mapping"):
+                channel.clean_parameter_mapping(self)
 
 
 class DispatchChannelStationLink(Orderable):
