@@ -292,6 +292,7 @@ class Plugin(Instance):
                 # QC PIPELINE SYSTEM: QC checks using pipeline
                 qc_bits, qc_status, qc_messages = self.perform_qc_checks_with_pipeline(
                     value=value,
+                    variable_mapping=mapping,
                     adl_param=adl_param,
                     station_link=station_link,
                     obs_time=obs_time
@@ -396,13 +397,19 @@ class Plugin(Instance):
         
         return results
     
-    def perform_qc_checks_with_pipeline(self, value: float, adl_param, station_link, obs_time: datetime):
+    def perform_qc_checks_with_pipeline(self, value: float, variable_mapping, adl_param, station_link,
+                                        obs_time: datetime):
         """Perform QC checks using the QCPipeline system with optimized history fetching"""
         from adl.core.models import QCBits, QCStatus
         from adl.core.qc.config import QCConfigConverter, build_qc_context
         from adl.core.qc.validators import QCFlag
         
-        if not adl_param.qc_checks:
+        if hasattr(variable_mapping, "qc_checks"):
+            qc_checks = variable_mapping.qc_checks
+        else:
+            qc_checks = adl_param.qc_checks
+        
+        if qc_checks:
             return QCBits(0), QCStatus.NOT_EVALUATED, []
         
         # Create cache key with parameter version
@@ -415,7 +422,7 @@ class Plugin(Instance):
                 del self._qc_pipelines_cache[old_key]
             
             try:
-                pipeline = QCConfigConverter.streamfield_to_pipeline(adl_param.qc_checks)
+                pipeline = QCConfigConverter.streamfield_to_pipeline(qc_checks)
                 self._qc_pipelines_cache[cache_key] = pipeline
                 logger.debug(f"Created QC pipeline for parameter {adl_param.name}")
             except Exception as e:
