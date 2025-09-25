@@ -713,6 +713,9 @@ def dispatch_channel_station_links(request, channel_id):
                         station_link_id__in=to_delete
                     ).delete()
             
+            if hasattr(channel, "after_update_station_links"):
+                channel.after_update_station_links()
+            
             messages.success(request, _("Saved changes for this page."))
             # Stay on the same page after save
             return redirect(f"{reverse('dispatch_channel_station_links', args=[channel.id])}?page={page_obj.number}")

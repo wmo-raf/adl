@@ -1,6 +1,7 @@
 from datetime import timezone
 from enum import IntFlag, auto
 
+from adl.core.registries import plugin_registry
 from django import forms
 from django.contrib.gis.db import models
 from django.core.exceptions import ValidationError, ObjectDoesNotExist
@@ -24,7 +25,6 @@ from wagtail.models import Orderable
 from wagtail.snippets.models import register_snippet
 from wagtailgeowidget.panels import LeafletPanel
 
-from adl.core.registries import plugin_registry
 from .blocks import QCChecksStreamBlock
 from .dispatchers import get_dispatch_channel_data
 from .dispatchers.wis2box import upload_to_wis2box
@@ -631,6 +631,13 @@ class DispatchChannel(PolymorphicModel, ClusterableModel):
     def __str__(self):
         return f"{self.name}"
     
+    def get_parameter_mappings(self):
+        return self.parameter_mappings.all()
+    
+    def get_parameter_mapping_values(self):
+        channel_param_values = [pm.channel_parameter for pm in self.get_parameter_mappings()]
+        return channel_param_values
+    
     def send_station_data(self, station_link, station_data_records):
         raise NotImplementedError("Method send_station_data must be implemented in the subclass")
     
@@ -648,6 +655,9 @@ class DispatchChannel(PolymorphicModel, ClusterableModel):
             allowed_station_links = allowed_station_links.union(network_station_links)
         
         return allowed_station_links
+    
+    def clean_parameter_mapping(self):
+        pass
 
 
 class DispatchChannelParameterMapping(Orderable):
@@ -675,6 +685,13 @@ class DispatchChannelParameterMapping(Orderable):
     
     def __str__(self):
         return f"{self.dispatch_channel.name} - {self.parameter.name}"
+    
+    def clean(self):
+        super(DispatchChannelParameterMapping, self).clean()
+        
+        channel = self.dispatch_channel
+        if hasattr(channel, "clean_parameter_mapping"):
+            channel.clean_parameter_mapping(self)
 
 
 class DispatchChannelStationLink(Orderable):

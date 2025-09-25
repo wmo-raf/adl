@@ -67,7 +67,7 @@ def get_dispatch_channel_data(dispatch_channel):
     channel_name = dispatch_channel.name
     logger.info(f"[DISPATCH] Getting dispatch data for channel '{channel_name}'")
     
-    parameter_mappings = dispatch_channel.parameter_mappings.all()
+    parameter_mappings = dispatch_channel.get_parameter_mappings()
     
     if not parameter_mappings:
         logger.error(
