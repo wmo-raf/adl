@@ -395,7 +395,8 @@
                                             {% endif %}
                                         </div>
                                         <div class="t-wrapper">
-                                            <div id="p-controls-{{ channel.id }}" class="t-controls-container">
+                                            <div id="p-controls-{{ network_connection.id }}-{{ channel.id }}"
+                                                 class="t-controls-container">
                                                 <a href="{% url 'dispatch_channel_monitoring' channel.id %}"
                                                    class="button button-small bicolor button--icon button-secondary"
                                                    target="_blank">
@@ -417,7 +418,7 @@
                                                 apiBaseUrl: "{{ data_api_base_url }}",
                                                 defaultDirection: "push",
                                                 channelId: "{{ channel.id }}",
-                                                controlsElId: "p-controls-{{ channel.id }}",
+                                                controlsElId: "p-controls-{{ network_connection.id }}-{{ channel.id }}",
                                             });
                                         </script>
                                     </div>
