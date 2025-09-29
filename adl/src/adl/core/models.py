@@ -656,7 +656,7 @@ class DispatchChannel(PolymorphicModel, ClusterableModel):
         
         return allowed_station_links
     
-    def clean_parameter_mapping(self):
+    def clean_parameter_mapping(self, *args, **kwargs):
         pass
 
 
