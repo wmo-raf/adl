@@ -384,11 +384,11 @@ class NetworkConnection(PolymorphicModel, ClusterableModel):
         plugin = plugin_registry.get(plugin_type)
         return plugin
     
-    def collect_data(self):
+    def collect_data(self, initial_start_date=None):
         plugin = self.get_plugin()
         if not plugin:
             raise ValueError(f"Plugin {self.plugin} not found in the registry.")
-        return plugin.run_process(self)
+        return plugin.run_process(self, initial_start_date=initial_start_date)
 
 
 class StationLink(PolymorphicModel, ClusterableModel):

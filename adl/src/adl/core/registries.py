@@ -353,8 +353,11 @@ class Plugin(Instance):
         return saved_records
     
     # ---------- Orchestration ----------
-    def process_station(self, station_link) -> int:
+    def process_station(self, station_link, initial_start_date=None) -> int:
         start_date, end_date = self.get_dates_for_station(station_link)
+        
+        if initial_start_date:
+            start_date = initial_start_date
         
         logger.info("[%s] Fetching %s from %s to %s.",
                     self.label, station_link, start_date, end_date)
@@ -379,7 +382,7 @@ class Plugin(Instance):
         
         return saved_obs_records_count
     
-    def run_process(self, network_connection) -> Dict[int, int]:
+    def run_process(self, network_connection, start_date=None) -> Dict[int, int]:
         
         station_links = network_connection.station_links.all()
         
@@ -394,7 +397,7 @@ class Plugin(Instance):
                 logger.info("[%s] Skipping disabled station link: %s", self.label, station_link)
                 continue
             
-            results[station_link.station.id] = self.process_station(station_link)
+            results[station_link.station.id] = self.process_station(station_link, initial_start_date=start_date)
         
         return results
     
