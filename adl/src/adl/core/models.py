@@ -477,6 +477,23 @@ class StationLink(PolymorphicModel, ClusterableModel):
             "data_records": data_records
         }
     
+    def fetch_and_save_latest_data(self):
+        """
+        Fetches latest data for the station link and saves it to the database.
+        """
+        fetch_result = self.fetch_latest_data()
+        data_records = fetch_result.get("data_records", [])
+        
+        saved_records = self.plugin.save_data_records(self, data_records)
+        
+        return {
+            "start_date": fetch_result.get("start_date"),
+            "end_date": fetch_result.get("end_date"),
+            "fetched_count": len(data_records),
+            "saved_count": len(saved_records),
+            "saved_records": saved_records,
+        }
+    
     @property
     def plugin(self):
         return self.network_connection.get_plugin()
