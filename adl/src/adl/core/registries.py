@@ -288,7 +288,7 @@ class Plugin(Instance):
                     continue
                 
                 time_key = dj_timezone.localtime(obs_time, timezone=py_tz.utc).isoformat()
-                utc_obs_key_with_parm = f"{time_key}_{adl_param.id}"
+                utc_obs_key_with_param = f"{time_key}_{adl_param.id}"
                 
                 # QC PIPELINE SYSTEM: QC checks using pipeline
                 qc_bits, qc_status, qc_messages = self.perform_qc_checks_with_pipeline(
@@ -301,18 +301,18 @@ class Plugin(Instance):
                 
                 # Store QC results for message creation
                 if qc_messages:
-                    if utc_obs_key_with_parm not in qc_results:
-                        qc_results[utc_obs_key_with_parm] = []
-                    qc_results[utc_obs_key_with_parm].extend(qc_messages)
+                    if utc_obs_key_with_param not in qc_results:
+                        qc_results[utc_obs_key_with_param] = []
+                    qc_results[utc_obs_key_with_param].extend(qc_messages)
                 
                 # Use a dict key to deduplicate in case of multiple records for same time/param
-                if utc_obs_key_with_parm in observation_records:
+                if utc_obs_key_with_param in observation_records:
                     logger.info(
                         "[%s] Duplicate observation for station %s, time %s, parameter %s. Overwriting previous value.",
                         self.label, station.name, obs_time, adl_param.name
                     )
                 
-                observation_records[utc_obs_key_with_parm] = ObservationRecord(
+                observation_records[utc_obs_key_with_param] = ObservationRecord(
                     station=station,
                     parameter=adl_param,
                     time=obs_time,
