@@ -117,6 +117,11 @@ def get_dispatch_channel_data(dispatch_channel):
                 logger.debug(f"[DISPATCH] Found {station_channel_records.count()} records for "
                              f"station {station_link.station_id}, connection '{connection.name}', and channel '{channel_name}'")
                 
+                if station_channel_records.exists():
+                    sample_params = set(station_channel_records.values_list('parameter_id', flat=True))
+                    logger.debug(f"[DISPATCH] Parameter IDs in records: {sample_params}")
+                    logger.debug(f"[DISPATCH] Expected parameter IDs: {set(parameter_mappings_ids)}")
+                
                 for obs in station_channel_records:
                     if obs.station_id not in by_station_by_time:
                         by_station_by_time[obs.station_id] = {}
