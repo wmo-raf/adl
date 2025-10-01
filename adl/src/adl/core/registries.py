@@ -382,7 +382,7 @@ class Plugin(Instance):
         
         return saved_obs_records_count
     
-    def run_process(self, network_connection, start_date=None) -> Dict[int, int]:
+    def run_process(self, network_connection, initial_start_date=None) -> Dict[int, int]:
         
         station_links = network_connection.station_links.all()
         
@@ -397,7 +397,7 @@ class Plugin(Instance):
                 logger.info("[%s] Skipping disabled station link: %s", self.label, station_link)
                 continue
             
-            results[station_link.station.id] = self.process_station(station_link, initial_start_date=start_date)
+            results[station_link.station.id] = self.process_station(station_link, initial_start_date=initial_start_date)
         
         return results
     
