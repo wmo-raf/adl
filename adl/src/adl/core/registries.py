@@ -353,11 +353,14 @@ class Plugin(Instance):
         return saved_records
     
     # ---------- Orchestration ----------
-    def process_station(self, station_link, initial_start_date=None) -> int:
+    def process_station(self, station_link, initial_start_date=None, initial_end_date=None) -> int:
         start_date, end_date = self.get_dates_for_station(station_link)
         
         if initial_start_date:
             start_date = initial_start_date
+        
+        if initial_end_date:
+            end_date = initial_end_date
         
         logger.info("[%s] Fetching %s from %s to %s.",
                     self.label, station_link, start_date, end_date)
