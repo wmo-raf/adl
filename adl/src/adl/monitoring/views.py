@@ -172,7 +172,7 @@ def get_station_activity_log(request, connection_id):
     # Stations always useful for groups
     if request.GET.get("include_stations", "true").lower() != "false":
         payload["stations"] = [
-            {"id": link.station.id, "name": link.station.name}
+            {"id": link.id, "name": link.station.name}
             for link in station_links
         ]
         
