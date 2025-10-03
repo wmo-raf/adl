@@ -1,0 +1,79 @@
+{% extends "wagtailadmin/generic/base.html" %}
+{% load i18n wagtailadmin_tags static wagtailiconchooser_tags %}
+
+
+{% block extra_css %}
+    <style>
+
+        .t-icon-small {
+            display: flex;
+            align-items: center;
+        }
+
+        .t-icon-small svg {
+            height: 16px;
+            width: 16px;
+        }
+    </style>
+{% endblock %}
+
+
+{% block main_content %}
+    <div style="margin-top: 40px">
+
+        <table class="listing">
+            <thead>
+            <tr>
+                <th>Time</th>
+                <th>Success</th>
+                <th>Duration</th>
+                <th>Message</th>
+                {% if direction == 'push' %}
+                    <th>Dispatch Channel</th>
+                {% endif %}
+            </tr>
+            </thead>
+            <tbody>
+
+            {% for activity in page_obj %}
+                <tr>
+                    <td>{{ activity.time }}</td>
+                    <td>
+                        {% if activity.success %}
+                            <span class="t-icon-small" style="color: var(--w-color-positive-100)">
+                                    {% icon name="circle-check" %}
+                                </span>
+                        {% else %}
+                            <span class="t-icon-small" style="color: var(--w-color-critical-200)">
+                                    {% icon name="error" %}
+                                </span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {{ activity.duration_seconds }} s
+                    </td>
+                    <td>
+                        {% if activity.message %}
+                            {{ activity.message }}
+                        {% endif %}
+                    </td>
+                    {% if direction == 'push' %}
+                        <td>
+                            {{ activity.dispatch_channel }}
+                        </td>
+                    {% endif %}
+                </tr>
+            {% endfor %}
+
+            </tbody>
+        </table>
+        {% if paginator.num_pages > 1 %}
+            <div style="margin-top:40px;">
+                {% include "wagtailadmin/shared/pagination_nav.html" with items=page_obj %}
+            </div>
+        {% endif %}
+
+    </div>
+
+
+{% endblock %}

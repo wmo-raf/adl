@@ -4,7 +4,8 @@ from .views import (
     get_network_conn_plugin_task_results_since,
     get_station_activity_log,
     network_connection_monitoring,
-    dispatch_channel_monitoring
+    dispatch_channel_monitoring,
+    station_link_monitoring
 )
 
 urlpatterns = [
@@ -21,4 +22,6 @@ urlpatterns = [
          name='network_connection_monitoring'),
     path('dispatch-channel/<int:channel_id>/', dispatch_channel_monitoring,
          name='dispatch_channel_monitoring'),
+    path('station-link/<int:link_id>/', station_link_monitoring,
+         name='station_link_monitoring')
 ]

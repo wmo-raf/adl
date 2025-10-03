@@ -1,7 +1,5 @@
 from datetime import timedelta
 
-from adl.core.models import NetworkConnection, DispatchChannel
-from adl.core.utils import get_object_or_none
 from django.shortcuts import render, get_object_or_404
 from django.urls import reverse_lazy
 from django.utils import timezone as dj_timezone
@@ -11,7 +9,10 @@ from django_celery_results.models import TaskResult
 from rest_framework import status
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
+from wagtail.admin.paginator import WagtailPaginator
 
+from adl.core.models import NetworkConnection, DispatchChannel, StationLink
+from adl.core.utils import get_object_or_none
 from .constants import NETWORK_PLUGIN_TASK_NAME
 from .models import StationLinkActivityLog
 from .serializers import TaskResultSerializer, StationLinkActivityLogSerializer
@@ -170,7 +171,10 @@ def get_station_activity_log(request, connection_id):
     
     # Stations always useful for groups
     if request.GET.get("include_stations", "true").lower() != "false":
-        payload["stations"] = [link.station.name for link in station_links]
+        payload["stations"] = [
+            {"id": link.station.id, "name": link.station.name}
+            for link in station_links
+        ]
         
         # If you want to send channels list once (only for this connection)
     if request.GET.get("include_channels", "false").lower() == "true":
@@ -218,3 +222,51 @@ def dispatch_channel_monitoring(request, channel_id):
     }
     
     return render(request, "monitoring/dispatch_channel_monitoring.html", context)
+
+
+def station_link_monitoring(request, link_id):
+    link = get_object_or_404(StationLink, id=link_id)
+    
+    direction = request.GET.get("direction")
+    if direction not in ("pull", "push"):
+        direction = "pull"
+    
+    if direction == "push":
+        dispatch_channel_id = request.GET.get("dispatch_channel_id")
+    else:
+        dispatch_channel_id = None
+    
+    today_start = dj_timezone.localtime().replace(hour=0, minute=0, second=0, microsecond=0)
+    
+    filters = {
+        "station_link": link,
+        "direction": direction,
+        "time__gte": today_start,
+    }
+    
+    if dispatch_channel_id:
+        filters["dispatch_channel_id"] = dispatch_channel_id
+    
+    activity = StationLinkActivityLog.objects.filter(**filters).select_related("dispatch_channel").order_by("-time")
+    
+    label = f"Monitoring for {link}"
+    
+    breadcrumbs_items = [
+        {"url": reverse_lazy("wagtailadmin_home"), "label": _("Home")},
+        {"url": "", "label": label},
+    ]
+    
+    page_number = request.GET.get("p", 1)
+    paginator = WagtailPaginator(activity, 20)  # 50 rows per page
+    page_obj = paginator.get_page(page_number)
+    elided_page_range = paginator.get_elided_page_range(page_number)
+    
+    context = {
+        "breadcrumbs_items": breadcrumbs_items,
+        "page_obj": page_obj,
+        "paginator": paginator,
+        "elided_page_range": elided_page_range,
+        "direction": direction,
+        "station_link": link,
+    }
+    return render(request, "monitoring/station_link_monitoring.html", context)

@@ -55,3 +55,8 @@ class StationLinkActivityLog(TimescaleModel):
     
     def __str__(self):
         return f"{self.station_link} - {self.direction} - {self.time}"
+    
+    def duration_seconds(self):
+        if self.duration_ms is not None:
+            return self.duration_ms / 1000.0
+        return None

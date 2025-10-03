@@ -21,7 +21,7 @@ class StationsActivityTimeline {
         this.items = new vis.DataSet([], {queue: true}); // queue for batch add
         this.timeline = null;
 
-        // Cache fetched “tiles” by day (YYYY-MM-DD)
+        // Cache fetched "tiles" by day (YYYY-MM-DD)
         this.dayCache = new Map();  // key -> Promise<void> to dedupe inflight
 
         // Bounds
@@ -48,7 +48,7 @@ class StationsActivityTimeline {
         return new Date(d).toISOString();
     }
 
-// LOCAL day key: YYYY-MM-DD from local clock
+    // LOCAL day key: YYYY-MM-DD from local clock
     dayKeyLocal(d) {
         const y = d.getFullYear();
         const m = String(d.getMonth() + 1).padStart(2, "0");
@@ -56,7 +56,7 @@ class StationsActivityTimeline {
         return `${y}-${m}-${dd}`;
     }
 
-// Split [start,end) by LOCAL midnights
+    // Split [start,end) by LOCAL midnights
     daysInRange(start, end) {
         const out = [];
         const d = new Date(start);
@@ -76,7 +76,6 @@ class StationsActivityTimeline {
         el.classList.add("just-refreshed");
         setTimeout(() => el.classList.remove("just-refreshed"), 500);
     }
-
 
     // Fetch a concrete [start, end) window. Optionally include stations if first load.
     async fetchRange(start, end, {includeStations = false, force = false} = {}) {
@@ -125,9 +124,19 @@ class StationsActivityTimeline {
         if (!r.ok) throw new Error(`HTTP ${r.status}`);
         const data = await r.json();
 
-        // Seed groups once
+        // Seed groups once with clickable links
         if (includeStations && Array.isArray(data.stations)) {
-            const groupObjs = data.stations.map(s => ({id: s, content: s, className: "station-group"}));
+            const groupObjs = data.stations.map(s => {
+                let url = `/monitoring/station-link/${s.id}/?direction=${this.direction}`;
+                if (this.direction === "push" && this.channelId) {
+                    url += `&dispatch_channel_id=${this.channelId}`;
+                }
+                return {
+                    id: s.name,
+                    content: `<a href="${url}" class="station-link">${s.name}</a>`,
+                    className: "station-group"
+                };
+            });
             this.groups.update(groupObjs);
         }
 
@@ -138,7 +147,6 @@ class StationsActivityTimeline {
         if (data.hard_min) this.min = new Date(data.hard_min);
         if (data.hard_max) this.max = new Date(data.hard_max);
     }
-
 
     _toVisItem = (log) => {
         const start = log.start_date;
@@ -219,13 +227,11 @@ class StationsActivityTimeline {
              </button>
          `;
 
-
         container.append(btnControls);
 
         const btn = container.querySelector(".t-refresh-now");
         btn.addEventListener("click", () => this.refreshNow());
     }
-
 
     // Public: Refresh now ALWAYS refetches today's data up to now and resets the view
     async refreshNow() {
