@@ -15,8 +15,9 @@ def set_aggregation_methods(apps, schema_editor):
         )
         
         if params_with_degrees.exists():
+            count = params_with_degrees.count()
             params_with_degrees.update(aggregation_method='circular')
-            print(f"Updated {params_with_degrees.count()} parameters to 'circular' aggregation method.")
+            print(f"Updated {count} parameter(s) to 'circular' aggregation method.")
     
     except Unit.DoesNotExist:
         pass
