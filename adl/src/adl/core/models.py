@@ -224,6 +224,11 @@ class DataParameter(ClusterableModel):
         ("communication", _("Communication")),
     ]
     
+    AGGREGATION_METHOD_CHOICES = [
+        ("standard", _("Standard (Min/Max/Avg/Sum)")),
+        ("circular", _("Circular Mean (for angular data like wind direction)")),
+    ]
+    
     name = models.CharField(max_length=255, verbose_name=_("Name"), help_text=_("Name of the variable"))
     unit = models.ForeignKey(Unit, on_delete=models.CASCADE, verbose_name=_("Unit"),
                              help_text=_("Unit of the variable"))
@@ -235,6 +240,15 @@ class DataParameter(ClusterableModel):
                                            choices=get_custom_unit_context_entries,
                                            verbose_name=_("Custom Unit Conversion Context"),
                                            help_text=_("Context of the unit"))
+    aggregation_method = models.CharField(
+        max_length=20,
+        choices=AGGREGATION_METHOD_CHOICES,
+        default="standard",
+        verbose_name=_("Aggregation Method"),
+        help_text=_(
+            "How to aggregate this parameter in hourly/daily summaries. Use 'Circular Mean' for angular measurements like wind direction.")
+    )
+    
     modified_at = models.DateTimeField(auto_now=True)
     qc_checks = StreamField(
         QCChecksStreamBlock(),
@@ -250,6 +264,7 @@ class DataParameter(ClusterableModel):
         FieldPanel("description"),
         FieldPanel("category"),
         FieldPanel("custom_unit_context"),
+        FieldPanel("aggregation_method"),
         FieldPanel("qc_checks"),
     ]
     
