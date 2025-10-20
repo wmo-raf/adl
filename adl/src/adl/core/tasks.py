@@ -3,9 +3,11 @@ import logging
 import time
 
 from celery import shared_task
+from celery.schedules import crontab
 from celery.signals import worker_ready
 from celery_singleton import Singleton, clear_locks
 from django.core.cache import cache
+from django.core.management import call_command
 from django.utils import timezone as dj_timezone
 from django_celery_beat.models import IntervalSchedule, PeriodicTask
 from more_itertools import chunked
@@ -15,6 +17,26 @@ from .dispatchers import run_dispatch_channel
 from .utils import get_object_or_none
 
 logger = logging.getLogger(__name__)
+
+
+@app.task(base=Singleton, bind=True)
+def run_backup(self):
+    # Run the `dbbackup` command
+    logger.info("[BACKUP] Running backup")
+    call_command('dbbackup', '--clean', '--noinput')
+    
+    # Run the `mediabackup` command
+    logger.info("[BACKUP] Running mediabackup")
+    call_command('mediabackup', '--clean', '--noinput')
+
+
+@app.on_after_finalize.connect
+def setup_periodic_tasks(sender, **kwargs):
+    sender.add_periodic_task(
+        crontab(hour=0, minute=0),
+        run_backup.s(),
+        name="run-backup-daily-at-midnight",
+    )
 
 
 @shared_task(bind=True)
