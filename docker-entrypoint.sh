@@ -64,6 +64,12 @@ start_celery_worker() {
     exec celery -A adl worker "${EXTRA_CELERY_ARGS[@]}" -l "${ADL_CELERY_WORKER_LOG_LEVEL}" "$@"
 }
 
+start_celery_beat() {
+  startup_plugin_setup
+
+  exec celery -A adl beat -l "${ADL_CELERY_BEAT_DEBUG_LEVEL}" -S django_celery_beat.schedulers:DatabaseScheduler "$@"
+}
+
 # Lets devs attach to this container running the passed command, press ctrl-c and only
 # the command will stop. Additionally they will be able to use bash history to
 # re-run the containers command after they have done what they want.
@@ -147,7 +153,7 @@ celery-worker)
     start_celery_worker -Q celery -n default-worker@%h "${@:2}"
     ;;
 celery-beat)
-    exec celery -A adl beat -l "${ADL_CELERY_BEAT_DEBUG_LEVEL}" -S django_celery_beat.schedulers:DatabaseScheduler "${@:2}"
+    start_celery_beat "${@:2}"
     ;;
 install-plugin)
     exec /adl/plugins/install_plugin.sh --runtime "${@:2}"
