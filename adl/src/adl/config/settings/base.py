@@ -420,3 +420,7 @@ DBBACKUP_CONNECTORS = {
 DBBACKUP_CONNECTOR_MAPPING = {
     "timescale.db.backends.postgis": "dbbackup.db.postgresql.PgDumpBinaryConnector",
 }
+
+# pg_tileserv base url
+ADL_PG_TILESERV_BASE_URL = env.str("ADL_PG_TILESERV_BASE_URL", "")
+ADL_PG_TILESERV_BASEPATH = env.str("ADL_PG_TILESERV_BASE_URL", "")

@@ -68,7 +68,7 @@ services:
     command: gunicorn wsgi
     environment:
       <<: *backend-variables
-      ADL_PG_TS_URL: ${ADL_PG_TS_URLBASE}/tileserv
+      ADL_PG_TILESERV_BASE_URL: ${ADL_PG_TILESERV_BASE_URL}/tileserv
     expose:
       - "8000"
     depends_on:
@@ -145,9 +145,9 @@ services:
     container_name: adl_pg_tileserv
     restart: always
     environment:
-      - DATABASE_URL=${ADL_PG_TS_DATABASE_URL:-postgresql://${ADL_DB_USER}:${ADL_DB_PASSWORD}@adl_db:5432/${ADL_DB_NAME}}
-      - TS_URLBASE=${ADL_PG_TS_URLBASE:-}
-      - TS_BASEPATH=tileserv
+      - DATABASE_URL=${ADL_PG_TILESERV_DATABASE_URL:-postgresql://${ADL_DB_USER}:${ADL_DB_PASSWORD}@adl_db:5432/${ADL_DB_NAME}}
+      - TS_URLBASE=${ADL_PG_TILESERV_BASE_URL:-}
+      - TS_BASEPATH=${ADL_PG_TILESERV_BASEPATH:-tileserv}
     ports:
       - 7800
 

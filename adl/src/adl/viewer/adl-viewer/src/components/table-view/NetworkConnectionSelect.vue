@@ -4,6 +4,20 @@ import Select from 'primevue/select';
 
 import {useNetworkStore} from "@/stores/network.js";
 
+
+const props = defineProps({
+  fetchStationsLinkOnChange: {
+    type: Boolean,
+    default: true,
+    required: false
+  },
+  fetchDataParametersOnChange: {
+    type: Boolean,
+    default: false,
+    required: false
+  }
+})
+
 const networkStore = useNetworkStore()
 
 onMounted(() => {
@@ -11,9 +25,14 @@ onMounted(() => {
 })
 
 watch(() => networkStore.selectedNetworkConnection, (newValue) => {
-  if (newValue) {
+  if (newValue && props.fetchStationsLinkOnChange) {
     networkStore.loadNetworkConnectionStations(newValue)
   }
+
+  if (newValue && props.fetchDataParametersOnChange) {
+    networkStore.loadNetworkConnectionDataParameters(newValue)
+  }
+
 }, {immediate: true})
 
 

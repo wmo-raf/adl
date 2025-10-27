@@ -10,6 +10,10 @@ export const fetchNetworkConnectionStations = (axios, networkConnectionId) => {
     return axios.get(`/network-connection/${networkConnectionId}/station-links/`)
 }
 
+export const fetchNetworkConnectionDataParameters = (axios, networkConnectionId) => {
+    return axios.get(`/network-connection/${networkConnectionId}/data-parameters/`)
+}
+
 export const fetchStationLinkDetail = (axios, stationLinkId) => {
     return axios.get(`/station-link/${stationLinkId}/`)
 }

@@ -30,7 +30,6 @@ export const createViewerApp = (rootElementId, RootComponent) => {
 
     const el = document.getElementById(rootElementId)
 
-
     if (el) {
         const props = convertDatasetToProps({
             dataset: {...el.dataset},

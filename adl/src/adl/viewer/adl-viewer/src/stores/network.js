@@ -1,12 +1,17 @@
 import {defineStore} from 'pinia'
 
-import {fetchNetworkConnections, fetchNetworkConnectionStations} from '@/services/adlService'
+import {
+    fetchNetworkConnectionDataParameters,
+    fetchNetworkConnections,
+    fetchNetworkConnectionStations
+} from '@/services/adlService'
 
 export const useNetworkStore = defineStore('network', {
     state: () => ({
         networkConnections: [],
         selectedNetworkConnection: null,
         networkConnectionStations: {},
+        networkConnectionDataParameters: {},
         loading: false,
         error: null
     }),
@@ -46,6 +51,18 @@ export const useNetworkStore = defineStore('network', {
                 this.loading = false
             }
         },
+        async loadNetworkConnectionDataParameters(networkConnectionId) {
+            this.loading = true
+            this.error = null
+            try {
+                const response = await fetchNetworkConnectionDataParameters(this.axios, networkConnectionId)
+                this.networkConnectionDataParameters[networkConnectionId] = response.data
+            } catch (err) {
+                this.error = err.message || 'Failed to fetch network connection stations'
+            } finally {
+                this.loading = false
+            }
+        },
     },
     getters: {
         getNetworkConnectionStations: (state) => (networkConnectionId) => {
@@ -55,6 +72,15 @@ export const useNetworkStore = defineStore('network', {
             return state.networkConnections.find(
                 (networkConnection) => networkConnection.id === networkConnectionId
             )
+        },
+        getNetworkConnectionDataParameters: (state) => (networkConnectionId) => {
+            return state.networkConnectionDataParameters[networkConnectionId] || []
+        },
+        getSelectedNetworkConnectionDataParameter: (state) => (networkConnectionId, dataParameterId) => {
+            const connDataParameters = state.networkConnectionDataParameters[networkConnectionId]
+            if (connDataParameters && connDataParameters.length > 0) {
+                return connDataParameters.find(dataParameter => dataParameter.id === dataParameterId)
+            }
         }
     }
 })

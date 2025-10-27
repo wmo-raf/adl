@@ -23,7 +23,7 @@ def register_viewer_menu_item():
     submenu = Menu(items=[
         MenuItem(_('Table'), reverse('viewer_table'), icon_name='table'),
         MenuItem(_('Chart'), reverse('viewer_chart'), icon_name='chart-line'),
-        MenuItem(_('Map'), "#", icon_name='site'),
+        MenuItem(_('Map'), reverse("viewer_map"), icon_name='site'),
     ])
     
     return SubmenuMenuItem(_("Data Viewer"), submenu, icon_name='site')
