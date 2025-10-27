@@ -3,6 +3,10 @@ import {defineStore} from 'pinia'
 export const useMapStore = defineStore('map', {
     state: () => ({
         selectedDataParameterId: null,
+        visualizationType: 'circle',
+        setVisualizationType(type) {
+            this.visualizationType = type;
+        },
         loading: false,
         error: null
     }),
@@ -12,6 +16,7 @@ export const useMapStore = defineStore('map', {
         },
         clearDataParameterState() {
             this.selectedDataParameterId = null
+            this.visualizationType = 'circle';
         }
     },
 })

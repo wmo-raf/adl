@@ -6,6 +6,7 @@ import maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import NetworkConnectionSelect from "@/components/table-view/NetworkConnectionSelect.vue";
 import DataParameterSelect from "@/components/map-view/DataParameterSelect.vue";
+import MapVisualizationType from "@/components/map-view/MapVisualizationType.vue";
 import ColorScaleLegend from "@/components/map-view/ColorScaleLegend.vue";
 import Panel from 'primevue/panel';
 
@@ -37,6 +38,7 @@ const map = ref(null);
 const SOURCE_ID = 'observations-source';
 const LAYER_ID = 'observations-layer';
 const LABEL_LAYER_ID = 'observations-labels';
+const HEATMAP_LAYER_ID = 'observations-heatmap';
 
 // Parse bounds string to array
 const boundsArray = computed(() => {
@@ -83,24 +85,67 @@ const circleColor = computed(() => {
   return '#007cbf';
 });
 
-// Check if legend should be shown - now shows whenever a parameter is selected
-const showLegend = computed(() => {
-  return selectedDataParameter.value !== null;
+// Get heatmap color configuration
+const heatmapColor = computed(() => {
+  const dataParam = selectedDataParameter.value;
+
+  if (!dataParam?.style?.color_stops || dataParam.style.color_stops.length === 0) {
+    // Default heatmap colors
+    return [
+      'interpolate',
+      ['linear'],
+      ['heatmap-density'],
+      0, 'rgba(33,102,172,0)',
+      0.2, 'rgb(103,169,207)',
+      0.4, 'rgb(209,229,240)',
+      0.6, 'rgb(253,219,199)',
+      0.8, 'rgb(239,138,98)',
+      1, 'rgb(178,24,43)'
+    ];
+  }
+
+  // Use color stops from style for heatmap
+  const sortedStops = [...dataParam.style.color_stops].sort((a, b) => a.value - b.value);
+
+  const heatmapExpression = [
+    'interpolate',
+    ['linear'],
+    ['heatmap-density']
+  ];
+
+  // Add starting transparent color
+  heatmapExpression.push(0);
+  heatmapExpression.push('rgba(0,0,0,0)');
+
+  // Map density (0-1) to colors, ensuring strict ascending order
+  sortedStops.forEach((stop, index) => {
+    // Calculate density as a value between 0 and 1
+    const density = (index + 1) / sortedStops.length;
+    const hex = stop.color;
+    const r = parseInt(hex.slice(1, 3), 16);
+    const g = parseInt(hex.slice(3, 5), 16);
+    const b = parseInt(hex.slice(5, 7), 16);
+
+    heatmapExpression.push(density);
+    heatmapExpression.push(`rgba(${r},${g},${b},1)`);
+  });
+
+  return heatmapExpression;
 });
 
-// Get color stops for legend (empty array if no color scale)
-const colorStops = computed(() => {
-  return selectedDataParameter.value?.style?.color_stops || [];
-});
+// Get the min and max values for heatmap weight calculation
+const heatmapWeightRange = computed(() => {
+  const dataParam = selectedDataParameter.value;
 
-// Get parameter unit for legend
-const parameterUnit = computed(() => {
-  return selectedDataParameter.value?.unit?.symbol || '';
-});
+  if (!dataParam?.style?.color_stops || dataParam.style.color_stops.length === 0) {
+    return {min: 0, max: 100}; // Default range
+  }
 
-// Get parameter name for legend
-const parameterName = computed(() => {
-  return selectedDataParameter.value?.name || '';
+  const sortedStops = [...dataParam.style.color_stops].sort((a, b) => a.value - b.value);
+  return {
+    min: sortedStops[0].value,
+    max: sortedStops[sortedStops.length - 1].value
+  };
 });
 
 // Function to add or update the vector tile source and layer
@@ -108,10 +153,14 @@ const updateMapSource = () => {
   if (!map.value || !tileUrl.value) return;
 
   const mapInstance = map.value;
+  const visualizationType = mapStore.visualizationType || 'circle';
 
-  // Remove existing layers and source if they exist
+  // Remove all existing layers
   if (mapInstance.getLayer(LABEL_LAYER_ID)) {
     mapInstance.removeLayer(LABEL_LAYER_ID);
+  }
+  if (mapInstance.getLayer(HEATMAP_LAYER_ID)) {
+    mapInstance.removeLayer(HEATMAP_LAYER_ID);
   }
   if (mapInstance.getLayer(LAYER_ID)) {
     mapInstance.removeLayer(LAYER_ID);
@@ -128,47 +177,126 @@ const updateMapSource = () => {
     maxzoom: 22
   });
 
-  // Add circle layer with data-driven styling
-  mapInstance.addLayer({
-    id: LAYER_ID,
-    type: 'circle',
-    source: SOURCE_ID,
-    'source-layer': 'default', // Update this to match your tile layer name
-    paint: {
-      'circle-radius': 16,
-      'circle-color': circleColor.value,
-      'circle-stroke-width': 1,
-      'circle-stroke-color': '#000'
-    }
-  });
+  if (visualizationType === 'heatmap') {
+    const weightRange = heatmapWeightRange.value;
 
-  // Add label layer to show values in the middle of circles
-  mapInstance.addLayer({
-    id: LABEL_LAYER_ID,
-    type: 'symbol',
-    source: SOURCE_ID,
-    'source-layer': 'default', // Update this to match your tile layer name
-    layout: {
-      'text-field': [
-        'concat',
-        ['to-string', ['round', ['get', 'value']]],
-        ''
-      ],
-      'text-font': ['FiraSans-Bold'],
-      'text-size': 11,
-      'text-anchor': 'center',
-      'text-allow-overlap': true,
-      'text-ignore-placement': false
-    },
-    paint: {
-      'text-color': '#ffffff',
-      'text-halo-color': '#000000',
-      'text-halo-width': 1
-    }
-  });
+    // Add heatmap layer
+    mapInstance.addLayer({
+      id: HEATMAP_LAYER_ID,
+      type: 'heatmap',
+      source: SOURCE_ID,
+      'source-layer': 'default',
+      paint: {
+        // Normalize the heatmap weight based on actual data range
+        'heatmap-weight': [
+          'interpolate',
+          ['linear'],
+          ['get', 'value'],
+          weightRange.min, 0,
+          weightRange.max, 1
+        ],
+        // Increase the heatmap color intensity based on zoom level
+        'heatmap-intensity': [
+          'interpolate',
+          ['linear'],
+          ['zoom'],
+          0, 0.5,
+          9, 1
+        ],
+        // Color ramp for heatmap
+        'heatmap-color': heatmapColor.value,
+        // Adjust the heatmap radius by zoom level
+        'heatmap-radius': [
+          'interpolate',
+          ['linear'],
+          ['zoom'],
+          0, 10,
+          5, 20,
+          9, 40
+        ],
+        // Transition from heatmap to circle layer by zoom level
+        'heatmap-opacity': [
+          'interpolate',
+          ['linear'],
+          ['zoom'],
+          7, 1,
+          9, 0.5
+        ]
+      }
+    });
 
-  // Add click popup to show detailed information
-  mapInstance.on('click', LAYER_ID, (e) => {
+    // Add a circle layer on top for point visualization at high zoom
+    mapInstance.addLayer({
+      id: LAYER_ID,
+      type: 'circle',
+      source: SOURCE_ID,
+      'source-layer': 'default',
+      minzoom: 10,
+      paint: {
+        'circle-radius': [
+          'interpolate',
+          ['linear'],
+          ['zoom'],
+          10, 5,
+          15, 10
+        ],
+        'circle-color': circleColor.value,
+        'circle-stroke-color': 'white',
+        'circle-stroke-width': 1,
+        'circle-opacity': [
+          'interpolate',
+          ['linear'],
+          ['zoom'],
+          10, 0,
+          11, 1
+        ]
+      }
+    });
+  } else {
+    // Add circle layer with data-driven styling
+    mapInstance.addLayer({
+      id: LAYER_ID,
+      type: 'circle',
+      source: SOURCE_ID,
+      'source-layer': 'default',
+      paint: {
+        'circle-radius': 16,
+        'circle-color': circleColor.value,
+        'circle-stroke-width': 1,
+        'circle-stroke-color': '#000'
+      }
+    });
+
+    // Add label layer to show values in the middle of circles
+    mapInstance.addLayer({
+      id: LABEL_LAYER_ID,
+      type: 'symbol',
+      source: SOURCE_ID,
+      'source-layer': 'default',
+      layout: {
+        'text-field': [
+          'concat',
+          ['to-string', ['round', ['get', 'value']]],
+          ''
+        ],
+        'text-font': ['FiraSans-Bold'],
+        'text-size': 11,
+        'text-anchor': 'center',
+        'text-allow-overlap': true,
+        'text-ignore-placement': false
+      },
+      paint: {
+        'text-color': '#ffffff',
+        'text-halo-color': '#000000',
+        'text-halo-width': 1
+      }
+    });
+  }
+
+  // Add click popup to show detailed information (works for both visualizations)
+  const clickLayerId = visualizationType === 'heatmap' ? HEATMAP_LAYER_ID : LAYER_ID;
+
+  mapInstance.on('click', clickLayerId, (e) => {
     if (e.features.length > 0) {
       const feature = e.features[0];
       const value = feature.properties.value;
@@ -187,11 +315,11 @@ const updateMapSource = () => {
   });
 
   // Change cursor on hover
-  mapInstance.on('mouseenter', LAYER_ID, () => {
+  mapInstance.on('mouseenter', clickLayerId, () => {
     mapInstance.getCanvas().style.cursor = 'pointer';
   });
 
-  mapInstance.on('mouseleave', LAYER_ID, () => {
+  mapInstance.on('mouseleave', clickLayerId, () => {
     mapInstance.getCanvas().style.cursor = '';
   });
 };
@@ -252,6 +380,13 @@ watch(tileUrl, (newUrl) => {
   }
 });
 
+// Watch for changes in visualization type
+watch(() => mapStore.visualizationType, () => {
+  if (map.value?.loaded() && tileUrl.value) {
+    updateMapSource();
+  }
+});
+
 </script>
 
 <template>
@@ -263,6 +398,7 @@ watch(tileUrl, (newUrl) => {
             :fetchStationsLinkOnChange="false"
         />
         <DataParameterSelect/>
+        <MapVisualizationType/>
       </div>
     </Panel>
 
