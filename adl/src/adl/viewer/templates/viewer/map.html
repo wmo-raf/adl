@@ -19,8 +19,12 @@
 {% endblock %}
 
 {% block content %}
-    <div id="map-view" data-api-url="{{ api_url }}" data-language-code="{{ LANGUAGE_CODE }}"
-         data-bounds="{{ bounds }}" data-latest-records-mvt-url="{{ latest_records_mvt_url }}">
+    <div id="map-view"
+         data-api-url="{{ api_url }}"
+         data-language-code="{{ LANGUAGE_CODE }}"
+         data-bounds="{{ bounds }}"
+         data-latest-records-mvt-url="{{ latest_records_mvt_url }}"
+         data-nearest-records-mvt-url="{{ nearest_records_mvt_url }}">
     </div>
 {% endblock %}
 

@@ -140,7 +140,7 @@ const gradientId = computed(() => `gradient-${Math.random().toString(36).substr(
 .color-scale-legend {
   display: inline-block;
   background: rgba(255, 255, 255, 0.95);
-  padding: 10px 12px;
+  padding: 10px;
   border-radius: 4px;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
 }
@@ -151,7 +151,6 @@ const gradientId = computed(() => `gradient-${Math.random().toString(36).substr(
   font-weight: 600;
   color: #333;
   text-align: center;
-  margin-bottom: 6px;
 }
 
 .unit-badge {

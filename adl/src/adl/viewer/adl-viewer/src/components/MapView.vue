@@ -6,6 +6,7 @@ import maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import NetworkConnectionSelect from "@/components/table-view/NetworkConnectionSelect.vue";
 import DataParameterSelect from "@/components/map-view/DataParameterSelect.vue";
+import TimeControls from "@/components/map-view/TimeControls.vue";
 import ColorScaleLegend from "@/components/map-view/ColorScaleLegend.vue";
 import Panel from 'primevue/panel';
 
@@ -27,6 +28,10 @@ const props = defineProps({
   latestRecordsMvtUrl: {
     type: String,
     required: true,
+  },
+  nearestRecordsMvtUrl: {
+    type: String,
+    required: true,
   }
 });
 
@@ -37,6 +42,8 @@ const map = ref(null);
 const SOURCE_ID = 'observations-source';
 const LAYER_ID = 'observations-layer';
 const LABEL_LAYER_ID = 'observations-labels';
+
+const activePopup = ref(null);
 
 // Parse bounds string to array
 const boundsArray = computed(() => {
@@ -49,14 +56,20 @@ const boundsArray = computed(() => {
   }
 });
 
-// Compute the tile URL based on selected values
+// Compute the tile URL based on selected values and time
 const tileUrl = computed(() => {
   const connectionId = networkStore.selectedNetworkConnection;
   const parameterId = mapStore.selectedDataParameterId;
 
   if (!connectionId || !parameterId) return null;
 
-  return `${props.latestRecordsMvtUrl}?connection_id=${connectionId}&parameter_id=${parameterId}`;
+  // Use latest or nearest based on isCurrentTime
+  if (mapStore.isCurrentTime) {
+    return `${props.latestRecordsMvtUrl}?connection_id=${connectionId}&parameter_id=${parameterId}`;
+  } else {
+    const atTime = mapStore.selectedDateTime;
+    return `${props.nearestRecordsMvtUrl}?connection_id=${connectionId}&parameter_id=${parameterId}&at_time=${atTime}`;
+  }
 });
 
 const selectedDataParameter = computed(() => {
@@ -83,12 +96,12 @@ const circleColor = computed(() => {
   return '#007cbf';
 });
 
-// Check if legend should be shown - now shows whenever a parameter is selected
+// Check if legend should be shown
 const showLegend = computed(() => {
   return selectedDataParameter.value !== null;
 });
 
-// Get color stops for legend (empty array if no color scale)
+// Get color stops for legend
 const colorStops = computed(() => {
   return selectedDataParameter.value?.style?.color_stops || [];
 });
@@ -103,24 +116,31 @@ const parameterName = computed(() => {
   return selectedDataParameter.value?.name || '';
 });
 
+const showTimeControls = computed(() => {
+  return selectedDataParameter.value !== null;
+});
 
 // Format UTC time
 const formatUtcTime = (utcTime) => {
   if (!utcTime) return null;
 
   try {
-    const date = new Date(utcTime);
+    // Ensure the string is treated as UTC by adding 'Z' if not present
+    const utcString = utcTime.endsWith('Z') ? utcTime : utcTime + 'Z';
+    const date = new Date(utcString);
+
+    // Format in local time
     return date.toLocaleString('en-US', {
       year: 'numeric',
       month: 'short',
       day: 'numeric',
       hour: '2-digit',
       minute: '2-digit',
-      timeZone: 'UTC',
+      hour12: false,
       timeZoneName: 'short'
     });
   } catch (error) {
-    return utcTime; // Fallback to raw value if parsing fails
+    return utcTime;
   }
 };
 
@@ -155,10 +175,14 @@ const generatePopupHTML = (feature) => {
   `;
 };
 
-
 // Create and show popup
 const showPopup = (mapInstance, lngLat, feature) => {
-  new maplibregl.Popup({
+  if (activePopup.value) {
+    activePopup.value.remove();
+    activePopup.value = null;
+  }
+
+  const popup = new maplibregl.Popup({
     closeButton: true,
     closeOnClick: true,
     maxWidth: '300px'
@@ -166,8 +190,15 @@ const showPopup = (mapInstance, lngLat, feature) => {
       .setLngLat(lngLat)
       .setHTML(generatePopupHTML(feature))
       .addTo(mapInstance);
-};
 
+  // Keep reference so we can close it later
+  activePopup.value = popup;
+
+  // When closed manually, clear the reference
+  popup.on('close', () => {
+    activePopup.value = null;
+  });
+};
 
 // Function to add or update the vector tile source and layer
 const updateMapSource = () => {
@@ -199,7 +230,7 @@ const updateMapSource = () => {
     id: LAYER_ID,
     type: 'circle',
     source: SOURCE_ID,
-    'source-layer': 'default', // Update this to match your tile layer name
+    'source-layer': 'default',
     paint: {
       'circle-radius': 16,
       'circle-color': circleColor.value,
@@ -213,7 +244,7 @@ const updateMapSource = () => {
     id: LABEL_LAYER_ID,
     type: 'symbol',
     source: SOURCE_ID,
-    'source-layer': 'default', // Update this to match your tile layer name
+    'source-layer': 'default',
     layout: {
       'text-field': [
         'concat',
@@ -232,7 +263,7 @@ const updateMapSource = () => {
       'text-halo-width': 1
     }
   });
-// Add click popup to show detailed information
+
   // Add click popup to show detailed information
   mapInstance.on('click', LAYER_ID, (e) => {
     if (e.features.length > 0) {
@@ -250,6 +281,21 @@ const updateMapSource = () => {
   });
 };
 
+function onTimeChange(newDate) {
+  // If the new time is within a few minutes of now, consider it “current time”
+  const now = new Date();
+  const isCurrent = Math.abs(now - newDate) < 5 * 60 * 1000; // within 5 min
+
+  mapStore.setSelectedDateTime(newDate.toISOString(), isCurrent);
+
+  // Close any open popup when time changes
+  if (activePopup.value) {
+    activePopup.value.remove();
+    activePopup.value = null;
+  }
+}
+
+
 onMounted(() => {
   networkStore.loadNetworkConnections();
 
@@ -259,9 +305,7 @@ onMounted(() => {
     style: "https://geoserveis.icgc.cat/contextmaps/icgc_mapa_base_gris_simplificat.json",
     center: [0, 0],
     zoom: 2,
-    attributionControl: {
-      compact: true
-    }
+    attributionControl: false
   });
 
   // add navigation control. Zoom in,out
@@ -270,6 +314,10 @@ onMounted(() => {
   })
 
   map.value.addControl(navControl, 'bottom-right')
+
+  map.value.addControl(new maplibregl.AttributionControl({
+    compact: true
+  }), "top-right");
 
   // Fit map to bounds if available
   if (boundsArray.value && boundsArray.value.length === 4) {
@@ -320,7 +368,12 @@ watch(tileUrl, (newUrl) => {
       </div>
     </Panel>
 
-    <!-- Color Scale Legend -->
+    <!-- Time Controls - Bottom Center -->
+    <div v-if="showTimeControls" class="time-controls-container">
+      <TimeControls @timeChange="onTimeChange"/>
+    </div>
+
+    <!-- Color Scale Legend - Bottom Center, below time controls -->
     <div v-if="showLegend" class="legend-container">
       <ColorScaleLegend
           :color-stops="colorStops"
@@ -345,6 +398,7 @@ watch(tileUrl, (newUrl) => {
   top: 1rem;
   left: 1rem;
   z-index: 2;
+  max-width: 320px;
 }
 
 .mv-selectors {
@@ -353,9 +407,19 @@ watch(tileUrl, (newUrl) => {
   gap: 1rem;
 }
 
+.time-controls-container {
+  position: absolute;
+  bottom: 1rem;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 2;
+  max-width: 90%;
+  width: auto;
+}
+
 .legend-container {
   position: absolute;
-  bottom: 2.5rem;
+  top: 1rem;
   left: 50%;
   transform: translateX(-50%);
   z-index: 2;

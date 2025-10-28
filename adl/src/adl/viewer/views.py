@@ -31,7 +31,7 @@ def latest_records_mvt(request, z, x, y):
         'in_connection_id': connection_id,
         'in_parameter_id': parameter_id,
     }
-    return _fetch_pg_tileserv_mvt_tile('public.obs_records_latest_mvt', z, x, y, params)
+    return _fetch_pg_tileserv_mvt_tile('public.obs_latest_records_mvt', z, x, y, params)
 
 
 @permission_classes([HasAPIKeyOrIsAuthenticated])
@@ -56,7 +56,7 @@ def nearest_records_mvt(request, z, x, y):
         'in_parameter_id': parameter_id,
         'in_datetime': at_time,
     }
-    return _fetch_pg_tileserv_mvt_tile('public.obs_records_nearest_mvt', z, x, y, params)
+    return _fetch_pg_tileserv_mvt_tile('public.obs_nearest_records_mvt', z, x, y, params)
 
 
 def table_view(request):
