@@ -24,7 +24,7 @@ const props = defineProps({
     required: false,
     default: null
   },
-  tileservBaseUrl: {
+  latestRecordsMvtUrl: {
     type: String,
     required: true,
   }
@@ -56,7 +56,7 @@ const tileUrl = computed(() => {
 
   if (!connectionId || !parameterId) return null;
 
-  return `${props.tileservBaseUrl}/public.obs_records_latest_mvt/{z}/{x}/{y}.pbf?in_connection_id=${connectionId}&in_parameter_id=${parameterId}`;
+  return `${props.latestRecordsMvtUrl}?connection_id=${connectionId}&parameter_id=${parameterId}`;
 });
 
 const selectedDataParameter = computed(() => {
@@ -102,6 +102,72 @@ const parameterUnit = computed(() => {
 const parameterName = computed(() => {
   return selectedDataParameter.value?.name || '';
 });
+
+
+// Format UTC time
+const formatUtcTime = (utcTime) => {
+  if (!utcTime) return null;
+
+  try {
+    const date = new Date(utcTime);
+    return date.toLocaleString('en-US', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      timeZone: 'UTC',
+      timeZoneName: 'short'
+    });
+  } catch (error) {
+    return utcTime; // Fallback to raw value if parsing fails
+  }
+};
+
+// Generate popup HTML
+const generatePopupHTML = (feature) => {
+  const value = feature.properties.value;
+  const utcTime = feature.properties.utc_time;
+  const parameterName = selectedDataParameter.value?.name || 'Value';
+  const unit = selectedDataParameter.value?.unit?.symbol || '';
+  const formattedTime = formatUtcTime(utcTime);
+
+  return `
+    <div class="popup-container">
+      <div class="popup-header">
+        ${parameterName}
+      </div>
+      <div class="popup-value">
+        ${value !== null && value !== undefined
+      ? `${value} <span class="popup-unit">${unit}</span>`
+      : '<span class="popup-no-data">No data</span>'}
+      </div>
+      ${formattedTime ? `
+        <div class="popup-time">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="10"></circle>
+            <polyline points="12 6 12 12 16 14"></polyline>
+          </svg>
+          ${formattedTime}
+        </div>
+      ` : ''}
+    </div>
+  `;
+};
+
+
+// Create and show popup
+const showPopup = (mapInstance, lngLat, feature) => {
+  new maplibregl.Popup({
+    closeButton: true,
+    closeOnClick: true,
+    maxWidth: '300px'
+  })
+      .setLngLat(lngLat)
+      .setHTML(generatePopupHTML(feature))
+      .addTo(mapInstance);
+};
+
 
 // Function to add or update the vector tile source and layer
 const updateMapSource = () => {
@@ -166,23 +232,11 @@ const updateMapSource = () => {
       'text-halo-width': 1
     }
   });
-
+// Add click popup to show detailed information
   // Add click popup to show detailed information
   mapInstance.on('click', LAYER_ID, (e) => {
     if (e.features.length > 0) {
-      const feature = e.features[0];
-      const value = feature.properties.value;
-      const unit = selectedDataParameter.value?.unit?.symbol || '';
-
-      new maplibregl.Popup()
-          .setLngLat(e.lngLat)
-          .setHTML(`
-          <div style="padding: 8px;">
-            <strong>${selectedDataParameter.value?.name || 'Value'}</strong><br>
-            ${value !== null && value !== undefined ? `${value} ${unit}` : 'No data'}
-          </div>
-        `)
-          .addTo(mapInstance);
+      showPopup(mapInstance, e.lngLat, e.features[0]);
     }
   });
 
@@ -305,5 +359,76 @@ watch(tileUrl, (newUrl) => {
   left: 50%;
   transform: translateX(-50%);
   z-index: 2;
+}
+
+/* Popup styling */
+.map-container :deep(.maplibregl-popup-content) {
+  padding: 0;
+  border-radius: 8px;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+}
+
+.map-container :deep(.maplibregl-popup-close-button) {
+  font-size: 20px;
+  color: #6b7280;
+  padding: 4px 8px;
+  right: 4px;
+  top: 4px;
+}
+
+.map-container :deep(.maplibregl-popup-close-button):hover {
+  background-color: #f3f4f6;
+  color: #111827;
+  border-radius: 4px;
+}
+
+.map-container :deep(.maplibregl-popup-tip) {
+  border-top-color: white;
+}
+
+/* Popup content classes */
+.map-container :deep(.popup-container) {
+  padding: 12px;
+  font-family: 'Roboto', Arial, sans-serif;
+  min-width: 180px;
+}
+
+.map-container :deep(.popup-header) {
+  font-size: 14px;
+  font-weight: 600;
+  color: #1f2937;
+  margin-bottom: 8px;
+  padding-bottom: 8px;
+  border-bottom: 2px solid #e5e7eb;
+}
+
+.map-container :deep(.popup-value) {
+  font-size: 24px;
+  font-weight: 700;
+  color: #111827;
+  margin-bottom: 4px;
+}
+
+.map-container :deep(.popup-unit) {
+  font-size: 16px;
+  font-weight: 500;
+  color: #6b7280;
+}
+
+.map-container :deep(.popup-no-data) {
+  color: #9ca3af;
+}
+
+.map-container :deep(.popup-time) {
+  font-size: 12px;
+  color: #6b7280;
+  margin-top: 8px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.map-container :deep(.popup-time svg) {
+  flex-shrink: 0;
 }
 </style>
