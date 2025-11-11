@@ -278,7 +278,7 @@ WAGTAILDOCS_EXTENSIONS = ['csv', 'docx', 'key', 'odt', 'pdf', 'pptx', 'rtf', 'tx
 GEO_WIDGET_DEFAULT_LOCATION = {'lat': 0, 'lng': 0}
 GEO_WIDGET_ZOOM = 3
 
-REDIS_HOST = env.str("REDIS_HOST", "redis")
+REDIS_HOST = env.str("REDIS_HOST", "adl_redis")
 REDIS_PORT = env.str("REDIS_PORT", "6379")
 REDIS_USERNAME = env.str("REDIS_USER", "")
 REDIS_PASSWORD = env.str("REDIS_PASSWORD", "")
