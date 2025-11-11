@@ -61,10 +61,10 @@
     <!-- Active Tasks List -->
     <div v-else class="tasks-list">
       <Accordion
-        v-model:value="expandedPanels"
-        :multiple="true"
-        expandIcon="pi pi-chevron-down"
-        collapseIcon="pi pi-chevron-up"
+          v-model:value="expandedPanels"
+          :multiple="true"
+          expandIcon="pi pi-chevron-down"
+          collapseIcon="pi pi-chevron-up"
       >
         <AccordionPanel
             v-for="(task, index) in activeTasks"
@@ -79,6 +79,15 @@
                   <div class="font-semibold">{{ task.task_name_short }}</div>
                   <div class="text-sm text-gray-500">
                     Network ID: {{ task.network_id }} • {{ task.task_id.slice(0, 8) }}...
+                  </div>
+                  <div v-if="task.stations && task.stations.length > 0" class="mt-2 flex flex-wrap gap-2">
+                    <div v-for="station in task.stations" :key="station.id">
+                      <Badge
+                          :value="station.name"
+                          class="mr-1 mb-1"
+                          severity="info"
+                      />
+                    </div>
                   </div>
                 </div>
               </div>
@@ -117,7 +126,7 @@
 </template>
 
 <script setup>
-import { onMounted, onUnmounted, ref, computed } from 'vue'
+import {onMounted, onUnmounted, ref, computed} from 'vue'
 import TaskLogViewer from './TaskLogViewer.vue'
 import Accordion from 'primevue/accordion'
 import AccordionPanel from 'primevue/accordionpanel'
@@ -204,7 +213,7 @@ const fetchActiveTasks = async () => {
     if (previouslyExpanded.length > 0) {
       const existingTaskIds = activeTasks.value.map(task => task.task_id)
       expandedPanels.value = previouslyExpanded.filter(taskId =>
-        existingTaskIds.includes(taskId)
+          existingTaskIds.includes(taskId)
       )
     } else if (activeTasks.value.length > 0 && expandedPanels.value.length === 0) {
       // Auto-expand first task on initial load
