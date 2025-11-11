@@ -321,8 +321,13 @@ def get_active_tasks_by_network(request, network_id=None):
         
         # Extract network_id from args
         task_network_id = None
+        task_station_ids = []
         if task_args and len(task_args) > 0:
             task_network_id = int(task_args[0])
+            
+            if task_name == 'adl.core.tasks.process_station_link_batch':
+                if len(task_args) > 1 and isinstance(task_args[1], list):
+                    task_station_ids = task_args[1]
         
         # Filter by network_id if provided
         if network_id and task_network_id != network_id:
@@ -332,7 +337,7 @@ def get_active_tasks_by_network(request, network_id=None):
         is_active = task in (active.get(list(active.keys())[0], []) if active else [])
         status = 'STARTED' if is_active else 'PENDING'
         
-        filtered_tasks.append({
+        task_detail = {
             'task_id': task_id,
             'task_name': task_name,
             'task_name_short': task_name.split('.')[-1],  # Just the function name
@@ -342,7 +347,14 @@ def get_active_tasks_by_network(request, network_id=None):
             'started_at': datetime.fromtimestamp(task.get('time_start', 0)).isoformat() if task.get(
                 'time_start') else None,
             'args': task_args,
-        })
+        }
+        
+        if task_station_ids:
+            stations_list = StationLink.objects.filter(id__in=task_station_ids).select_related('station')
+            task_stations = [{'name': sl.station.name, 'id': sl.id, } for sl in stations_list]
+            task_detail['stations'] = task_stations
+        
+        filtered_tasks.append(task_detail)
     
     return JsonResponse({
         'tasks': filtered_tasks,
