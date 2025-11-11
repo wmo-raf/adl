@@ -1,15 +1,13 @@
-import logging
 from datetime import timedelta, datetime
+from datetime import timezone as py_tz
 from typing import Iterable, List, Dict, Any, Optional, Tuple
 
 from django.core.exceptions import ImproperlyConfigured
 from django.utils import timezone as dj_timezone
 
+from .logging import TaskLogger
 from .registry import Registry, Instance
 from .validators import StationRecordModel
-
-logger = logging.getLogger(__name__)
-from datetime import timezone as py_tz
 
 
 class Plugin(Instance):
@@ -37,6 +35,19 @@ class Plugin(Instance):
         
         # Initialize QC pipeline cache
         self._qc_pipelines_cache = {}
+        
+        self._task_logger = None
+    
+    def get_logger(self) -> TaskLogger:
+        """Get or create task logger"""
+        if self._task_logger is None:
+            # Use standard logger without task_id
+            self._task_logger = TaskLogger(plugin_label=self.label)
+        return self._task_logger
+    
+    def set_task_context(self, task_id: str):
+        """Set the current task context for logging"""
+        self._task_logger = TaskLogger(task_id=task_id, plugin_label=self.label)
     
     # ---------- URL exposure ----------
     def get_urls(self) -> list:
@@ -203,11 +214,13 @@ class Plugin(Instance):
         """
         from adl.core.models import ObservationRecord
         
+        log = self.get_logger()  # Get logger once
+        
         station = station_link.station
         variable_mappings = list(station_link.get_variable_mappings() or [])
         
         if not variable_mappings:
-            logger.warning("[%s] No variable mappings for station %s.", self.label, station.name)
+            log.warning("No variable mappings for station %s.", station.name)
             return None
         
         observation_records = {}
@@ -223,19 +236,19 @@ class Plugin(Instance):
                 rec = StationRecordModel(observation_time=record.get("observation_time"),
                                          values={k: v for k, v in record.items() if k != "observation_time"})
             except Exception as e:
-                logger.warning("[%s] Bad record for station %s: %s", self.label, station.name, e)
+                log.warning("Bad record for station %s: %s", station.name, e)
                 continue
             
             obs_time = rec.observation_time
             
             if not obs_time:
-                logger.warning("[%s] Missing observation_time for station %s.", self.label, station.name)
+                log.warning("Missing observation_time for station %s.", station.name)
                 continue
             
             if not isinstance(obs_time, datetime):
-                msg = (f"[{self.label}] observation_time for station {station.name} must be datetime, "
+                msg = (f"observation_time for station {station.name} must be datetime, "
                        f"got {type(obs_time)}: {obs_time!r}")
-                logger.error(msg)
+                log.error(msg)
                 raise ValueError(msg)
             
             # Normalize to aware station-local time WITHOUT shifting the instant
@@ -252,9 +265,9 @@ class Plugin(Instance):
                 
                 # Validate required mapping attributes
                 if not (adl_param and src_name and src_unit):
-                    logger.warning(
-                        "[%s] Bad variable mapping for station %s (id=%s): adl=%s src=%s unit=%s",
-                        self.label, station.name, getattr(mapping, "id", "?"),
+                    log.warning(
+                        "Bad variable mapping for station %s (id=%s): adl=%s src=%s unit=%s",
+                        station.name, getattr(mapping, "id", "?"),
                         bool(adl_param), bool(src_name), bool(src_unit),
                     )
                     continue
@@ -264,9 +277,9 @@ class Plugin(Instance):
                 
                 if src_name not in rec.values:
                     # Fine to skip silently; use debug
-                    logger.debug(
-                        "[%s] No value for parameter %s (%s) in station %s at %s. Skipping.",
-                        self.label, adl_param.name, src_name, station.name, obs_time
+                    log.debug(
+                        "No value for parameter %s (%s) in station %s at %s. Skipping.",
+                        adl_param.name, src_name, station.name, obs_time
                     )
                     continue
                 
@@ -281,9 +294,9 @@ class Plugin(Instance):
                     if adl_param.unit != src_unit:
                         value = adl_param.convert_value_from_units(value, src_unit)
                 except Exception as e:
-                    logger.warning(
-                        "[%s] Unit conversion failed for %s (%s→%s) on station %s: %s",
-                        self.label, adl_param.name, src_unit, adl_param.unit, station.name, e
+                    log.warning(
+                        "Unit conversion failed for %s (%s→%s) on station %s: %s",
+                        adl_param.name, src_unit, adl_param.unit, station.name, e
                     )
                     continue
                 
@@ -307,8 +320,8 @@ class Plugin(Instance):
                 
                 # Use a dict key to deduplicate in case of multiple records for same time/param
                 if utc_obs_key_with_param in observation_records:
-                    logger.info(
-                        "[%s] Duplicate observation for station %s, time %s, parameter %s. Overwriting previous value.",
+                    log.info(
+                        "Duplicate observation for station %s, time %s, parameter %s. Overwriting previous value.",
                         self.label, station.name, obs_time, adl_param.name
                     )
                 
@@ -327,7 +340,7 @@ class Plugin(Instance):
         observation_records_list = list(observation_records.values())
         
         if not observation_records_list:
-            logger.warning("[%s] No valid observation records for station %s.", self.label, station.name)
+            log.warning("No valid observation records for station %s.", station.name)
             return None
         
         saved_records = ObservationRecord.objects.bulk_create(
@@ -345,15 +358,16 @@ class Plugin(Instance):
             try:
                 self.after_save_records(station_link, station_records, saved_records)
             except Exception as e:
-                logger.error(
-                    "[%s] after_save_records hook failed for station %s: %s",
-                    self.label, station.name, e
+                log.error(
+                    "after_save_records hook failed for station %s: %s",
+                    station.name, e
                 )
         
         return saved_records
     
     # ---------- Orchestration ----------
     def process_station(self, station_link, initial_start_date=None, initial_end_date=None) -> int:
+        log = self.get_logger()
         start_date, end_date = self.get_dates_for_station(station_link)
         
         if initial_start_date:
@@ -362,21 +376,20 @@ class Plugin(Instance):
         if initial_end_date:
             end_date = initial_end_date
         
-        logger.info("[%s] Fetching %s from %s to %s.",
-                    self.label, station_link, start_date, end_date)
+        log.info("Fetching %s from %s to %s.", station_link, start_date, end_date)
         
         # get the station data
         station_records = self.get_station_data(station_link, start_date=start_date, end_date=end_date)
         
         if not station_records:
-            logger.info("[%s] No new data for %s.", self.label, station_link)
+            log.info("No new data for %s.", station_link)
             return 0
         
         earliest = min(station_records, key=lambda r: r["observation_time"])["observation_time"]
         latest = max(station_records, key=lambda r: r["observation_time"])["observation_time"]
         
-        logger.info("[%s] Fetched %d records for %s from %s to %s.",
-                    self.label, len(station_records), station_link, earliest, latest)
+        log.info("Fetched %d records for %s from %s to %s.",
+                 len(station_records), station_link, earliest, latest)
         
         # save the records to the database
         saved_obs_records = self.save_records(station_link, station_records)
@@ -386,18 +399,18 @@ class Plugin(Instance):
         return saved_obs_records_count
     
     def run_process(self, network_connection, initial_start_date=None) -> Dict[int, int]:
+        log = self.get_logger()
         
         station_links = network_connection.station_links.all()
         
         results: Dict[int, int] = {}
         
-        logger.info("[%s] Processing %d station links for %s.",
-                    self.label, len(station_links), network_connection.name)
+        log.info("Processing %d station links for %s.", len(station_links), network_connection.name)
         
         # process each station link
         for station_link in station_links:
             if not station_link.enabled:
-                logger.info("[%s] Skipping disabled station link: %s", self.label, station_link)
+                log.info("Skipping disabled station link: %s", station_link)
                 continue
             
             results[station_link.station.id] = self.process_station(station_link, initial_start_date=initial_start_date)
@@ -410,6 +423,8 @@ class Plugin(Instance):
         from adl.core.models import QCBits, QCStatus
         from adl.core.qc.config import QCConfigConverter, build_qc_context
         from adl.core.qc.validators import QCFlag
+        
+        log = self.get_logger()
         
         if hasattr(variable_mapping, "qc_checks"):
             qc_checks = variable_mapping.qc_checks
@@ -431,9 +446,9 @@ class Plugin(Instance):
             try:
                 pipeline = QCConfigConverter.streamfield_to_pipeline(qc_checks)
                 self._qc_pipelines_cache[cache_key] = pipeline
-                logger.debug(f"Created QC pipeline for parameter {adl_param.name}")
+                log.debug(f"Created QC pipeline for parameter {adl_param.name}")
             except Exception as e:
-                logger.error(f"Error creating QC pipeline for parameter {adl_param.name}: {e}")
+                log.error(f"Error creating QC pipeline for parameter {adl_param.name}: {e}")
                 return QCBits(0), QCStatus.NOT_EVALUATED, []
         
         pipeline = self._qc_pipelines_cache[cache_key]
@@ -453,8 +468,8 @@ class Plugin(Instance):
             
             # Check if we have minimum required history
             if len(recent_history) < history_requirements['min_required']:
-                logger.debug(f"Insufficient history for {adl_param.name}: "
-                             f"got {len(recent_history)}, need {history_requirements['min_required']}")
+                log.debug(f"Insufficient history for {adl_param.name}: "
+                          f"got {len(recent_history)}, need {history_requirements['min_required']}")
         
         # Build QC context
         mock_observation_record = {'observation_time': obs_time}
@@ -464,7 +479,7 @@ class Plugin(Instance):
         try:
             pipeline_result = pipeline.run_single(value, context)
         except Exception as e:
-            logger.error(f"Error running QC pipeline for {adl_param.name}: {e}")
+            log.error(f"Error running QC pipeline for {adl_param.name}: {e}")
             return QCBits(0), QCStatus.NOT_EVALUATED, []
         
         qc_bits = QCBits(0)
@@ -500,8 +515,8 @@ class Plugin(Instance):
                         "reason": summary_message,
                     })
         
-        logger.debug(f"QC result for {adl_param.name}: passed={pipeline_result.passed}, "
-                     f"confidence={pipeline_result.confidence:.2f}, flags={[f.name for f in pipeline_result.flags]}")
+        log.debug(f"QC result for {adl_param.name}: passed={pipeline_result.passed}, "
+                  f"confidence={pipeline_result.confidence:.2f}, flags={[f.name for f in pipeline_result.flags]}")
         
         return qc_bits, qc_status, qc_messages
     
@@ -535,6 +550,8 @@ class Plugin(Instance):
         """Get recent observation history for QC context"""
         from adl.core.models import ObservationRecord
         
+        log = self.get_logger()
+        
         try:
             recent_obs = ObservationRecord.objects.filter(
                 station=station_link.station,
@@ -552,7 +569,7 @@ class Plugin(Instance):
                 for obs in recent_obs
             ]
         except Exception as e:
-            logger.warning(f"Error getting recent history for QC: {e}")
+            log.warning(f"Error getting recent history for QC: {e}")
             return []
 
 

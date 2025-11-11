@@ -42,6 +42,10 @@ DEBUG = env('DEBUG', False)
 
 # Application definition
 INSTALLED_APPS = [
+    'daphne',
+    'channels',
+    
+    "django_eventstream",
     "django_countries",
     "django_celery_beat",
     "django_celery_results",
@@ -307,6 +311,16 @@ CACHES = {
 
 CELERY_CACHE_BACKEND = "default"
 
+EVENTSTREAM_REDIS = {
+    'host': REDIS_HOST,
+    'port': REDIS_PORT,
+    'username': REDIS_USERNAME,
+    'password': REDIS_PASSWORD,
+    'db': 0,
+}
+EVENTSTREAM_ALLOW_ORIGIN = '*'
+EVENTSTREAM_CHANNELMANAGER_CLASS = 'django_eventstream.channelmanager.DefaultChannelManager'
+
 ADL_LOG_LEVEL = env.str("ADL_LOG_LEVEL", "INFO")
 ADL_DATABASE_LOG_LEVEL = env.str("ADL_DATABASE_LOG_LEVEL", "ERROR")
 
@@ -411,9 +425,7 @@ DBBACKUP_CLEANUP_KEEP_MEDIA = 1
 DBBACKUP_CLEANUP_KEEP = 1
 DBBACKUP_CONNECTORS = {
     "default": {
-        "CONNECTOR": "dbbackup.db.postgresql.PgDumpBinaryConnector",  # Use pg_dump binary
-        "DUMP_SUFFIX": "-e plpgsql",  # dump only system extensions
-        "RESTORE_SUFFIX": "--if-exists"  # Drop only if exists
+        "CONNECTOR": "dbbackup.db.postgresql.PgDumpBinaryConnector",
     }
 }
 

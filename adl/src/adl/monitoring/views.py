@@ -1,5 +1,7 @@
-from datetime import timedelta
+from datetime import timedelta, datetime
 
+from celery import current_app
+from django.http import JsonResponse
 from django.shortcuts import render, get_object_or_404
 from django.urls import reverse_lazy
 from django.utils import timezone as dj_timezone
@@ -16,6 +18,17 @@ from adl.core.utils import get_object_or_none
 from .constants import NETWORK_PLUGIN_TASK_NAME
 from .models import StationLinkActivityLog
 from .serializers import TaskResultSerializer, StationLinkActivityLogSerializer
+
+
+def task_monitor(request):
+    context = {
+        "page_title": _("Task Monitor"),
+        "breadcrumbs_items": [
+            {"url": reverse_lazy("wagtailadmin_home"), "label": _("Home")},
+            {"url": "", "label": _("Task Monitor")},
+        ],
+    }
+    return render(request, 'monitoring/task_monitor.html', context)
 
 
 @api_view()
@@ -270,3 +283,68 @@ def station_link_monitoring(request, link_id):
         "station_link": link,
     }
     return render(request, "monitoring/station_link_monitoring.html", context)
+
+
+def get_active_tasks_by_network(request, network_id=None):
+    """
+    Get currently running/pending tasks using Celery inspect API
+    Optionally filtered by network_id
+    """
+    inspect = current_app.control.inspect()
+    
+    active_tasks = []
+    
+    # Get active (currently executing) tasks
+    active = inspect.active()
+    if active:
+        for worker, tasks in active.items():
+            active_tasks.extend(tasks)
+    
+    # Get reserved (queued) tasks
+    reserved = inspect.reserved()
+    if reserved:
+        for worker, tasks in reserved.items():
+            active_tasks.extend(tasks)
+    
+    # Filter and format tasks
+    filtered_tasks = []
+    
+    for task in active_tasks:
+        task_name = task.get('name', '')
+        task_args = task.get('args', [])
+        task_id = task.get('id')
+        
+        # Only include our ADL tasks
+        if task_name not in ['adl.core.tasks.run_network_plugin',
+                             'adl.core.tasks.process_station_link_batch']:
+            continue
+        
+        # Extract network_id from args
+        task_network_id = None
+        if task_args and len(task_args) > 0:
+            task_network_id = int(task_args[0])
+        
+        # Filter by network_id if provided
+        if network_id and task_network_id != network_id:
+            continue
+        
+        # Determine status
+        is_active = task in (active.get(list(active.keys())[0], []) if active else [])
+        status = 'STARTED' if is_active else 'PENDING'
+        
+        filtered_tasks.append({
+            'task_id': task_id,
+            'task_name': task_name,
+            'task_name_short': task_name.split('.')[-1],  # Just the function name
+            'network_id': task_network_id,
+            'status': status,
+            'worker': task.get('hostname'),
+            'started_at': datetime.fromtimestamp(task.get('time_start', 0)).isoformat() if task.get(
+                'time_start') else None,
+            'args': task_args,
+        })
+    
+    return JsonResponse({
+        'tasks': filtered_tasks,
+        'count': len(filtered_tasks)
+    })

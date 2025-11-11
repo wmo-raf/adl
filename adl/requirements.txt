@@ -36,3 +36,4 @@ pydantic==2.11.7
 django-oauth-toolkit
 django-allauth
 django-enum.IntFlag-field==0.0.4
+django-eventstream==5.3.3
