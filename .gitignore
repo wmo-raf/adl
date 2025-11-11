@@ -179,3 +179,5 @@ adl/src/adl/static
 adl/src/adl/media
 
 backup/
+node_modules/
+.vscode/

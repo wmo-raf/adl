@@ -4,11 +4,12 @@ from django.http import JsonResponse
 from django.shortcuts import render
 from django.urls import reverse
 from rest_framework.decorators import permission_classes
+from wagtail.admin import messages
 from wagtail.api.v2.utils import get_full_url
 
 from adl.api.auth import HasAPIKeyOrIsAuthenticated
 from adl.core.models import AdlSettings
-from adl.viewer.utils import _fetch_pg_tileserv_mvt_tile
+from adl.viewer.utils import _fetch_pg_tileserv_mvt_tile, reload_pg_tileserv_index
 
 
 @permission_classes([HasAPIKeyOrIsAuthenticated])
@@ -97,3 +98,21 @@ def map_view(request):
         })
     
     return render(request, 'viewer/map.html', context)
+
+
+def pg_tileserver_settings(request):
+    breadcrumb_items = [
+        {"url": reverse("wagtailadmin_home"), "label": "Home"},
+        {"url": "", "label": "PgTileServ Settings"},
+    ]
+    
+    context = {
+        "page_title": "PgTileServ Settings",
+        "breadcrumbs_items": breadcrumb_items,
+    }
+    
+    if request.method == "POST":
+        reload_pg_tileserv_index()
+        messages.success(request, "PgTileServ settings updated.")
+    
+    return render(request, 'viewer/tileserver_settings.html', context)

@@ -29,3 +29,17 @@ def _fetch_pg_tileserv_mvt_tile(url_path, z, x, y, params):
     
     response = session.get(url, params=params)
     return HttpResponse(response.content, content_type='application/vnd.mapbox-vector-tile')
+
+
+def reload_pg_tileserv_index():
+    """
+    Trigger pg_tileserv to reload its home schema
+    """
+    if not ADL_PG_TILESERV_BASE_URL:
+        raise RuntimeError("No tileserv base url set")
+    
+    session = get_tileserv_session()
+    
+    response = session.get(ADL_PG_TILESERV_BASE_URL)
+    if response.status_code != 200:
+        raise RuntimeError(f"Failed to reload pg_tileserv index: {response.status_code} {response.text}")

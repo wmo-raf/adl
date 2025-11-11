@@ -1,0 +1,21 @@
+{% extends "wagtailadmin/generic/base.html" %}
+{% load wagtailadmin_tags i18n %}
+
+{% block main_content %}
+    <div style="margin-top: 2rem;">
+        <form method="post">
+            {% csrf_token %}
+            <div>
+                <h2>Reload TileServer Tables</h2>
+                <p>
+                    Click the button below to reload the TileServer tables. This action will refresh the data used by
+                    the TileServer to ensure it is up-to-date.
+                </p>
+            </div>
+
+            <button type="submit" class="button button--primary">
+                Reload TileServer Tables
+            </button>
+        </form>
+    </div>
+{% endblock %}

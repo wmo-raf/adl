@@ -1,5 +1,7 @@
 <script setup>
 import {computed, onBeforeUnmount, onMounted, ref} from 'vue';
+import DatePicker from 'primevue/datepicker';
+
 
 const props = defineProps({
   initialDate: {
@@ -14,7 +16,6 @@ const props = defineProps({
 });
 
 const emit = defineEmits(['timeChange']);
-
 // Reactive state
 const currentTime = ref(new Date(props.initialDate));
 const maxTime = ref(new Date()); // Current time as maximum
@@ -22,19 +23,12 @@ const offset = ref(0);
 const isDragging = ref(false);
 const dragStartX = ref(0);
 const timelineWrapper = ref(null);
+const dragStartTime = ref(null); // Store the time when drag started
 
 // Constants
 const PIXELS_PER_MINUTE = 2;
 const MINUTES_INTERVAL = 5;
 
-const formattedDateTime = computed(() => {
-  const year = currentTime.value.getFullYear();
-  const month = String(currentTime.value.getMonth() + 1).padStart(2, '0');
-  const day = String(currentTime.value.getDate()).padStart(2, '0');
-  const hours = String(currentTime.value.getHours()).padStart(2, '0');
-  const minutes = String(currentTime.value.getMinutes()).padStart(2, '0');
-  return `${year}-${month}-${day} ${hours}:${minutes}`;
-});
 
 const visibleMarks = computed(() => {
   const marks = [];
@@ -79,6 +73,7 @@ const visibleMarks = computed(() => {
 function startDrag(e) {
   isDragging.value = true;
   dragStartX.value = e.type.includes('mouse') ? e.clientX : e.touches[0].clientX;
+  dragStartTime.value = new Date(currentTime.value); // Store the starting time
 
   if (timelineWrapper.value) {
     timelineWrapper.value.style.cursor = 'grabbing';
@@ -116,7 +111,7 @@ function onDrag(e) {
   dragStartX.value = currentX;
   offset.value = 0;
 
-  emit('timeChange', targetTime);
+  // DO NOT emit timeChange here during dragging
 }
 
 function endDrag() {
@@ -127,6 +122,13 @@ function endDrag() {
     if (timelineWrapper.value) {
       timelineWrapper.value.style.cursor = 'grab';
     }
+
+    // Only emit timeChange when dragging stops AND if the time actually changed
+    if (dragStartTime.value && dragStartTime.value.getTime() !== currentTime.value.getTime()) {
+      emit('timeChange', currentTime.value);
+    }
+
+    dragStartTime.value = null; // Reset the drag start time
   }
 }
 
@@ -207,11 +209,17 @@ onBeforeUnmount(() => {
   <div class="timeline-container">
     <!-- Date/Time Display -->
     <div class="datetime-display">
-      <div class="datetime-stack">
-        <span class="datetime-main">{{ formattedDateTime }}</span>
-        <span class="datetime-sub">Local</span>
-      </div>
-      <div class="center-triangle"></div>
+      <DatePicker
+          v-model="currentTime"
+          showTime
+          hourFormat="24"
+          touchUI
+          :maxDate="maxTime"
+          :manualInput="false"
+          size="small"
+          class="timeline-calendar-popup"
+          @date-select="(value) => emit('timeChange', value)"
+      />
     </div>
 
     <!-- Timeline Controls -->
@@ -329,9 +337,11 @@ onBeforeUnmount(() => {
 <style scoped>
 .timeline-container {
   width: 100%;
+  position: relative;
 }
 
 .datetime-display {
+  margin-bottom: 0.5rem;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -362,14 +372,6 @@ onBeforeUnmount(() => {
 .datetime-sub {
   font-size: 12px;
   color: #757575;
-}
-
-.center-triangle {
-  width: 0;
-  height: 0;
-  border-left: 8px solid transparent;
-  border-right: 8px solid transparent;
-  border-top: 8px solid #757575;
 }
 
 .timeline-controls {
