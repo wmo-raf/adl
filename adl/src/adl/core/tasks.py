@@ -14,6 +14,7 @@ from more_itertools import chunked
 
 from adl.config.celery import app
 from .dispatchers import run_dispatch_channel
+from .logging import TaskLogger
 from .utils import get_object_or_none
 
 logger = logging.getLogger(__name__)
@@ -39,44 +40,109 @@ def setup_periodic_tasks(sender, **kwargs):
     )
 
 
-@shared_task(bind=True)
+@shared_task(bind=True, name='adl.core.tasks.run_network_plugin')
 def run_network_plugin(self, network_id):
+    """
+    Coordinator task that spawns batch processing subtasks.
+    This task primarily logs orchestration events.
+    """
     from .models import NetworkConnection
+    
+    task_id = self.request.id
+    log = TaskLogger(task_id=task_id, plugin_label="NetworkPlugin")
+    
     network_connection = get_object_or_none(NetworkConnection, id=network_id)
     
     if not network_connection:
-        logger.error(f"Network Connection with id {network_id} does not exist. Skipping...")
+        log.error("Network Connection with id %d does not exist. Skipping...", network_id)
         return
+    
+    log.info("Starting network plugin for connection: %s (ID: %d)",
+             network_connection.name, network_id)
     
     batch_size = network_connection.batch_size or 10
     
     # only process enabled station links
-    station_link_ids = network_connection.station_links.filter(enabled=True).values_list("id", flat=True)
+    station_link_ids = list(
+        network_connection.station_links.filter(enabled=True).values_list("id", flat=True)
+    )
+    
+    if not station_link_ids:
+        log.warning("No enabled station links found for connection %s", network_connection.name)
+        return
+    
+    log.info("Found %d enabled station links. Batch size: %d",
+             len(station_link_ids), batch_size)
+    
+    batch_count = 0
+    spawned_tasks = []
+    
     for batch in chunked(station_link_ids, batch_size):
-        process_station_link_batch_task.delay(network_id, batch)
+        batch_count += 1
+        batch_list = list(batch)
+        
+        log.info("Spawning batch %d with %d station links: %s",
+                 batch_count, len(batch_list), batch_list)
+        
+        task = process_station_link_batch_task.delay(network_id, batch_list)
+        
+        spawned_tasks.append(task.id)
+    
+    log.success("Successfully spawned %d batch tasks for connection %s",
+                batch_count, network_connection.name)
+    
+    return {
+        'status': 'success',
+        'network_id': network_id,
+        'connection_name': network_connection.name,
+        'total_station_links': len(station_link_ids),
+        'batch_count': batch_count,
+        'spawned_tasks': spawned_tasks
+    }
 
 
-@shared_task(bind=True)
+@shared_task(bind=True, name='adl.core.tasks.process_station_link_batch')
 def process_station_link_batch_task(self, network_id, station_link_ids):
     from adl.core.registries import plugin_registry
     from .models import NetworkConnection
     from .models import StationLink
     from adl.monitoring.models import StationLinkActivityLog
     
+    # Create task logger for this batch task
+    task_id = self.request.id
+    log = TaskLogger(
+        task_id=task_id,
+        plugin_label="BatchProcessor",
+    )
+    
+    log.info("Starting batch processing for network %d with %d station links: %s",
+             network_id, len(station_link_ids), station_link_ids)
+    
     network_connection = get_object_or_none(NetworkConnection, id=network_id)
     
     if not network_connection:
-        logger.error(f"Network Connection with id {network_id} does not exist. Skipping...")
+        log.error("Network Connection with id %d does not exist. Skipping...", network_id)
         return
     
     network_plugin_type = network_connection.plugin
     plugin = plugin_registry.get(network_plugin_type)
     
+    # Set the task context on the plugin so it uses the same task_id for logging
+    plugin.set_task_context(task_id)
+    
+    log.info("Using plugin: %s for network connection: %s",
+             plugin.label, network_connection.name)
+    
+    total_processed = 0
+    total_records = 0
+    skipped = 0
+    errors = 0
+    
     for station_link_id in station_link_ids:
         station_link = get_object_or_none(StationLink, id=station_link_id)
         
         if not station_link:
-            logger.error(f"Station link with id {station_link_id} does not exist. Skipping...")
+            log.error("Station link with id %d does not exist. Skipping...", station_link_id)
             continue
         
         lock_key = f"lock:station:{station_link_id}"
@@ -84,36 +150,67 @@ def process_station_link_batch_task(self, network_id, station_link_ids):
         lock_acquired = cache.add(lock_key, "locked", timeout=None)
         
         if not lock_acquired:
-            logger.warning(f"Station link {station_link_id} is still processing. Skipping...")
+            log.warning("Station link %s (ID: %d) is still processing. Skipping...",
+                        station_link, station_link_id)
+            skipped += 1
             continue
         
         start = time.monotonic()
-        log = StationLinkActivityLog.objects.create(
+        activity_log = StationLinkActivityLog.objects.create(
             time=dj_timezone.now(),
             station_link=station_link,
             direction='pull',
         )
         
+        log.info("Processing station link: %s (ID: %d)", station_link, station_link_id)
+        
         try:
+            # This will now log to WebSocket via the plugin's logger
             saved_records_count = plugin.process_station(station_link)
             
-            log.success = True
-            log.records_count = saved_records_count
+            activity_log.success = True
+            activity_log.records_count = saved_records_count
             
             if saved_records_count > 0:
-                logger.info(f"Processed {saved_records_count} records for station link {station_link_id}")
+                log.success("Processed %d records for station link %s",
+                            saved_records_count, station_link)
+                total_records += saved_records_count
+            else:
+                log.info("No new records for station link %s", station_link)
+            
+            total_processed += 1
         
         except Exception as e:
-            log.success = False
-            log.message = str(e)
-            logger.error(f"Error processing station link {station_link_id}: {e}")
+            activity_log.success = False
+            activity_log.message = str(e)
+            log.error("Error processing station link %s: %s", station_link, str(e), exc_info=True)
+            errors += 1
+        
         finally:
-            
-            log.duration_ms = (time.monotonic() - start) * 1000
-            log.save()
+            activity_log.duration_ms = (time.monotonic() - start) * 1000
+            activity_log.save()
             
             # Release the lock after processing
             cache.delete(lock_key)
+            
+            log.info("Station link %s completed in %.2fms",
+                     station_link, activity_log.duration_ms)
+    
+    # Summary
+    log.success(
+        "Batch complete. Processed: %d, Records saved: %d, Skipped: %d, Errors: %d",
+        total_processed, total_records, skipped, errors
+    )
+    
+    return {
+        'status': 'success',
+        'network_id': network_id,
+        'station_link_ids': station_link_ids,
+        'processed': total_processed,
+        'total_records': total_records,
+        'skipped': skipped,
+        'errors': errors
+    }
 
 
 @app.on_after_finalize.connect

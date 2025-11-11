@@ -1,0 +1,18 @@
+{% extends "wagtailadmin/generic/base.html" %}
+{% load wagtailadmin_tags i18n vue_utils static %}
+
+{% get_current_language as LANGUAGE_CODE %}
+
+{% block extra_css %}
+{% endblock %}
+
+{% block main_content %}
+    <div id="task-monitor"></div>
+{% endblock %}
+
+{% block extra_js %}
+    {{ block.super }}
+    <script src="{% static 'django_eventstream/eventsource.min.js' %}"></script>
+    <script src="{% static 'django_eventstream/reconnecting-eventsource.js' %}"></script>
+    <script type="module" crossorigin src="{% vue_bundle_url 'task-monitor' %}"></script>
+{% endblock %}
