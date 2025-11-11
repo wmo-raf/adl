@@ -68,6 +68,7 @@ services:
     command: gunicorn wsgi
     environment:
       <<: *backend-variables
+      ADL_PG_TILESERV_BASE_URL: ${ADL_PG_TILESERV_BASE_URL:-http://adl_pg_tileserv:7800}
     expose:
       - "8000"
     depends_on:
@@ -138,6 +139,13 @@ services:
       - ./deploy/nginx/nginx.conf:/etc/nginx/nginx.conf
     ports:
       - ${ADL_WEB_PROXY_PORT:-80}:80
+
+  adl_pg_tileserv:
+    image: pramsey/pg_tileserv:latest
+    container_name: adl_pg_tileserv
+    restart: always
+    environment:
+      - DATABASE_URL=${ADL_PG_TILESERV_DATABASE_URL:-postgresql://${ADL_DB_USER}:${ADL_DB_PASSWORD}@adl_db:5432/${ADL_DB_NAME}}
 
 networks:
   default:

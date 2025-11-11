@@ -1,0 +1,34 @@
+{% extends "wagtailadmin/generic/base.html" %}
+{% load wagtailadmin_tags i18n vue_utils %}
+
+{% get_current_language as LANGUAGE_CODE %}
+
+{% block extra_css %}
+    <style>
+        .content {
+            padding: 0 !important;
+            height: 100%;
+            width: 100%;
+        }
+
+        #map-view {
+            width: 100%;
+            height: 100%;
+        }
+    </style>
+{% endblock %}
+
+{% block content %}
+    <div id="map-view"
+         data-api-url="{{ api_url }}"
+         data-language-code="{{ LANGUAGE_CODE }}"
+         data-bounds="{{ bounds }}"
+         data-latest-records-mvt-url="{{ latest_records_mvt_url }}"
+         data-nearest-records-mvt-url="{{ nearest_records_mvt_url }}">
+    </div>
+{% endblock %}
+
+{% block extra_js %}
+    {{ block.super }}
+    <script type="module" crossorigin src="{% vue_bundle_url 'map-view' %}"></script>
+{% endblock %}

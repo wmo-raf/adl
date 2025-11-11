@@ -45,10 +45,6 @@ const LABEL_LAYER_ID = 'observations-labels';
 
 const activePopup = ref(null);
 
-const isLoadingTiles = ref(false);
-let pendingRequests = 0;
-let spinnerTimer;
-
 // Parse bounds string to array
 const boundsArray = computed(() => {
   if (!props.bounds) return null;
@@ -337,28 +333,6 @@ onMounted(() => {
       updateMapSource();
     }
   });
-
-  map.value.on('dataloading', (e) => {
-    if (e.dataType === 'source') {
-      pendingRequests++;
-      clearTimeout(spinnerTimer);
-      isLoadingTiles.value = true;
-    }
-  });
-
-  map.value.on('data', (e) => {
-    if (e.dataType === 'source') {
-      pendingRequests = Math.max(0, pendingRequests - 1);
-      if (pendingRequests === 0) {
-        // Delay hiding slightly to avoid flicker
-        spinnerTimer = setTimeout(() => {
-          isLoadingTiles.value = false;
-        }, 200);
-      }
-    }
-  });
-
-
 });
 
 onUnmounted(() => {
@@ -384,7 +358,6 @@ watch(tileUrl, (newUrl) => {
 
 <template>
   <div ref="mapContainer" class="map-container">
-    <div v-if="isLoadingTiles" class="map-loading-bar"></div>
     <Panel class="mv-selector-panel" toggleable>
       <div class="mv-selectors">
         <NetworkConnectionSelect
@@ -521,26 +494,5 @@ watch(tileUrl, (newUrl) => {
 
 .map-container :deep(.popup-time svg) {
   flex-shrink: 0;
-}
-
-.map-loading-bar {
-  position: absolute;
-  top: 0;
-  left: 0;
-  height: 3px;
-  width: 100%;
-  background: linear-gradient(90deg, #3b82f6, #22c55e, #eab308);
-  background-size: 200% 100%;
-  animation: map-loading-stripes 1s linear infinite;
-  z-index: 5;
-}
-
-@keyframes map-loading-stripes {
-  0% {
-    background-position: 200% 0;
-  }
-  100% {
-    background-position: -200% 0;
-  }
 }
 </style>

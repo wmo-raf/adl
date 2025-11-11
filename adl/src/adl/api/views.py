@@ -15,6 +15,7 @@ from adl.core.models import (
     ObservationRecord,
     DataParameter
 )
+from adl.viewer.models import MapViewerSetting
 from .auth import HasAPIKeyOrIsAuthenticated
 from .pagination import StandardResultsSetPagination
 from .serializers import (
@@ -311,3 +312,57 @@ def get_station_link_timeseries_data(request, station_link_id):
     paginated = paginator.paginate_queryset(grouped_data, request)
     
     return paginator.get_paginated_response(paginated)
+
+
+@api_view()
+@permission_classes([HasAPIKeyOrIsAuthenticated])
+def get_network_connection_data_parameters(request, network_conn_id):
+    network = get_object_or_404(NetworkConnection, id=network_conn_id)
+    stations = network.station_links.all()
+    
+    unique_variable_mappings = {}
+    
+    for station_link in stations:
+        station_link_variable_mappings = None
+        if hasattr(station_link.network_connection, 'variable_mappings'):
+            station_link_variable_mappings = station_link.network_connection.variable_mappings.all()
+        elif hasattr(station_link, 'variable_mappings'):
+            station_link_variable_mappings = station_link.variable_mappings.all()
+        
+        if station_link_variable_mappings:
+            for variable_mapping in station_link_variable_mappings:
+                if hasattr(variable_mapping, 'adl_parameter'):
+                    unique_variable_mappings[variable_mapping.adl_parameter.id] = variable_mapping.adl_parameter
+    
+    # Get the map settings with prefetch
+    map_settings = MapViewerSetting.for_request(request)
+    
+    # Get all styles in one query, filtered by the parameters we have
+    parameter_ids = list(unique_variable_mappings.keys())
+    styles = map_settings.data_parameter_styles.filter(
+        data_parameter_id__in=parameter_ids
+    ).select_related('data_parameter')
+    
+    # Build a dictionary of styles
+    styles_dict = {
+        style.data_parameter.id: {
+            'color_scale': style.get_maplibre_color_scale(),
+            'color_stops': style.get_color_scale_json(),
+        }
+        for style in styles
+    }
+    
+    # Serialize data parameters
+    data_parameters = DataParameterSerializer(unique_variable_mappings.values(), many=True)
+    
+    # Add style information to each parameter
+    result = []
+    for param in data_parameters.data:
+        param_with_style = param.copy()
+        param_id = param['id']
+        
+        param_with_style['style'] = styles_dict.get(param_id, None)
+        
+        result.append(param_with_style)
+    
+    return Response(result)
