@@ -6,6 +6,7 @@ from wagtail.admin.views import generic
 from wagtail.admin.viewsets.chooser import ChooserViewSet
 from wagtail.admin.viewsets.model import ModelViewSet
 from wagtail.admin.widgets import HeaderButton, ListingButton
+from .components import StationLinkCollectionStatusPanel
 
 from .constants import PREDEFINED_DATA_PARAMETERS
 from .models import (
@@ -122,6 +123,13 @@ class StationChooserViewSet(ChooserViewSet):
     choose_another_text = "Choose different Station"
     edit_item_text = "Edit this Station"
     list_per_page = 50
+
+
+class StationLinkInspectView(generic.InspectView):
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context["collection_status_panel"] = StationLinkCollectionStatusPanel()
+        return context
 
 
 class UnitViewSet(AdletViewSet):

@@ -63,7 +63,7 @@ def get_station_channel_records(dispatch_channel, station_id, connection_id):
     return obs_records.order_by(time_field)
 
 
-def get_dispatch_channel_data(dispatch_channel):
+def get_dispatch_channel_data(dispatch_channel, station_link_ids=None):
     channel_name = dispatch_channel.name
     logger.info(f"[DISPATCH] Getting dispatch data for channel '{channel_name}'")
     
@@ -95,6 +95,9 @@ def get_dispatch_channel_data(dispatch_channel):
     
     # get station links for the dispatch channel that are enabled to send data
     station_links = dispatch_channel.stations_allowed_to_send()
+    
+    if station_link_ids:
+        station_links = station_links.filter(id__in=station_link_ids)
     
     # group by station and by time
     by_station_by_time = {}
@@ -171,7 +174,7 @@ def get_dispatch_channel_data(dispatch_channel):
     return station_records_by_id
 
 
-def run_dispatch_channel(dispatcher_id):
+def run_dispatch_channel(dispatcher_id, station_link_ids=None):
     from adl.core.models import DispatchChannel, StationChannelDispatchStatus, StationLink
     dispatch_channel = get_object_or_none(DispatchChannel, id=dispatcher_id)
     
@@ -186,7 +189,7 @@ def run_dispatch_channel(dispatcher_id):
             f"[DISPATCH] No network connections found for dispatch channel {dispatch_channel.name}. Skipping...")
         return {"num_of_sent_records": 0}
     
-    data_records_by_station = get_dispatch_channel_data(dispatch_channel)
+    data_records_by_station = get_dispatch_channel_data(dispatch_channel, station_link_ids=station_link_ids)
     
     if not data_records_by_station:
         return {"num_of_sent_records": 0}

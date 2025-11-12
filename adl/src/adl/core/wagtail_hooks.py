@@ -38,9 +38,15 @@ from .views import (
     dispatch_channel_add_select,
     create_predefined_data_parameters,
     get_plugin_list,
-    dispatch_channel_station_links
+    dispatch_channel_station_links,
+    trigger_station_collection,
+    trigger_station_dispatch
 )
-from .viewsets import admin_viewsets, DispatchChannelIndexView
+from .viewsets import (
+    admin_viewsets,
+    DispatchChannelIndexView,
+    StationLinkInspectView
+)
 
 adl_register_plugin_menu_items_hook_name = "register_adl_plugin_menu_items"
 
@@ -60,6 +66,16 @@ def urlconf_adl():
         path('dispatch-channel/<int:channel_id>/station-links', dispatch_channel_station_links,
              name="dispatch_channel_station_links"),
         path('plugins/', get_plugin_list, name="plugins_list"),
+        path(
+            'station-link/<int:station_link_id>/trigger-collection/',
+            trigger_station_collection,
+            name='trigger_station_collection'
+        ),
+        path(
+            'station-link/<int:station_link_id>/trigger-dispatch/<int:channel_id>/',
+            trigger_station_dispatch,
+            name='trigger_station_dispatch'
+        ),
     ]
 
 
@@ -68,6 +84,9 @@ def insert_editor_js():
     return format_html(
         '<script src="{}"></script>', static("adl/js/conditional_fields.js"),
     )
+
+
+station_link_inspect_template_name = "core/station_link_inspect.html"
 
 
 # Register all NetworkConnection models
@@ -82,12 +101,24 @@ def get_connection_viewsets():
         if hasattr(model_cls, "station_link_model_string_label"):
             station_link_model = get_model_by_string_label(model_cls.station_link_model_string_label)
             if station_link_model:
-                station_link_viewset = make_registrable_viewset(station_link_model, list_filter=["network_connection"])
+                station_link_viewset_kwargs = {
+                    "list_filter": ["network_connection"]
+                }
+                
+                station_link_viewset_kwargs["inspect_view_enabled"] = True
+                station_link_viewset_kwargs["inspect_template_name"] = station_link_inspect_template_name
+                station_link_viewset_kwargs["inspect_view_class"] = StationLinkInspectView
+                
+                station_link_viewset = make_registrable_viewset(station_link_model, **station_link_viewset_kwargs)
                 station_link_viewset_registry.register(station_link_viewset)
                 station_link_viewsets.append(station_link_viewset)
         
-        connection_viewset = make_registrable_connection_viewset(model_cls, station_link_model=station_link_model,
-                                                                 list_filter=["network"])
+        connection_viewset_kwargs = {
+            "list_filter": ["network"]
+        }
+        connection_viewset = make_registrable_connection_viewset(
+            model_cls, station_link_model=station_link_model, **connection_viewset_kwargs
+        )
         connection_viewset_registry.register(connection_viewset)
         connection_viewsets.append(connection_viewset)
     

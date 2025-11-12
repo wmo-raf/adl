@@ -1,0 +1,542 @@
+{% load wagtailadmin_tags i18n %}
+
+<div class="collection-status">
+    <div class="collection-status__header">
+        <h3 class="collection-status__title">{% trans "Collection Status" %}</h3>
+    </div>
+
+    {# Pull Status Section #}
+    <div class="collection-status__section">
+        <div class="collection-status__section-header">
+            <svg class="icon icon-download" aria-hidden="true">
+                <use href="#icon-download"></use>
+            </svg>
+            <h4>{% trans "Data Collection (Pull)" %}</h4>
+        </div>
+
+        {% if station_link.latest_pull_log %}
+            <div class="status-card {% if station_link.latest_pull_log.success %}status-card--success{% else %}status-card--error{% endif %}">
+                <div class="status-card__grid">
+                    <div class="status-card__item">
+                        <span class="status-card__label">{% trans "Status" %}</span>
+                        <span class="status-card__value">
+                            <span class="status-badge {% if station_link.latest_pull_log.success %}status-badge--success{% else %}status-badge--error{% endif %}">
+                                {% if station_link.latest_pull_log.success %}{% trans "Success" %}{% else %}
+                                    {% trans "Failed" %}{% endif %}
+                            </span>
+                        </span>
+                    </div>
+
+                    <div class="status-card__item">
+                        <span class="status-card__label">{% trans "Last Run" %}</span>
+                        <span class="status-card__value">{{ station_link.latest_pull_log.time|date:"Y-m-d H:i:s" }}</span>
+                    </div>
+
+                    <div class="status-card__item">
+                        <span class="status-card__label">{% trans "Records Fetched" %}</span>
+                        <span class="status-card__value">{{ station_link.latest_pull_log.records_count|default:"0" }}</span>
+                    </div>
+
+                    <div class="status-card__item">
+                        <span class="status-card__label">{% trans "Messages" %}</span>
+                        <span class="status-card__value">{{ station_link.latest_pull_log.messages_count|default:"0" }}</span>
+                    </div>
+
+                    <div class="status-card__item">
+                        <span class="status-card__label">{% trans "Duration" %}</span>
+                        <span class="status-card__value">
+                            {% if station_link.latest_pull_log.duration_ms %}
+                                {{ station_link.latest_pull_log.duration_seconds|floatformat:2 }}s
+                            {% else %}
+                                —
+                            {% endif %}
+                        </span>
+                    </div>
+
+                    {% if station_link.latest_pull_log.obs_start_time or station_link.latest_pull_log.obs_end_time %}
+                        <div class="status-card__item">
+                            <span class="status-card__label">{% trans "Observation Period" %}</span>
+                            <span class="status-card__value status-card__value--small">
+                                {% if station_link.latest_pull_log.obs_start_time %}
+                                    {{ station_link.latest_pull_log.obs_start_time|date:"Y-m-d H:i" }}
+                                {% else %}
+                                    —
+                                {% endif %}
+                                <br>
+                                {% trans "to" %}
+                                <br>
+                                {% if station_link.latest_pull_log.obs_end_time %}
+                                    {{ station_link.latest_pull_log.obs_end_time|date:"Y-m-d H:i" }}
+                                {% else %}
+                                    —
+                                {% endif %}
+                            </span>
+                        </div>
+                    {% endif %}
+                </div>
+
+                {% if not station_link.latest_pull_log.success and station_link.latest_pull_log.message %}
+                    <div class="status-card__error">
+                        <strong>{% trans "Error:" %}</strong>
+                        <code>{{ station_link.latest_pull_log.message }}</code>
+                    </div>
+                {% endif %}
+
+                {% if station_link.latest_pull_log.success and station_link.latest_pull_log.message %}
+                    <div class="status-card__message">
+                        {{ station_link.latest_pull_log.message }}
+                    </div>
+                {% endif %}
+            </div>
+        {% else %}
+            <div class="status-empty">
+                <p>{% trans "No collection activity recorded yet" %}</p>
+            </div>
+        {% endif %}
+
+        <div class="manual-trigger">
+            <form method="post" action="{% url 'trigger_station_collection' station_link.id %}"
+                  class="manual-trigger__form">
+                {% csrf_token %}
+                <input type="hidden" name="station_link_id" value="{{ station_link.id }}">
+                <button type="submit" class="button button-small button-secondary manual-trigger__button">
+                    <svg class="icon icon-download" aria-hidden="true">
+                        <use href="#icon-download"></use>
+                    </svg>
+                    {% trans "Trigger Collection Now" %}
+                </button>
+                <span class="manual-trigger__help">{% trans "Manually fetch latest data from source" %}</span>
+            </form>
+        </div>
+    </div>
+
+    {# Push Status Section #}
+    <div class="collection-status__section">
+        <div class="collection-status__section-header">
+            <svg class="icon icon-upload" aria-hidden="true">
+                <use href="#icon-upload"></use>
+            </svg>
+            <h4>{% trans "Data Dispatch (Push)" %}</h4>
+        </div>
+
+        {% if station_link.dispatch_channels %}
+            <div class="dispatch-channels">
+                {% for channel in station_link.dispatch_channels %}
+                    <div class="dispatch-channel">
+                        <div class="dispatch-channel__header">
+                            <h5 class="dispatch-channel__name">
+                                {{ channel.name }}
+                                {% if not channel.enabled %}
+                                    <span class="status-badge status-badge--disabled">{% trans "Disabled" %}</span>
+                                {% endif %}
+                            </h5>
+                            {% if channel.public_url %}
+                                <a href="{{ channel.public_url }}" target="_blank" class="dispatch-channel__link"
+                                   title="{% trans 'View channel' %}">
+                                    <svg class="icon icon-link-external" aria-hidden="true">
+                                        <use href="#icon-link-external"></use>
+                                    </svg>
+                                </a>
+                            {% endif %}
+                        </div>
+
+                        {% if channel.latest_push_log %}
+                            <div class="status-card status-card--compact {% if channel.latest_push_log.success %}status-card--success{% else %}status-card--error{% endif %}">
+                                <div class="status-card__grid status-card__grid--compact">
+                                    <div class="status-card__item">
+                                        <span class="status-card__label">{% trans "Status" %}</span>
+                                        <span class="status-card__value">
+                                            <span class="status-badge {% if channel.latest_push_log.success %}status-badge--success{% else %}status-badge--error{% endif %}">
+                                                {% if channel.latest_push_log.success %}{% trans "Success" %}{% else %}
+                                                    {% trans "Failed" %}{% endif %}
+                                            </span>
+                                        </span>
+                                    </div>
+
+                                    <div class="status-card__item">
+                                        <span class="status-card__label">{% trans "Last Push" %}</span>
+                                        <span class="status-card__value">{{ channel.latest_push_log.time|date:"Y-m-d H:i:s" }}</span>
+                                    </div>
+
+                                    <div class="status-card__item">
+                                        <span class="status-card__label">{% trans "Records Sent" %}</span>
+                                        <span class="status-card__value">{{ channel.latest_push_log.records_count|default:"0" }}</span>
+                                    </div>
+
+                                    <div class="status-card__item">
+                                        <span class="status-card__label">{% trans "Messages" %}</span>
+                                        <span class="status-card__value">{{ channel.latest_push_log.messages_count|default:"0" }}</span>
+                                    </div>
+
+                                    <div class="status-card__item">
+                                        <span class="status-card__label">{% trans "Duration" %}</span>
+                                        <span class="status-card__value">
+                                            {% if channel.latest_push_log.duration_ms %}
+                                                {{ channel.latest_push_log.duration_seconds|floatformat:2 }}s
+                                            {% else %}
+                                                —
+                                            {% endif %}
+                                        </span>
+                                    </div>
+                                </div>
+
+                                {% if not channel.latest_push_log.success and channel.latest_push_log.message %}
+                                    <div class="status-card__error">
+                                        <strong>{% trans "Error:" %}</strong>
+                                        <code>{{ channel.latest_push_log.message }}</code>
+                                    </div>
+                                {% endif %}
+
+                                {% if channel.latest_push_log.success and channel.latest_push_log.message %}
+                                    <div class="status-card__message status-card__message--compact">
+                                        {{ channel.latest_push_log.message }}
+                                    </div>
+                                {% endif %}
+                            </div>
+                        {% else %}
+                            <div class="status-empty status-empty--compact">
+                                <p>{% trans "No dispatch activity recorded yet" %}</p>
+                            </div>
+                        {% endif %}
+
+                        {# Manual Dispatch Trigger Form #}
+                        <div class="manual-trigger manual-trigger--compact">
+                            <form method="post" action="{% url 'trigger_station_dispatch' station_link.id channel.id %}"
+                                  class="manual-trigger__form">
+                                {% csrf_token %}
+                                <input type="hidden" name="station_link_id" value="{{ station_link.id }}">
+                                <input type="hidden" name="dispatch_channel_id" value="{{ channel.id }}">
+                                <button type="submit"
+                                        class="button button-small button-secondary manual-trigger__button">
+                                    <svg class="icon icon-upload" aria-hidden="true">
+                                        <use href="#icon-upload"></use>
+                                    </svg>
+                                    {% trans "Trigger Dispatch Now" %}
+                                </button>
+                                <span class="manual-trigger__help">{% trans "Manually send data to this channel" %}</span>
+                            </form>
+                        </div>
+                    </div>
+                {% endfor %}
+            </div>
+        {% else %}
+            {# No Dispatch Channels Message #}
+            <div class="help-block help-info">
+                <svg class="icon icon-help" aria-hidden="true">
+                    <use href="#icon-help"></use>
+                </svg>
+                <div>
+                    <p><strong>{% trans "No dispatch channels connected" %}</strong></p>
+                    <p>{% trans "This station is not connected to any dispatch channels yet. Data collected from this station will not be automatically distributed." %}</p>
+                    <p>{% trans "To enable data dispatch, configure a dispatch channel in the network connection settings and link it to this station." %}</p>
+                </div>
+            </div>
+        {% endif %}
+    </div>
+</div>
+
+<style>
+    .collection-status {
+        margin: 40px 0;
+        background: white;
+        border-radius: 6px;
+        overflow: hidden;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+    }
+
+    .collection-status__header {
+        padding: 1.25rem 1.5rem;
+        border-bottom: 2px solid #e8e8e8;
+        background: #fafafa;
+    }
+
+    .collection-status__title {
+        margin: 0;
+        font-size: 1.125rem;
+        font-weight: 600;
+        color: #333;
+    }
+
+    .collection-status__section {
+        padding: 1.5rem;
+        border-bottom: 1px solid #e8e8e8;
+    }
+
+    .collection-status__section:last-child {
+        border-bottom: none;
+    }
+
+    .collection-status__section-header {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        margin-bottom: 1rem;
+    }
+
+    .collection-status__section-header h4 {
+        margin: 0;
+        font-size: 1rem;
+        font-weight: 600;
+        color: #555;
+    }
+
+    .collection-status__section-header .icon {
+        width: 1.25rem;
+        height: 1.25rem;
+        color: #666;
+    }
+
+    /* Status Cards */
+    .status-card {
+        background: #f9f9f9;
+        border-radius: 4px;
+        padding: 1.25rem;
+        border-left: 4px solid #ccc;
+        margin-bottom: 1rem;
+    }
+
+    .status-card--success {
+        border-left-color: #28a745;
+        background: #f0f9f4;
+    }
+
+    .status-card--error {
+        border-left-color: #dc3545;
+        background: #fef5f5;
+    }
+
+    .status-card--warning {
+        border-left-color: #ffc107;
+        background: #fffbf0;
+    }
+
+    .status-card__grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+        gap: 1rem;
+    }
+
+    .status-card__grid--compact {
+        grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+        gap: 0.75rem;
+    }
+
+    .status-card__item {
+        display: flex;
+        flex-direction: column;
+        gap: 0.25rem;
+    }
+
+    .status-card__label {
+        font-size: 0.75rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        color: #666;
+        letter-spacing: 0.5px;
+    }
+
+    .status-card__value {
+        font-size: 0.95rem;
+        color: #333;
+        font-weight: 500;
+    }
+
+    .status-card__value--small {
+        font-size: 0.8125rem;
+        line-height: 1.4;
+    }
+
+    .status-card__error {
+        margin-top: 1rem;
+        padding: 0.75rem;
+        background: rgba(220, 53, 69, 0.1);
+        border-radius: 4px;
+        font-size: 0.875rem;
+    }
+
+    .status-card__error code {
+        display: block;
+        margin-top: 0.5rem;
+        padding: 0.5rem;
+        background: white;
+        border-radius: 3px;
+        font-size: 0.8125rem;
+        color: #d63031;
+        word-break: break-word;
+    }
+
+    .status-card__message {
+        margin-top: 1rem;
+        padding: 0.75rem;
+        background: rgba(40, 167, 69, 0.1);
+        border-radius: 4px;
+        font-size: 0.875rem;
+        color: #155724;
+    }
+
+    .status-card__message--compact {
+        padding: 0.5rem;
+        font-size: 0.8125rem;
+    }
+
+    /* Status Badges */
+    .status-badge {
+        display: inline-block;
+        padding: 0.25rem 0.625rem;
+        border-radius: 12px;
+        font-size: 0.75rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+    }
+
+    .status-badge--success {
+        background: #28a745;
+        color: white;
+    }
+
+    .status-badge--error {
+        background: #dc3545;
+        color: white;
+    }
+
+    .status-badge--warning {
+        background: #ffc107;
+        color: #333;
+    }
+
+    .status-badge--disabled {
+        background: #6c757d;
+        color: white;
+        margin-left: 0.5rem;
+        font-size: 0.6875rem;
+    }
+
+    /* Empty State */
+    .status-empty {
+        padding: 2rem;
+        text-align: center;
+        background: #f9f9f9;
+        border-radius: 4px;
+        border: 2px dashed #ddd;
+        margin-bottom: 1rem;
+    }
+
+    .status-empty--compact {
+        padding: 1rem;
+    }
+
+    .status-empty p {
+        margin: 0;
+        color: #999;
+        font-style: italic;
+    }
+
+    /* Manual Trigger Forms */
+    .manual-trigger {
+        background: #f8f9fa;
+        border-radius: 4px;
+        padding: 1rem;
+        border: 1px solid #e0e0e0;
+    }
+
+    .manual-trigger--compact {
+        margin-top: 0.75rem;
+        padding: 0.75rem;
+    }
+
+    .manual-trigger__form {
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+        flex-wrap: wrap;
+    }
+
+    .manual-trigger__button {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+        margin: 0;
+    }
+
+    .manual-trigger__button .icon {
+        width: 1rem;
+        height: 1rem;
+    }
+
+    .manual-trigger__button:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+    }
+
+    .manual-trigger__help {
+        font-size: 0.8125rem;
+        color: #666;
+        font-style: italic;
+    }
+
+    /* Dispatch Channels */
+    .dispatch-channels {
+        display: flex;
+        flex-direction: column;
+        gap: 1rem;
+    }
+
+    .dispatch-channel {
+        background: #fafafa;
+        border-radius: 4px;
+        padding: 1rem;
+        border: 1px solid #e8e8e8;
+    }
+
+    .dispatch-channel__header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 0.75rem;
+    }
+
+    .dispatch-channel__name {
+        margin: 0;
+        font-size: 0.9375rem;
+        font-weight: 600;
+        color: #444;
+        display: flex;
+        align-items: center;
+    }
+
+    .dispatch-channel__link {
+        color: #007bff;
+        transition: color 0.15s ease;
+    }
+
+    .dispatch-channel__link:hover {
+        color: #0056b3;
+    }
+
+    .dispatch-channel__link .icon {
+        width: 1rem;
+        height: 1rem;
+    }
+
+    .status-card--compact {
+        padding: 1rem;
+    }
+
+    /* Responsive */
+    @media (max-width: 768px) {
+        .status-card__grid {
+            grid-template-columns: 1fr;
+        }
+
+        .collection-status__section {
+            padding: 1rem;
+        }
+
+        .manual-trigger__form {
+            flex-direction: column;
+            align-items: flex-start;
+            gap: 0.5rem;
+        }
+    }
+</style>

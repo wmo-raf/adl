@@ -267,7 +267,7 @@ def update_network_plugin_periodic_task(sender, instance, **kwargs):
     base=Singleton,
     bind=True
 )
-def perform_channel_dispatch(self, channel_id):
+def perform_channel_dispatch(self, channel_id, station_link_ids=None):
     from .models import DispatchChannel
     channel = get_object_or_none(DispatchChannel, id=channel_id)
     
@@ -276,7 +276,7 @@ def perform_channel_dispatch(self, channel_id):
         logger.error(message)
         raise ValueError(message)
     
-    num_of_sent_records = run_dispatch_channel(channel.id)
+    num_of_sent_records = run_dispatch_channel(channel.id, station_link_ids=station_link_ids)
     
     return {"records_count": num_of_sent_records}
 
