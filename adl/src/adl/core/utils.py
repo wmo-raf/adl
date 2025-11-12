@@ -3,20 +3,20 @@ import logging
 import re
 
 import pandas as pd
+from adl.core.registries import station_link_viewset_registry
+from adl.core.registry import Instance
+from adl.core.table import LinkColumnWithIcon
 from django.apps import apps
 from django.contrib.gis.geos import Polygon, Point
 from django.core.exceptions import ValidationError
 from django.core.files.base import ContentFile
 from django.urls import reverse
+from django.utils.functional import cached_property
 from django.utils.translation import gettext
 from pyoscar import OSCARClient
 from wagtail.admin.views import generic
 from wagtail.admin.viewsets.model import ModelViewSet
 from wagtail.admin.widgets import ListingButton
-
-from adl.core.registries import station_link_viewset_registry
-from adl.core.registry import Instance
-from adl.core.table import LinkColumnWithIcon
 
 logger = logging.getLogger(__name__)
 
@@ -224,8 +224,16 @@ def import_class_by_string_label(class_path):
     return getattr(module, class_name)
 
 
-def make_registrable_viewset(model_cls, icon="snippet", list_display=None, list_filter=None, index_view_class=None):
+def make_registrable_viewset(model_cls, **kwargs):
     from adl.core.viewsets import AdletViewSet, AdletIndexView
+    
+    icon = kwargs.get("icon", "snippet")
+    list_display = kwargs.get("list_display", None)
+    list_filter = kwargs.get("list_filter", None)
+    index_view_class = kwargs.get("index_view_class", AdletIndexView)
+    inspect_view_enabled = kwargs.get("inspect_view_enabled", False)
+    inspect_view_class = kwargs.get("inspect_view_class", None)
+    inspect_template_name = kwargs.get("inspect_template_name", None)
     
     model_name = model_cls._meta.model_name
     viewset_name = f"{model_name.title()}ViewSet"
@@ -236,6 +244,7 @@ def make_registrable_viewset(model_cls, icon="snippet", list_display=None, list_
         "type": model_name,
         "icon": icon,
         "index_view_class": index_view_class or AdletIndexView,
+        "inspect_view_enabled": inspect_view_enabled,
     }
     
     if list_display:
@@ -243,6 +252,16 @@ def make_registrable_viewset(model_cls, icon="snippet", list_display=None, list_
     
     if list_filter:
         attrs["list_filter"] = list_filter
+    
+    if inspect_view_enabled and inspect_view_class:
+        attrs["inspect_view_class"] = inspect_view_class
+        
+        if inspect_template_name:
+            @cached_property
+            def custom_inspect_template_name(self):
+                return inspect_template_name
+            
+            attrs["inspect_template_name"] = custom_inspect_template_name
     
     # Dynamically create the subclass
     ViewSetCls = type(viewset_name, (AdletViewSet, Instance), attrs)
@@ -278,7 +297,10 @@ class ConnectionIndexView(generic.IndexView):
         return table_kwargs
 
 
-def make_registrable_connection_viewset(model_cls, icon="snippet", station_link_model=None, list_filter=None):
+def make_registrable_connection_viewset(model_cls, station_link_model=None, **kwargs):
+    icon = kwargs.get("icon", "snippet")
+    list_filter = kwargs.get("list_filter", None)
+    
     model_name = model_cls._meta.model_name
     viewset_name = f"{model_name.title()}ViewSet"
     

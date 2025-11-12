@@ -1,7 +1,6 @@
 from datetime import timezone
 from enum import IntFlag, auto
 
-from adl.core.registries import plugin_registry
 from django import forms
 from django.contrib.gis.db import models
 from django.core.exceptions import ValidationError, ObjectDoesNotExist
@@ -25,6 +24,7 @@ from wagtail.models import Orderable
 from wagtail.snippets.models import register_snippet
 from wagtailgeowidget.panels import LeafletPanel
 
+from adl.core.registries import plugin_registry
 from .blocks import QCChecksStreamBlock
 from .dispatchers import get_dispatch_channel_data
 from .dispatchers.wis2box import upload_to_wis2box
@@ -512,6 +512,19 @@ class StationLink(PolymorphicModel, ClusterableModel):
     @property
     def plugin(self):
         return self.network_connection.get_plugin()
+    
+    def get_dispatch_channels(self):
+        """
+        A channel includes this station iff:
+          - station.network_connection is among channel.network_connections
+          - NOT explicitly disabled for that channel
+        """
+        return DispatchChannel.objects.filter(
+            network_connections=self.network_connection
+        ).exclude(
+            dispatch_station_links__station_link=self,
+            dispatch_station_links__disabled=True,
+        ).distinct()
 
 
 class QCStatus(models.IntegerChoices):
@@ -678,15 +691,20 @@ class DispatchChannel(PolymorphicModel, ClusterableModel):
         return data_records_by_station
     
     def stations_allowed_to_send(self):
-        disabled_station_link_ids = self.station_links.filter(disabled=True).values_list('station_link_id', flat=True)
+        """
+        Eligible = station in this channel's networks AND not explicitly disabled
+        """
+        base_qs = StationLink.objects.filter(
+            network_connection__in=self.network_connections.all()
+        )
         
-        # Get station links from all connected networks
-        allowed_station_links = StationLink.objects.none()  # Start with empty queryset
-        for network_conn in self.network_connections.all():
-            network_station_links = network_conn.station_links.exclude(id__in=disabled_station_link_ids)
-            allowed_station_links = allowed_station_links.union(network_station_links)
+        # Explicit disables win
+        qs = base_qs.exclude(
+            dispatch_channel_links__dispatch_channel=self,
+            dispatch_channel_links__disabled=True,
+        )
         
-        return allowed_station_links
+        return qs.distinct()
     
     def clean_parameter_mapping(self, *args, **kwargs):
         pass
@@ -728,7 +746,7 @@ class DispatchChannelParameterMapping(Orderable):
 
 
 class DispatchChannelStationLink(Orderable):
-    dispatch_channel = ParentalKey(DispatchChannel, on_delete=models.CASCADE, related_name="station_links")
+    dispatch_channel = ParentalKey(DispatchChannel, on_delete=models.CASCADE, related_name="dispatch_station_links")
     station_link = models.ForeignKey(StationLink, on_delete=models.CASCADE, verbose_name=_("Station Link"),
                                      related_name="dispatch_channel_links")
     disabled = models.BooleanField(default=False, verbose_name=_("Disabled"))

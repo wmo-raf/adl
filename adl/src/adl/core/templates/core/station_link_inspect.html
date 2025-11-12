@@ -1,0 +1,88 @@
+{% extends "wagtailadmin/generic/base.html" %}
+{% load i18n wagtailadmin_tags l10n %}
+
+{% block extra_css %}
+    {{ block.super }}
+    <style>
+        .inspect-fields {
+            background: white;
+            border-radius: 4px;
+            overflow: hidden;
+            margin-top: 2rem;
+        }
+
+        .inspect-field {
+            display: grid;
+            grid-template-columns: 200px 1fr;
+            border-bottom: 1px solid #e8e8e8;
+            transition: background-color 0.15s ease;
+        }
+
+        .inspect-field:last-child {
+            border-bottom: none;
+        }
+
+        .inspect-field:hover {
+            background-color: #f9f9f9;
+        }
+
+        .inspect-field__label {
+            padding: 1rem 1.5rem;
+            background-color: #fafafa;
+            font-weight: 600;
+            color: #333;
+            border-right: 1px solid #e8e8e8;
+            display: flex;
+            align-items: center;
+        }
+
+        .inspect-field__value {
+            padding: 1rem 1.5rem;
+            color: #666;
+            word-break: break-word;
+        }
+
+        .inspect-field__value:empty::before {
+            content: '—';
+            color: #ccc;
+        }
+
+        @media (max-width: 768px) {
+            .inspect-field {
+                grid-template-columns: 1fr;
+            }
+
+            .inspect-field__label {
+                border-right: none;
+                border-bottom: 1px solid #e8e8e8;
+            }
+        }
+    </style>
+{% endblock %}
+
+{% block main_content %}
+    {% if collection_status_panel %}
+        {% component collection_status_panel with station_link=object %}
+    {% endif %}
+
+    {% block fields_output %}
+        {% if fields %}
+            <div class="inspect-fields">
+                {% for field in fields %}
+                    <div class="inspect-field">
+                        <div class="inspect-field__label">
+                            {{ field.label }}
+                        </div>
+                        <div class="inspect-field__value">
+                            {% if field.component %}
+                                {% component field.component %}
+                            {% else %}
+                                {{ field.value|localize }}
+                            {% endif %}
+                        </div>
+                    </div>
+                {% endfor %}
+            </div>
+        {% endif %}
+    {% endblock %}
+{% endblock %}

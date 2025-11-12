@@ -8,6 +8,7 @@ from django.db import transaction
 from django.shortcuts import render, redirect, get_object_or_404
 from django.urls import reverse_lazy, reverse
 from django.utils.translation import gettext as _
+from django.views.decorators.http import require_http_methods
 from wagtail.admin import messages
 from wagtail.admin.paginator import WagtailPaginator
 from wagtail.admin.ui.tables import Table, TitleColumn
@@ -28,6 +29,7 @@ from .models import (
 )
 from .plugin_utils import get_plugin_metadata
 from .registries import dispatch_channel_viewset_registry, connection_viewset_registry, plugin_registry
+from .tasks import process_station_link_batch_task, perform_channel_dispatch
 from .utils import (
     get_stations_for_country_live,
     get_stations_for_country_local,
@@ -739,3 +741,57 @@ def dispatch_channel_station_links(request, channel_id):
         "network_connections": network_connections,
     }
     return render(request, "core/dispatch_channel_station_links.html", context=context)
+
+
+@require_http_methods(["POST"])
+def trigger_station_collection(request, station_link_id):
+    """Manually trigger data collection for a station link"""
+    if request.method == 'POST':
+        station_link = get_object_or_404(StationLink, id=station_link_id)
+        
+        try:
+            # Trigger the collection task
+            process_station_link_batch_task.delay(station_link.network_connection.id, [station_link.id])
+            
+            messages.success(
+                request,
+                _('Data collection triggered for station link: %(station_link)s') % {'station_link': station_link}
+            )
+        except Exception as e:
+            messages.error(
+                request,
+                _('Failed to trigger collection: %(error)s') % {'error': str(e)}
+            )
+        
+        # Redirect back to the station link detail page
+        return redirect(request.META.get('HTTP_REFERER', 'wagtailadmin_home'))
+    
+    return redirect('wagtailadmin_home')
+
+
+def trigger_station_dispatch(request, station_link_id, channel_id):
+    """Manually trigger data dispatch for a station link to a specific channel"""
+    if request.method == 'POST':
+        station_link = get_object_or_404(StationLink, id=station_link_id)
+        dispatch_channel = get_object_or_404(DispatchChannel, id=channel_id)
+        
+        try:
+            # Get data records for this station
+            perform_channel_dispatch.delay(dispatch_channel.id, [station_link.id])
+            
+            messages.success(
+                request,
+                _('Dispatch triggered successfully for %(channel)s.') % {
+                    'channel': dispatch_channel.name
+                }
+            )
+        except Exception as e:
+            messages.error(
+                request,
+                _('Failed to trigger dispatch: %(error)s') % {'error': str(e)}
+            )
+        
+        # Redirect back to the station link detail page
+        return redirect(request.META.get('HTTP_REFERER', 'wagtailadmin_home'))
+    
+    return redirect('wagtailadmin_home')
