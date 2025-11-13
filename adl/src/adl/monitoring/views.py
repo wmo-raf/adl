@@ -315,8 +315,8 @@ def get_active_tasks_by_network(request, network_id=None):
         task_id = task.get('id')
         
         # Only include our ADL tasks
-        if task_name not in ['adl.core.tasks.run_network_plugin',
-                             'adl.core.tasks.process_station_link_batch']:
+        allowed = {'adl.core.tasks.process_station_link_batch'}
+        if task_name not in allowed:
             continue
         
         # Extract network_id from args
