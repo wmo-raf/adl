@@ -29,7 +29,7 @@ from .models import (
 )
 from .plugin_utils import get_plugin_metadata
 from .registries import dispatch_channel_viewset_registry, connection_viewset_registry, plugin_registry
-from .tasks import process_station_link_batch_task, perform_channel_dispatch
+from .tasks import process_station_link_batch, perform_channel_dispatch
 from .utils import (
     get_stations_for_country_live,
     get_stations_for_country_local,
@@ -751,7 +751,7 @@ def trigger_station_collection(request, station_link_id):
         
         try:
             # Trigger the collection task
-            process_station_link_batch_task.delay(station_link.network_connection.id, [station_link.id])
+            process_station_link_batch.delay(station_link.network_connection.id, [station_link.id])
             
             messages.success(
                 request,
