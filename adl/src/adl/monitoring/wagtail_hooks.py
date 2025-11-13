@@ -4,7 +4,6 @@ from wagtail import hooks
 
 from .panels import StationActivityPanel
 from .views import (
-    task_monitor,
     get_active_tasks_by_network
 )
 from .viewsets import MonitoringViewSetGroup
