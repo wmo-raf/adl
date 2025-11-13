@@ -84,7 +84,7 @@ def run_network_plugin(self, network_id):
         log.info("Spawning batch %d with %d station links: %s",
                  batch_count, len(batch_list), batch_list)
         
-        task = process_station_link_batch_task.delay(network_id, batch_list)
+        task = process_station_link_batch.delay(network_id, batch_list)
         
         spawned_tasks.append(task.id)
     
@@ -102,7 +102,7 @@ def run_network_plugin(self, network_id):
 
 
 @shared_task(bind=True, name='adl.core.tasks.process_station_link_batch')
-def process_station_link_batch_task(self, network_id, station_link_ids):
+def process_station_link_batch(self, network_id, station_link_ids):
     from adl.core.registries import plugin_registry
     from .models import NetworkConnection
     from .models import StationLink
