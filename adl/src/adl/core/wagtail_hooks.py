@@ -45,7 +45,13 @@ from .views import (
 from .viewsets import (
     admin_viewsets,
     DispatchChannelIndexView,
-    StationLinkInspectView
+    DispatchChannelCreateView,
+    DispatchChannelEditView,
+    DispatchChannelDeleteView,
+    StationLinkInspectView,
+    StationLinkAddView,
+    StationLinkEditView,
+    StationLinkDeleteView
 )
 
 adl_register_plugin_menu_items_hook_name = "register_adl_plugin_menu_items"
@@ -97,12 +103,14 @@ def get_connection_viewsets():
     connection_viewsets = []
     
     for model_cls in connection_model_cls:
-        station_link_model = None
         if hasattr(model_cls, "station_link_model_string_label"):
             station_link_model = get_model_by_string_label(model_cls.station_link_model_string_label)
             if station_link_model:
                 station_link_viewset_kwargs = {
-                    "list_filter": ["network_connection"]
+                    "list_filter": ["network_connection"],
+                    "add_view_class": StationLinkAddView,
+                    "edit_view_class": StationLinkEditView,
+                    "delete_view_class": StationLinkDeleteView,
                 }
                 
                 station_link_viewset_kwargs["inspect_view_enabled"] = True
@@ -116,9 +124,7 @@ def get_connection_viewsets():
         connection_viewset_kwargs = {
             "list_filter": ["network"]
         }
-        connection_viewset = make_registrable_connection_viewset(
-            model_cls, station_link_model=station_link_model, **connection_viewset_kwargs
-        )
+        connection_viewset = make_registrable_connection_viewset(model_cls, **connection_viewset_kwargs)
         connection_viewset_registry.register(connection_viewset)
         connection_viewsets.append(connection_viewset)
     
@@ -130,7 +136,14 @@ def get_dispatch_channels_viewsets():
     viewsets = []
     
     for model_cls in dispatch_channels_model_cls:
-        viewset = make_registrable_viewset(model_cls, index_view_class=DispatchChannelIndexView)
+        channel_viewset_kwargs = {
+            "index_view_class": DispatchChannelIndexView,
+            "add_view_class": DispatchChannelCreateView,
+            "edit_view_class": DispatchChannelEditView,
+            "delete_view_class": DispatchChannelDeleteView,
+        }
+        
+        viewset = make_registrable_viewset(model_cls, **channel_viewset_kwargs)
         
         # add this viewset to a local registry so that
         # we can refer to it later

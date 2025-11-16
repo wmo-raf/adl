@@ -5,9 +5,9 @@ from wagtail.admin.ui.tables import BulkActionsCheckboxColumn
 from wagtail.admin.views import generic
 from wagtail.admin.viewsets.chooser import ChooserViewSet
 from wagtail.admin.viewsets.model import ModelViewSet
-from wagtail.admin.widgets import HeaderButton, ListingButton
-from .components import StationLinkCollectionStatusPanel
+from wagtail.admin.widgets import HeaderButton
 
+from .components import StationLinkCollectionStatusPanel
 from .constants import PREDEFINED_DATA_PARAMETERS
 from .models import (
     Network,
@@ -15,8 +15,44 @@ from .models import (
     DataParameter,
     Unit
 )
+from .utils import get_dispatch_channel_more_buttons, get_connection_list_more_buttons
 
 ADLET_MODELS = []
+
+
+class StationLinkAddView(generic.CreateView):
+    def get_success_url(self):
+        success_url = super().get_success_url()
+        
+        if self.object:
+            connection = self.object.network_connection
+            
+            if connection:
+                success_url = success_url + f"?network_connection={connection.pk}"
+        
+        return success_url
+
+
+class StationLinkEditView(generic.EditView):
+    def get_success_url(self):
+        success_url = super().get_success_url()
+        connection = self.object.network_connection
+        
+        if connection:
+            success_url = success_url + f"?network_connection={connection.pk}"
+        
+        return success_url
+
+
+class StationLinkDeleteView(generic.DeleteView):
+    def get_success_url(self):
+        success_url = super().get_success_url()
+        connection = self.object.network_connection
+        
+        if connection:
+            success_url = success_url + f"?network_connection={connection.pk}"
+        
+        return success_url
 
 
 class AdletViewSet(ModelViewSet):
@@ -45,23 +81,61 @@ class AdletIndexView(generic.IndexView):
         return columns
 
 
+class ConnectionIndexView(generic.IndexView):
+    def get_list_more_buttons(self, instance):
+        buttons = super().get_list_more_buttons(instance)
+        more_buttons = get_connection_list_more_buttons(instance)
+        
+        if more_buttons:
+            buttons.extend(more_buttons)
+        
+        return buttons
+    
+    def get_table_kwargs(self):
+        table_kwargs = super().get_table_kwargs()
+        table_kwargs["template_name"] = "core/card_view.html"
+        return table_kwargs
+
+
+class ConnectionCreateView(generic.CreateView):
+    def get_success_url(self):
+        url = reverse("connections_list")
+        return self._set_locale_query_param(url)
+
+
+class ConnectionEditView(generic.EditView):
+    def get_success_url(self):
+        return reverse("connections_list")
+
+
+class ConnectionDeleteView(generic.DeleteView):
+    def get_success_url(self):
+        return reverse("connections_list")
+
+
+class DispatchChannelCreateView(generic.CreateView):
+    def get_success_url(self):
+        url = reverse("dispatch_channels_list")
+        return self._set_locale_query_param(url)
+
+
+class DispatchChannelEditView(generic.EditView):
+    def get_success_url(self):
+        return reverse("dispatch_channels_list")
+
+
+class DispatchChannelDeleteView(generic.DeleteView):
+    def get_success_url(self):
+        return reverse("dispatch_channels_list")
+
+
 class DispatchChannelIndexView(AdletIndexView):
     def get_list_more_buttons(self, instance):
         buttons = super().get_list_more_buttons(instance)
         
-        label = _("Station Links")
-        url = reverse("dispatch_channel_station_links", args=[instance.id])
-        icon_name = "map-pin"
-        attrs = {"target": "_blank"}
-        if label and url:
-            buttons.append(
-                ListingButton(
-                    label,
-                    url=url,
-                    icon_name=icon_name,
-                    attrs=attrs,
-                )
-            )
+        more_buttons = get_dispatch_channel_more_buttons(instance)
+        if more_buttons:
+            buttons.extend(more_buttons)
         
         return buttons
 
