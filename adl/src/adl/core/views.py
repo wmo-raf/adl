@@ -11,11 +11,28 @@ from django.utils.translation import gettext as _
 from django.views.decorators.http import require_http_methods
 from wagtail.admin import messages
 from wagtail.admin.paginator import WagtailPaginator
-from wagtail.admin.ui.tables import Table, TitleColumn
-from wagtail.admin.widgets import HeaderButton
+from wagtail.admin.ui.tables import (
+    Table,
+    TitleColumn,
+    BooleanColumn,
+    ButtonsColumnMixin
+)
+from wagtail.admin.widgets import (
+    HeaderButton,
+    ListingButton,
+    ButtonWithDropdown
+)
 
-from .constants import OSCAR_SURFACE_REQUIRED_CSV_COLUMNS, PREDEFINED_DATA_PARAMETERS
-from .forms import StationLoaderForm, OSCARStationImportForm, CreatePredefinedDataParametersForm, StationIncludeForm
+from .constants import (
+    OSCAR_SURFACE_REQUIRED_CSV_COLUMNS,
+    PREDEFINED_DATA_PARAMETERS
+)
+from .forms import (
+    StationLoaderForm,
+    OSCARStationImportForm,
+    CreatePredefinedDataParametersForm,
+    StationIncludeForm
+)
 from .models import (
     Station,
     AdlSettings,
@@ -28,7 +45,12 @@ from .models import (
     StationLink
 )
 from .plugin_utils import get_plugin_metadata
-from .registries import dispatch_channel_viewset_registry, connection_viewset_registry, plugin_registry
+from .registries import (
+    dispatch_channel_viewset_registry,
+    connection_viewset_registry,
+    plugin_registry
+)
+from .table import LinkColumnWithIcon
 from .tasks import process_station_link_batch, perform_channel_dispatch
 from .utils import (
     get_stations_for_country_live,
@@ -36,7 +58,10 @@ from .utils import (
     get_wigos_id_parts,
     extract_digits,
     get_all_child_models,
-    get_child_model_by_name
+    get_child_model_by_name,
+    get_connection_station_link_url,
+    get_connection_list_more_buttons,
+    get_dispatch_channel_more_buttons
 )
 
 
@@ -357,12 +382,6 @@ def import_oscar_station(request, wigos_id):
     return render(request, template_name=template_name, context=context)
 
 
-def get_index_url_for_connection(connection):
-    model_cls = get_child_model_by_name(NetworkConnection, connection._meta.model_name)
-    viewset = connection_viewset_registry.get(model_cls._meta.model_name)
-    return reverse(viewset.get_url_name("index"))
-
-
 def connections_list(request):
     connections = NetworkConnection.objects.all().order_by("name")
     
@@ -371,16 +390,73 @@ def connections_list(request):
     for conn in connections:
         grouped_connections[conn.plugin].append(conn)
     
+    def get_url(instance):
+        return instance.edit_url
+    
     # Prepare data for each plugin group
     data = []
+    
+    class ConnectionButtonsColumn(ButtonsColumnMixin, TitleColumn):
+        def get_buttons(self, instance, parent_context):
+            more_buttons = []
+            buttons = []
+            if edit_url := instance.edit_url:
+                more_buttons.append(
+                    ListingButton(
+                        _("Edit"),
+                        url=edit_url,
+                        icon_name="edit",
+                        attrs={
+                            "aria-label": _("Edit '%(title)s'") % {"title": str(instance)}
+                        },
+                        priority=10,
+                    )
+                )
+            
+            if delete_url := instance.delete_url:
+                more_buttons.append(
+                    ListingButton(
+                        _("Delete"),
+                        url=delete_url,
+                        icon_name="bin",
+                        attrs={
+                            "aria-label": _("Delete '%(title)s'") % {"title": str(instance)}
+                        },
+                        priority=30,
+                    )
+                )
+            
+            extra_buttons = get_connection_list_more_buttons(instance)
+            if extra_buttons:
+                more_buttons.extend(extra_buttons)
+            
+            if more_buttons:
+                buttons.append(
+                    ButtonWithDropdown(
+                        buttons=more_buttons,
+                        icon_name="dots-horizontal",
+                        attrs={
+                            "aria-label": _("More options for '%(title)s'")
+                                          % {"title": str(instance)},
+                        },
+                    )
+                )
+            
+            return buttons
+    
     for plugin, conns in grouped_connections.items():
         plugin_obj = plugin_registry.get(plugin)
+        
+        columns = [
+            ConnectionButtonsColumn("name", label=_("Station Link"), get_url=get_url),
+            BooleanColumn("plugin_processing_enabled", label=_("Enabled")),
+            LinkColumnWithIcon("stations_link", label=_("Stations Link"), icon_name="map-pin",
+                               get_url=get_connection_station_link_url),
+        ]
+        
         data.append({
             "plugin": {"name": plugin_obj.label},
-            "connection": {
-                "index_url": get_index_url_for_connection(conns[0]),
-                "count": len(conns),
-            },
+            "connections_table": Table(columns, conns),
         })
     
     context = {
@@ -463,19 +539,89 @@ def dispatch_channels_list(request):
     
     data = {}
     
+    def get_channel_edit_url(instance):
+        return instance.edit_url
+    
+    def get_station_links_url(instance):
+        url = reverse("dispatch_channel_station_links", args=[instance.id])
+        return url
+    
+    dispatch_channels_by_model_name = {}
+    for channel in dispatch_channels:
+        model_name = channel.__class__._meta.model_name
+        
+        if not model_name in dispatch_channels_by_model_name:
+            dispatch_channels_by_model_name[model_name] = []
+        dispatch_channels_by_model_name[model_name].append(channel)
+        
+        class ChannelButtonsColumn(ButtonsColumnMixin, TitleColumn):
+            def get_buttons(self, instance, parent_context):
+                more_buttons = []
+                buttons = []
+                if edit_url := instance.edit_url:
+                    more_buttons.append(
+                        ListingButton(
+                            _("Edit"),
+                            url=edit_url,
+                            icon_name="edit",
+                            attrs={
+                                "aria-label": _("Edit '%(title)s'") % {"title": str(instance)}
+                            },
+                            priority=10,
+                        )
+                    )
+                
+                if delete_url := instance.delete_url:
+                    more_buttons.append(
+                        ListingButton(
+                            _("Delete"),
+                            url=delete_url,
+                            icon_name="bin",
+                            attrs={
+                                "aria-label": _("Delete '%(title)s'") % {"title": str(instance)}
+                            },
+                            priority=30,
+                        )
+                    )
+                
+                extra_buttons = get_dispatch_channel_more_buttons(instance)
+                if extra_buttons:
+                    more_buttons.extend(extra_buttons)
+                
+                if more_buttons:
+                    buttons.append(
+                        ButtonWithDropdown(
+                            buttons=more_buttons,
+                            icon_name="dots-horizontal",
+                            attrs={
+                                "aria-label": _("More options for '%(title)s'")
+                                              % {"title": str(instance)},
+                            },
+                        )
+                    )
+                
+                return buttons
+    
     for channel_type in channel_types:
         model_name = channel_type._meta.model_name
         viewset = dispatch_channel_viewset_registry.get(model_name)
         index_url = reverse(viewset.get_url_name("index"))
+        
+        if not model_name in dispatch_channels_by_model_name:
+            continue
+        
+        columns = [
+            ChannelButtonsColumn("name", get_url=get_channel_edit_url),
+            BooleanColumn("enabled"),
+            LinkColumnWithIcon("stations_link", label=_("Stations Link"), icon_name="map-pin",
+                               get_url=get_station_links_url),
+        ]
+        
         data[model_name] = {
             "name": channel_type._meta.verbose_name,
             "index_url": index_url,
-            "channels": [],
+            "channels_table": Table(columns, dispatch_channels_by_model_name[model_name]),
         }
-    
-    for channel in dispatch_channels:
-        model_name = channel.__class__._meta.model_name
-        data[model_name]["channels"].append(channel)
     
     context = {
         "breadcrumbs_items": breadcrumbs_items,

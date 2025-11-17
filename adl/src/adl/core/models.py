@@ -404,6 +404,21 @@ class NetworkConnection(PolymorphicModel, ClusterableModel):
         if not plugin:
             raise ValueError(f"Plugin {self.plugin} not found in the registry.")
         return plugin.run_process(self, initial_start_date=initial_start_date)
+    
+    @property
+    def edit_url(self):
+        from adl.core.utils import get_url_for_connection
+        return get_url_for_connection(self, "edit", takes_args=True)
+    
+    @property
+    def delete_url(self):
+        from adl.core.utils import get_url_for_connection
+        return get_url_for_connection(self, "delete", takes_args=True)
+    
+    @property
+    def station_link_url(self):
+        from adl.core.utils import get_connection_station_link_url
+        return get_connection_station_link_url(self)
 
 
 class StationLink(PolymorphicModel, ClusterableModel):
@@ -708,6 +723,16 @@ class DispatchChannel(PolymorphicModel, ClusterableModel):
     
     def clean_parameter_mapping(self, *args, **kwargs):
         pass
+    
+    @property
+    def edit_url(self):
+        from adl.core.utils import get_url_for_dispatch_channel
+        return get_url_for_dispatch_channel(self, "edit", takes_args=True)
+    
+    @property
+    def delete_url(self):
+        from adl.core.utils import get_url_for_dispatch_channel
+        return get_url_for_dispatch_channel(self, "delete", takes_args=True)
 
 
 class DispatchChannelParameterMapping(Orderable):
