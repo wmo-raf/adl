@@ -15,6 +15,7 @@ class StationsActivityTimeline {
         this.channelId = channelId;
         this.controlsElId = controlsElId;
         this.maxHeight = maxHeight;
+        this._ignoreNextRangeChanged = true;
 
         // Data stores
         this.groups = new vis.DataSet([]);
@@ -87,6 +88,7 @@ class StationsActivityTimeline {
         if (e <= s) return;
 
         const tiles = this.daysInRange(s, e);
+
         const jobs = tiles.map(day => {
             if (force) this.dayCache.delete(day);
 
@@ -241,7 +243,6 @@ class StationsActivityTimeline {
         const todayStart = new Date();
         todayStart.setHours(0, 0, 0, 0);
         const todayEnd = new Date(todayStart.getTime() + 24 * 3600 * 1000);
-
         await this.fetchRange(todayStart, now, {includeStations: false, force: true});
         this.timeline.setWindow(todayStart, todayEnd, {animation: false});
         this._flashRefreshed();
@@ -295,6 +296,7 @@ class StationsActivityTimeline {
                     clearTimeout(loadTimer);
                     loadTimer = setTimeout(() => this.onRangeChanged(props), 200);
                 };
+                this._ignoreNextRangeChanged = true;
                 this.timeline.on("rangechanged", debouncedLoad);
 
                 // Mount the single Refresh button (if a controls container was provided)
@@ -307,6 +309,11 @@ class StationsActivityTimeline {
     }
 
     async onRangeChanged(props) {
+        if (this._ignoreNextRangeChanged) {
+            this._ignoreNextRangeChanged = false;
+            return;
+        }
+
         const start = new Date(props.start);
         const end = new Date(props.end);
 
