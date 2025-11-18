@@ -95,8 +95,10 @@ def get_dispatch_channel_data(dispatch_channel, station_link_ids=None):
     
     # get station links for the dispatch channel that are enabled to send data
     station_links = dispatch_channel.stations_allowed_to_send()
+    logger.debug(f"[DISPATCH] Found {station_links.count()} station links allowed to send for channel '{channel_name}'")
     
     if station_link_ids:
+        logger.debug(f"[DISPATCH] Filtering station links for specific IDs: {station_link_ids}")
         station_links = station_links.filter(id__in=station_link_ids)
     
     # group by station and by time
@@ -168,8 +170,9 @@ def get_dispatch_channel_data(dispatch_channel, station_link_ids=None):
             
             station_records_by_id[station_id].append(record)
     
-    logger.debug(f"[DISPATCH] Prepared {len(station_records_by_id)} station records "
-                 f"for dispatch channel '{channel_name}'")
+    if station_link_ids:
+        logger.debug(f"[DISPATCH] Prepared {len(station_records_by_id)} station records "
+                     f"for dispatch channel '{channel_name}'")
     
     return station_records_by_id
 
@@ -189,27 +192,16 @@ def run_dispatch_channel(dispatcher_id, station_link_ids=None):
             f"[DISPATCH] No network connections found for dispatch channel {dispatch_channel.name}. Skipping...")
         return {"num_of_sent_records": 0}
     
+    # get station links allowed to send data
+    channel_station_links = dispatch_channel.stations_allowed_to_send()
+    if station_link_ids:
+        channel_station_links = channel_station_links.filter(id__in=station_link_ids)
+    
     data_records_by_station = get_dispatch_channel_data(dispatch_channel, station_link_ids=station_link_ids)
-    
-    if not data_records_by_station:
-        return {"num_of_sent_records": 0}
-    
     total_num_of_records = 0
     
-    for station_id, data_records in data_records_by_station.items():
-        # Find station_link across all network connections
-        station_link = None
-        for network_connection in network_connections:
-            station_link = get_object_or_none(StationLink, station_id=station_id, network_connection=network_connection)
-            if station_link:
-                break
-        
-        if not station_link:
-            connection_names = ", ".join([conn.name for conn in network_connections])
-            logger.error(f"[DISPATCH] Station link for station {station_id} not found in any of the connections "
-                         f"[{connection_names}]. Skipping...")
-            continue
-        
+    for station_link in channel_station_links:
+        station_id = station_link.station_id
         start = time.monotonic()
         log = StationLinkActivityLog.objects.create(
             time=dj_timezone.now(),
@@ -217,6 +209,17 @@ def run_dispatch_channel(dispatcher_id, station_link_ids=None):
             direction='push',
             dispatch_channel=dispatch_channel,
         )
+        
+        data_records = data_records_by_station.get(station_link.station_id)
+        if not data_records:
+            log.success = True
+            log.records_count = 0
+            log.duration_ms = (time.monotonic() - start) * 1000
+            log.message = "No data records to send"
+            log.save()
+            logger.info(f"[DISPATCH] No data records to send for station {station_id} on channel "
+                        f"{dispatch_channel.name}.")
+            continue
         
         try:
             num_of_sent_records, last_sent_obs_time = dispatch_channel.send_station_data(station_link, data_records)
