@@ -67,20 +67,18 @@ class NetworkConnectionActivityView(APIView):
         for sl in station_links:
             log = logs_map.get(sl.id)
             obs = obs_map.get(sl.station_id)
-            shown_time = obs.time
             
             # ========= Compute status =========
             status = compute_status(log) if log else "warning"
             summary[status] += 1
             
-            # ========= Human readable =========
-            last_collected_human = naturaltime(shown_time) if shown_time else None
-            last_check_human = naturaltime(log.time)
+            last_check = log.time if log else None
+            last_check_human = naturaltime(last_check) if last_check else None
             
-            station_link_monitoring_url = reverse(
-                "station_link_monitoring",
-                args=(sl.id,)
-            )
+            last_collected = obs.time if obs else None
+            last_collected_human = naturaltime(last_collected) if last_collected else None
+            
+            station_link_monitoring_url = reverse("station_link_monitoring", args=(sl.id,))
             
             station_link_monitoring_url += f"?direction=pull"
             
@@ -88,9 +86,9 @@ class NetworkConnectionActivityView(APIView):
                 "id": sl.id,
                 "name": sl.station.name,
                 "status": status,
-                "last_check": log.time,
+                "last_check": last_check,
                 "last_check_human": last_check_human,
-                "last_collected": shown_time,
+                "last_collected": last_collected,
                 "last_collected_human": last_collected_human,
                 "log_id": log.id if log else None,
                 "logs_url": station_link_monitoring_url,
