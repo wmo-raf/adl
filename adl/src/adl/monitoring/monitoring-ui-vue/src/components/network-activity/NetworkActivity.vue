@@ -3,7 +3,6 @@ import {computed, onMounted, ref} from "vue"
 
 import DataTable from "primevue/datatable"
 import Column from "primevue/column"
-import Tag from "primevue/tag"
 import InputText from "primevue/inputtext"
 import Button from "primevue/button"
 
@@ -16,8 +15,8 @@ const props = defineProps({
 
 const loading = ref(false)
 const stations = ref([])
-// Initialize with defaults to prevent template errors before data load
-const summary = ref({active: 0, warning: 0, offline: 0})
+// Initialize with defaults
+const summary = ref({active: 0, warning: 0, error: 0})
 const connection = ref(null)
 
 const search = ref("")
@@ -26,19 +25,12 @@ const filter = ref("all")
 const fetchData = async () => {
   loading.value = true
   try {
-    // Simulating API call for preview purposes if endpoint fails
-    // In production, keep your original fetch logic
-    try {
-      const res = await fetch(`/monitoring/connection-activity/${props.connectionId}/`)
-      if (!res.ok) throw new Error("API not found")
-      const data = await res.json()
-      connection.value = data.connection
-      summary.value = data.summary
-      stations.value = data.stations
-    } catch (e) {
-      // log error
-      console.warn("Error fetching data:", e)
-    }
+    const res = await fetch(`/monitoring/connection-activity/${props.connectionId}/`)
+    if (!res.ok) throw new Error("API not found")
+    const data = await res.json()
+    connection.value = data.connection
+    summary.value = data.summary
+    stations.value = data.stations
   } catch (err) {
     console.error("Failed to load activity data:", err)
   }
@@ -47,7 +39,6 @@ const fetchData = async () => {
 
 onMounted(fetchData)
 
-// Helper to format the ISO string into a clean short date
 const formatDate = (isoString) => {
   if (!isoString) return ''
   try {
@@ -63,37 +54,54 @@ const formatDate = (isoString) => {
   }
 }
 
+// Map backend 'error' to frontend 'danger' class, etc.
+const getSeverityClass = (status) => {
+  const map = {
+    active: "success",
+    warning: "warning",
+    error: "danger"
+  }
+  return map[status] || "info"
+}
+
 const filteredStations = computed(() => {
   let list = stations.value || []
 
+  // --- Updated Filter Logic for Dual Status ---
   if (filter.value !== "all") {
-    list = list.filter((s) => s.status === filter.value)
+    list = list.filter((s) => {
+      const pipe = s.pipeline_status
+      const data = s.data_status
+
+      if (filter.value === 'active') {
+        // Strict: Both must be healthy to be considered fully active
+        return pipe === 'active' && data === 'active'
+      }
+      if (filter.value === 'warning') {
+        // Loose: If either is warning (and neither is error), show in warning
+        return (pipe === 'warning' || data === 'warning')
+      }
+      if (filter.value === 'error') {
+        // Critical: If either is broken, show in error
+        return pipe === 'error' || data === 'error'
+      }
+      return true
+    })
   }
 
   if (search.value.trim().length > 0) {
     const q = search.value.toLowerCase()
     list = list.filter((s) =>
-        s.name.toLowerCase().includes(q) ||
-        (s.location && s.location.toLowerCase().includes(q))
+        s.name.toLowerCase().includes(q)
     )
   }
 
   return list
 })
-
-const getStatusSeverity = (status) => {
-  const map = {
-    active: "success",
-    warning: "warning",
-    offline: "danger"
-  }
-  return map[status] || "info"
-}
 </script>
 
 <template>
   <div class="station-monitor-container">
-    <!-- HEADER -->
     <div class="header-section">
       <div class="header-top-row">
         <div class="header-title-group">
@@ -106,7 +114,7 @@ const getStatusSeverity = (status) => {
                     <i class="pi pi-clock"></i> {{ connection?.interval_minutes || 5 }}m Interval
                 </span>
             <span class="meta-badge">
-                    <i class="pi pi-box"></i> {{ connection?.plugin || 'FTP' }}
+                    <i class="pi pi-box"></i> {{ connection?.plugin || 'Plugin' }}
                 </span>
           </div>
         </div>
@@ -116,21 +124,21 @@ const getStatusSeverity = (status) => {
             <span class="summary-label">Active</span>
             <span class="summary-count">{{ summary?.active || 0 }}</span>
           </div>
+
           <div class="summary-card warning">
             <span class="summary-label">Warning</span>
             <span class="summary-count">{{ summary?.warning || 0 }}</span>
           </div>
+
           <div class="summary-card danger">
-            <span class="summary-label">Offline</span>
-            <span class="summary-count">{{ summary?.offline || 0 }}</span>
+            <span class="summary-label">Error</span>
+            <span class="summary-count">{{ summary?.error || 0 }}</span>
           </div>
         </div>
       </div>
     </div>
 
-    <!-- MAIN CONTENT -->
     <div class="content-section">
-      <!-- FILTERS BAR -->
       <div class="controls-bar">
         <div class="controls-left">
           <div class="search-wrapper">
@@ -147,13 +155,13 @@ const getStatusSeverity = (status) => {
                 :class="['filter-btn', { active: filter === 'all' }]"
                 @click="filter = 'all'"
             >
-              All Stations
+              All
             </button>
             <button
                 :class="['filter-btn success', { active: filter === 'active' }]"
                 @click="filter = 'active'"
             >
-              Active
+              Healthy
             </button>
             <button
                 :class="['filter-btn warning', { active: filter === 'warning' }]"
@@ -162,29 +170,29 @@ const getStatusSeverity = (status) => {
               Warning
             </button>
             <button
-                :class="['filter-btn danger', { active: filter === 'offline' }]"
-                @click="filter = 'offline'"
+                :class="['filter-btn danger', { active: filter === 'error' }]"
+                @click="filter = 'error'"
             >
-              Offline
+              Error
             </button>
           </div>
         </div>
 
         <Button
             icon="pi pi-refresh"
-            label="Refresh Data"
+            label="Refresh"
             class="refresh-btn"
             :loading="loading"
             @click="fetchData"
         />
       </div>
 
-      <!-- DATA TABLE -->
       <div class="table-wrapper">
         <DataTable
             :value="filteredStations"
             :loading="loading"
             class="flat-table"
+            paginator :rows="50"
         >
           <Column header="Station Name" style="min-width: 250px">
             <template #body="{ data }">
@@ -199,20 +207,34 @@ const getStatusSeverity = (status) => {
             </template>
           </Column>
 
-          <Column header="Status" style="width: 130px">
+          <Column header="Health" style="width: 140px; text-align: center">
             <template #body="{ data }">
-              <div :class="['status-pill', getStatusSeverity(data.status)]">
-                <i class="pi pi-circle-fill"></i>
-                <span>{{ data.status }}</span>
+              <div class="dual-status-wrapper">
+
+                <div
+                    :class="['status-indicator', getSeverityClass(data.pipeline_status)]"
+                    :title="`Pipeline: ${data.pipeline_status}`"
+                >
+                  <i class="pi pi-cog"></i>
+                </div>
+
+                <div
+                    :class="['status-indicator', getSeverityClass(data.data_status)]"
+                    :title="`Data Freshness: ${data.data_status}`"
+                >
+                  <i class="pi pi-wifi"></i>
+                </div>
+
               </div>
             </template>
           </Column>
 
-          <!-- Separate Column for Check -->
-          <Column header="Last Check" style="width: 180px">
+          <Column header="Last Check (Pipeline)" style="width: 180px">
             <template #body="{ data }">
               <div class="time-cell">
-                <span class="time-main">{{ data.last_check_human || 'Never' }}</span>
+                <span class="time-main" :class="{'text-danger': data.pipeline_status === 'error'}">
+                    {{ data.last_check_human || 'Never' }}
+                </span>
                 <span class="time-sub" v-if="data.last_check">
                   {{ formatDate(data.last_check) }}
                 </span>
@@ -220,11 +242,12 @@ const getStatusSeverity = (status) => {
             </template>
           </Column>
 
-          <!-- Separate Column for Observation -->
-          <Column header="Last Observation" style="width: 180px">
+          <Column header="Last Data (Obs)" style="width: 180px">
             <template #body="{ data }">
               <div class="time-cell">
-                <span class="time-main">{{ data.last_collected_human || 'Never' }}</span>
+                <span class="time-main" :class="{'text-danger': data.data_status === 'error'}">
+                    {{ data.last_collected_human || 'Never' }}
+                </span>
                 <span class="time-sub" v-if="data.last_collected">
                   {{ formatDate(data.last_collected) }}
                 </span>
@@ -232,27 +255,19 @@ const getStatusSeverity = (status) => {
             </template>
           </Column>
 
-          <Column header="Actions" style="width: 180px" alignFrozen="right">
+          <Column header="Actions" style="width: 160px" alignFrozen="right">
             <template #body="{ data }">
               <div class="action-group">
-                <a
-                    :href="`${data.data_viewer_url}`"
-                    target="_blank"
-                    class="action-link"
-                >
-                  View Data
+                <a :href="`${data.data_viewer_url}`" target="_blank" class="action-icon" title="View Data">
+                  <i class="pi pi-table"></i>
                 </a>
-                <span class="divider">|</span>
-                <a
-                    :href="`${data.logs_url}`"
-                    target="_blank"
-                    class="action-link"
-                >
-                  Logs
+                <a :href="`${data.logs_url}`" target="_blank" class="action-icon" title="View Logs">
+                  <i class="pi pi-list"></i>
                 </a>
               </div>
             </template>
           </Column>
+
           <template #empty>
             <div class="empty-state">
               <i class="pi pi-search" style="font-size: 2rem; color: #94a3b8; margin-bottom: 1rem;"></i>
@@ -466,7 +481,7 @@ const getStatusSeverity = (status) => {
   color: #ffffff;
 }
 
-/* Specialized active states */
+/* Active states for filters */
 .filter-btn.success.active {
   background: #166534;
 }
@@ -502,7 +517,6 @@ const getStatusSeverity = (status) => {
   overflow: hidden;
 }
 
-/* Deep Selectors for PrimeVue Table Customization */
 :deep(.p-datatable-thead > tr > th) {
   background: #f1f5f9 !important;
   color: #475569 !important;
@@ -526,7 +540,7 @@ const getStatusSeverity = (status) => {
   border-bottom: none !important;
 }
 
-/* TABLE CONTENT CELLS */
+/* STATION CELL */
 .station-cell {
   display: flex;
   align-items: center;
@@ -548,65 +562,61 @@ const getStatusSeverity = (status) => {
 .cell-title {
   font-weight: 600;
   font-size: 14px;
+  color: #0f172a;
+  text-decoration: none;
 }
 
 .station-link:hover {
   text-decoration: underline;
-  cursor: pointer;
+  color: #2563eb;
 }
 
-/* STATUS PILLS */
-.status-pill {
-  display: inline-flex;
+/* NEW DUAL STATUS STYLES */
+.dual-status-wrapper {
+  display: flex;
+  gap: 8px;
+}
+
+.status-indicator {
+  width: 32px;
+  height: 32px;
+  border-radius: 6px;
+  display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 4px 10px;
-  border-radius: 100px;
-  font-size: 12px;
-  font-weight: 600;
-  text-transform: capitalize;
+  justify-content: center;
+  font-size: 14px;
+  transition: transform 0.1s;
+  cursor: help;
 }
 
-.status-pill i {
-  font-size: 6px;
+.status-indicator:hover {
+  transform: scale(1.05);
 }
 
-.status-pill.success {
+/* Indicators Colors */
+.status-indicator.success {
   background: #dcfce7;
-  color: #14532d;
+  color: #15803d;
   border: 1px solid #bbf7d0;
 }
 
-.status-pill.success i {
-  color: #16a34a;
-}
-
-.status-pill.warning {
+.status-indicator.warning {
   background: #fef3c7;
-  color: #78350f;
+  color: #b45309;
   border: 1px solid #fde68a;
 }
 
-.status-pill.warning i {
-  color: #d97706;
-}
-
-.status-pill.danger {
+.status-indicator.danger {
   background: #fee2e2;
-  color: #7f1d1d;
+  color: #b91c1c;
   border: 1px solid #fecaca;
 }
 
-.status-pill.danger i {
-  color: #dc2626;
-}
-
-.status-pill.info {
+.status-indicator.info {
   background: #f1f5f9;
-  color: #475569;
+  color: #64748b;
   border: 1px solid #e2e8f0;
 }
-
 
 /* TIME CELL */
 .time-cell {
@@ -619,11 +629,15 @@ const getStatusSeverity = (status) => {
   font-weight: 500;
 }
 
+.time-main.text-danger {
+  color: #dc2626;
+}
+
 .time-sub {
   font-size: 12px;
   color: #94a3b8;
   margin-top: 2px;
-  font-family: 'SF Mono', 'Roboto Mono', monospace; /* Monospace for alignment */
+  font-family: 'SF Mono', 'Roboto Mono', monospace;
 }
 
 /* ACTIONS */
@@ -631,25 +645,28 @@ const getStatusSeverity = (status) => {
   display: flex;
   align-items: center;
   gap: 8px;
+  justify-content: flex-end;
 }
 
-.divider {
-  color: #e2e8f0;
-  font-size: 12px;
-}
-
-.action-link {
+.action-icon {
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  color: #64748b;
+  background: transparent;
   text-decoration: none;
-  font-weight: 600;
-  font-size: 13px;
-  cursor: pointer;
-  transition: color 0.1s;
+  transition: all 0.2s;
 }
 
-.action-link:hover {
-  text-decoration: underline;
+.action-icon:hover {
+  background: #f1f5f9;
+  color: #2563eb;
 }
 
+/* EMPTY STATE */
 .empty-state {
   padding: 40px;
   text-align: center;
@@ -658,37 +675,14 @@ const getStatusSeverity = (status) => {
 
 /* RESPONSIVE */
 @media (max-width: 768px) {
-  .header-top-row {
-    flex-direction: column;
-    align-items: flex-start;
-  }
-
-  .status-summary-group {
-    width: 100%;
-  }
-
-  .summary-card {
-    flex: 1;
-  }
-
-  .controls-left {
-    width: 100%;
+  .header-top-row, .controls-left, .status-summary-group {
     flex-direction: column;
     align-items: stretch;
-  }
-
-  .search-input {
     width: 100%;
   }
 
-  .filter-group {
+  .summary-card, .filter-btn, .search-input {
     width: 100%;
-  }
-
-  .filter-btn {
-    flex: 1;
-    padding: 0;
-    font-size: 12px;
   }
 }
 </style>
