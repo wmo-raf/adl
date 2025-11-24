@@ -184,7 +184,7 @@ class DispatchChannelMonitoringView(APIView):
             # If aggregating, the data is inherently old by the size of the window.
             # We add this window to the allowed tolerance.
             if channel.aggregation_period == 'hourly':
-                aggregation_offset = timedelta(hours=1)
+                aggregation_offset = timedelta(hours=2)
             elif channel.aggregation_period == 'daily':  # Future proofing
                 aggregation_offset = timedelta(days=1)
             
