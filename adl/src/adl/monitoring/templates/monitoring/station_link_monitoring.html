@@ -25,7 +25,7 @@
             <thead>
             <tr>
                 <th>Time</th>
-                <th>Success</th>
+                <th>Status</th>
                 <th>Duration</th>
                 <th>Message</th>
                 {% if direction == 'push' %}
@@ -39,14 +39,18 @@
                 <tr>
                     <td>{{ activity.time }}</td>
                     <td>
-                        {% if activity.success %}
+                        {% if activity.status == "COMPLETED" %}
                             <span class="t-icon-small" style="color: var(--w-color-positive-100)">
                                     {% icon name="circle-check" %}
                                 </span>
-                        {% else %}
+                        {% elif activity.status == "FAILED" %}
                             <span class="t-icon-small" style="color: var(--w-color-critical-200)">
                                     {% icon name="error" %}
                                 </span>
+                        {% elif activity.status == "STARTED" %}
+                            <span class="t-icon-small" style="color: var(--w-color-info-100)">
+                                {% icon name="hourglass-half" %}
+                            </span>
                         {% endif %}
                     </td>
                     <td>

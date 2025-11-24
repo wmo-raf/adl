@@ -15,9 +15,9 @@ from wagtail.admin.paginator import WagtailPaginator
 
 from adl.core.models import NetworkConnection, DispatchChannel, StationLink
 from adl.core.utils import get_object_or_none
-from .constants import NETWORK_PLUGIN_TASK_NAME
-from .models import StationLinkActivityLog
-from .serializers import TaskResultSerializer, StationLinkActivityLogSerializer
+from ..constants import NETWORK_PLUGIN_TASK_NAME
+from ..models import StationLinkActivityLog
+from ..serializers import TaskResultSerializer, StationLinkActivityLogSerializer
 
 
 def task_monitor(request):

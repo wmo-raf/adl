@@ -11,10 +11,17 @@ class StationLinkActivityLog(TimescaleModel):
         ("push", "Push"),
     )
     
+    class ActivityStatus(models.TextChoices):
+        STARTED = "STARTED"
+        IN_PROGRESS = "IN_PROGRESS"
+        COMPLETED = "COMPLETED"
+        FAILED = "FAILED"
+    
     # time field is inherited from TimescaleModel. We use it to store the start time of the activity
     station_link = models.ForeignKey('core.StationLink', on_delete=models.CASCADE)
     direction = models.CharField(max_length=255, choices=DIRECTION_CHOICES)
     success = models.BooleanField(default=False)
+    status = models.CharField(max_length=50, choices=ActivityStatus, default="STARTED")
     message = models.TextField(blank=True, null=True)
     duration_ms = models.IntegerField(blank=True, null=True)
     task_id = models.CharField(max_length=255, blank=True, null=True)
@@ -60,3 +67,7 @@ class StationLinkActivityLog(TimescaleModel):
         if self.duration_ms is not None:
             return self.duration_ms / 1000.0
         return None
+    
+    @property
+    def complete(self):
+        return self.success and self.status == self.ActivityStatus.COMPLETED

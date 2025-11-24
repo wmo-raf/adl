@@ -1,4 +1,4 @@
-wagtail==7.0.1
+wagtail==7.2
 dj-database-url==2.2.0
 django-timescaledb==0.2.13
 django-environ==0.11.2

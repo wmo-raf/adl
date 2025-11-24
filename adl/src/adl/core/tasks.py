@@ -8,7 +8,6 @@ from celery.signals import worker_ready
 from celery_singleton import Singleton, clear_locks
 from django.core.cache import cache
 from django.core.management import call_command
-from django.utils import timezone as dj_timezone
 from django_celery_beat.models import IntervalSchedule, PeriodicTask
 from more_itertools import chunked
 
@@ -106,7 +105,6 @@ def process_station_link_batch(self, network_id, station_link_ids):
     from adl.core.registries import plugin_registry
     from .models import NetworkConnection
     from .models import StationLink
-    from adl.monitoring.models import StationLinkActivityLog
     
     # Create task logger for this batch task
     task_id = self.request.id
@@ -156,20 +154,11 @@ def process_station_link_batch(self, network_id, station_link_ids):
             continue
         
         start = time.monotonic()
-        activity_log = StationLinkActivityLog.objects.create(
-            time=dj_timezone.now(),
-            station_link=station_link,
-            direction='pull',
-        )
-        
         log.info("Processing station link: %s (ID: %d)", station_link, station_link_id)
         
         try:
             # This will now log to WebSocket via the plugin's logger
             saved_records_count = plugin.process_station(station_link)
-            
-            activity_log.success = True
-            activity_log.records_count = saved_records_count
             
             if saved_records_count > 0:
                 log.success("Processed %d records for station link %s",
@@ -177,24 +166,16 @@ def process_station_link_batch(self, network_id, station_link_ids):
                 total_records += saved_records_count
             else:
                 log.info("No new records for station link %s", station_link)
-            
             total_processed += 1
-        
         except Exception as e:
-            activity_log.success = False
-            activity_log.message = str(e)
             log.error("Error processing station link %s: %s", station_link, str(e), exc_info=True)
             errors += 1
         
         finally:
-            activity_log.duration_ms = (time.monotonic() - start) * 1000
-            activity_log.save()
-            
             # Release the lock after processing
             cache.delete(lock_key)
-            
-            log.info("Station link %s completed in %.2fms",
-                     station_link, activity_log.duration_ms)
+            duration_ms = (time.monotonic() - start) * 1000
+            log.info("Station link %s completed in %.2fms", station_link, duration_ms)
     
     # Summary
     log.success(

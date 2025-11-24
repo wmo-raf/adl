@@ -8,6 +8,8 @@ from .views import (
     station_link_monitoring
 )
 
+from .views.activity import NetworkConnectionActivityView, DispatchChannelMonitoringView
+
 urlpatterns = [
     path("plugin-processing-results/<int:network_conn_id>/",
          get_network_conn_plugin_task_results_since,
@@ -20,6 +22,10 @@ urlpatterns = [
          name="get_station_activity_log_with_date"),
     path('connection/<int:connection_id>/', network_connection_monitoring,
          name='network_connection_monitoring'),
+    path("connection-activity/<int:connection_id>/", NetworkConnectionActivityView.as_view(),
+         name='network_connection_activity'),
+    path("dispatch-activity/<int:channel_id>/", DispatchChannelMonitoringView.as_view(),
+         name='dispatch_activity'),
     path('dispatch-channel/<int:channel_id>/', dispatch_channel_monitoring,
          name='dispatch_channel_monitoring'),
     path('station-link/<int:link_id>/', station_link_monitoring,
