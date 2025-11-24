@@ -600,6 +600,11 @@ class ObservationRecord(TimescaleModel, ClusterableModel):
                 name='unique_station_conn_param_obs_record'
             )
         ]
+        
+        indexes = [
+            models.Index(fields=['station', '-time']),
+            models.Index(fields=['connection', 'station', '-time']),
+        ]
     
     @property
     def utc_time(self):

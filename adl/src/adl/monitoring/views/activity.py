@@ -1,4 +1,5 @@
 from datetime import timedelta
+from django.db.models import OuterRef, Subquery, Value, Case, When
 
 from django.contrib.humanize.templatetags.humanize import naturaltime
 from django.urls import reverse
@@ -34,64 +35,59 @@ class NetworkConnectionActivityView(APIView):
         if not connection:
             return Response({"error": "Connection not found"}, status=404)
         
-        # Fetch station links
-        station_links = connection.station_links.select_related("station")
+        # --- 1. Prepare Subqueries ---
+        # We prepare the SQL instructions, but they don't run yet.
         
-        # --- Fetch latest activity logs per station link
-        latest_logs = (
-            StationLinkActivityLog.objects
-            .filter(station_link__in=station_links)
-            .order_by("station_link", "-time")
-            .distinct("station_link")
+        # Get latest log time for the specific StationLink
+        latest_log_time_sq = StationLinkActivityLog.objects.filter(
+            station_link=OuterRef('pk')
+        ).order_by('-time').values('time')[:1]
+        
+        latest_log_success_sq = StationLinkActivityLog.objects.filter(
+            station_link=OuterRef('pk')
+        ).order_by('-time').values('success')[:1]
+        
+        # Get latest observation time
+        latest_obs_time_sq = ObservationRecord.objects.filter(
+            station=OuterRef('station'),
+            connection=connection
+        ).order_by('-time').values('time')[:1]
+        
+        # --- 2. The Main Query ---
+        # We fetch all links and attach the latest dates in a SINGLE database round-trip.
+        station_links = connection.station_links.select_related("station").annotate(
+            last_check=Subquery(latest_log_time_sq),
+            last_log_success=Subquery(latest_log_success_sq),
+            last_collected=Subquery(latest_obs_time_sq)
         )
-        
-        logs_map = {log.station_link_id: log for log in latest_logs}
-        
-        # --- Fetch latest observation records per station (fallback)
-        latest_obs = (
-            ObservationRecord.objects
-            .filter(
-                station__in=[sl.station for sl in station_links],
-                connection=connection
-            )
-            .order_by("station", "-time")
-            .distinct("station")
-        )
-        obs_map = {o.station_id: o for o in latest_obs}
         
         stations_output = []
-        summary = {"active": 0, "warning": 0, }
+        summary = {"active": 0, "warning": 0, "error": 0}
+        data_viewer_url = reverse("viewer_table")
         
-        data_viewer_url = reverse("viewer_table"),
         
+        # --- 3. Build Response ---
         for sl in station_links:
-            log = logs_map.get(sl.id)
-            obs = obs_map.get(sl.station_id)
+            # Logic: If no check ever -> Warning. If check exists -> Active (if success) or Error (if failed)
+            status = "warning"
+            if sl.last_check is not None:
+                status = "active" if sl.last_log_success else "error"
             
-            # ========= Compute status =========
-            status = compute_status(log) if log else "warning"
+            # Update summary counts safely
             summary[status] += 1
             
-            last_check = log.time if log else None
-            last_check_human = naturaltime(last_check) if last_check else None
-            
-            last_collected = obs.time if obs else None
-            last_collected_human = naturaltime(last_collected) if last_collected else None
-            
-            station_link_monitoring_url = reverse("station_link_monitoring", args=(sl.id,))
-            
-            station_link_monitoring_url += f"?direction=pull"
+            # Construct URLs
+            monitor_url = reverse("station_link_monitoring", args=(sl.id,)) + "?direction=pull"
             
             stations_output.append({
                 "id": sl.id,
                 "name": sl.station.name,
                 "status": status,
-                "last_check": last_check,
-                "last_check_human": last_check_human,
-                "last_collected": last_collected,
-                "last_collected_human": last_collected_human,
-                "log_id": log.id if log else None,
-                "logs_url": station_link_monitoring_url,
+                "last_check": sl.last_check,
+                "last_check_human": naturaltime(sl.last_check) if sl.last_check else None,
+                "last_collected": sl.last_collected,
+                "last_collected_human": naturaltime(sl.last_collected) if sl.last_collected else None,
+                "logs_url": monitor_url,
                 "data_viewer_url": data_viewer_url,
             })
         
