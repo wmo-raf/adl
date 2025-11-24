@@ -373,6 +373,8 @@ class NetworkConnection(PolymorphicModel, ClusterableModel):
                                              help_text=_("Number of stations to process in a single batch"))
     is_daily_data = models.BooleanField(default=False, verbose_name=_("Is Daily Data"),
                                         help_text=_("Check to mark data from this connection as daily data"))
+    sort_order = models.PositiveIntegerField(default=0, verbose_name=_("Sort Order"),
+                                             help_text=_("Order in which the connections are displayed"))
     
     panels = [
         FieldPanel("name"),
@@ -385,11 +387,13 @@ class NetworkConnection(PolymorphicModel, ClusterableModel):
             FieldPanel("batch_size"),
         ], heading=_("Plugin Configuration")),
         FieldPanel("is_daily_data"),
+        FieldPanel("sort_order"),
     ]
     
     class Meta:
         verbose_name = _("Network Connection")
         verbose_name_plural = _("Network Connections")
+        ordering = ["sort_order"]
     
     def __str__(self):
         return self.name
@@ -688,6 +692,8 @@ class DispatchChannel(PolymorphicModel, ClusterableModel):
                                           default="hourly", verbose_name=_("Aggregation Period"))
     public_url = models.URLField(blank=True, null=True, verbose_name=_("Public URL"),
                                  help_text=_("Public URL of the channel,if available"))
+    sort_order = models.PositiveIntegerField(default=0, verbose_name=_("Sort Order"),
+                                             help_text=_("Order in which the connections are displayed"))
     
     base_panels = [
         MultiFieldPanel([
@@ -700,7 +706,11 @@ class DispatchChannel(PolymorphicModel, ClusterableModel):
             FieldPanel("start_date"),
             FieldPanel("public_url"),
         ], heading=_("Base")),
+        FieldPanel("sort_order"),
     ]
+    
+    class Meta:
+        ordering = ["sort_order"]
     
     parameter_panels = [
         InlinePanel("parameter_mappings", label=_("Parameter Mappings"), heading=_("Parameter Mappings")),

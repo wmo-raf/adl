@@ -43,9 +43,9 @@ class StationActivityPanel(Component):
     def get_context_data(self, parent_context):
         context = super().get_context_data(parent_context)
         
-        network_connections = NetworkConnection.objects.all().order_by("network_id")
+        network_connections = NetworkConnection.objects.all().order_by("sort_order")
         context["network_connections"] = network_connections
         
-        dispatch_channels = DispatchChannel.objects.all()
+        dispatch_channels = DispatchChannel.objects.all().order_by("sort_order")
         context["dispatch_channels"] = dispatch_channels
         return context
