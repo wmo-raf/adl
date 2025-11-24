@@ -66,6 +66,7 @@ class NetworkConnectionActivityView(APIView):
         
         # --- PROCESS DATA & CALCULATE STATUS ---
         
+        stations_count = station_links.count()
         stations_output = []
         summary = {"active": 0, "warning": 0, "error": 0}
         data_viewer_url_base = reverse("viewer_table")
@@ -134,6 +135,7 @@ class NetworkConnectionActivityView(APIView):
                 "enabled": connection.enabled,
                 "interval_minutes": connection.interval,
                 "plugin": connection.plugin_name,
+                "stations_count": stations_count,
             },
             "summary": summary,
             "stations": stations_output,
@@ -199,6 +201,7 @@ class DispatchChannelMonitoringView(APIView):
         
         stations_output = []
         summary = {"active": 0, "warning": 0, "error": 0}
+        stations_count = station_links.count()
         
         for sl in station_links:
             # --- Pipeline Status ---
@@ -251,12 +254,14 @@ class DispatchChannelMonitoringView(APIView):
             })
         
         return Response({
-            "connection": {
+            "channel": {
                 "id": channel.id,
                 "name": channel.name,
                 "enabled": channel.enabled,
                 "interval_minutes": channel.data_check_interval,
                 "plugin": "Dispatch",
+                "stations_count": stations_count,
+                "public_url": channel.public_url,
             },
             "summary": summary,
             "stations": stations_output,

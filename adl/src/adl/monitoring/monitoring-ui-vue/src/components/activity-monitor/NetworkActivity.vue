@@ -116,6 +116,9 @@ const filteredStations = computed(() => {
             <span class="meta-badge">
                     <i class="pi pi-box"></i> {{ connection?.plugin || 'Plugin' }}
                 </span>
+            <span class="meta-badge">
+               <i class="pi pi-map-marker"></i> {{ connection?.stations_count || 0 }} Stations
+             </span>
           </div>
         </div>
 

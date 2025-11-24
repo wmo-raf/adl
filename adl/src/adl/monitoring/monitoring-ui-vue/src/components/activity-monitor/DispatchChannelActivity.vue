@@ -31,7 +31,7 @@ const fetchData = async () => {
     const res = await fetch(`/monitoring/dispatch-activity/${props.channelId}/`)
     if (!res.ok) throw new Error("API not found")
     const data = await res.json()
-    channel.value = data.connection
+    channel.value = data.channel
     summary.value = data.summary
     stations.value = data.stations
   } catch (err) {
@@ -125,7 +125,24 @@ const filteredStations = computed(() => {
                 <i class="pi pi-clock"></i> {{ channel?.interval_minutes || 10 }}m Check
             </span>
             <span class="meta-badge">
-                <i class="pi pi-send"></i> Dispatch
+                <i class="pi pi-send"></i>
+              <a
+                  v-if="channel?.public_url"
+                  :href="channel.public_url"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  class="badge-link"
+              >
+                  Dispatch <i class="pi pi-external-link" style="font-size: 0.7em;"></i>
+                </a>
+
+                <span v-else>
+                  Dispatch
+                </span>
+
+            </span>
+            <span class="meta-badge">
+              <i class="pi pi-map-marker"></i> {{ channel?.stations_count || 0 }} Stations
             </span>
           </div>
         </div>
