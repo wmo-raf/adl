@@ -394,10 +394,23 @@ class NetworkConnection(PolymorphicModel, ClusterableModel):
     def __str__(self):
         return self.name
     
+    @property
+    def enabled(self):
+        return self.plugin_processing_enabled
+    
+    @property
+    def interval(self):
+        return self.plugin_processing_interval
+    
     def get_plugin(self):
         plugin_type = self.plugin
         plugin = plugin_registry.get(plugin_type)
         return plugin
+    
+    @property
+    def plugin_name(self):
+        plugin = self.get_plugin()
+        return plugin.label
     
     def collect_data(self, initial_start_date=None):
         plugin = self.get_plugin()

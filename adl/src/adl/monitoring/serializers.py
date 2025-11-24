@@ -40,6 +40,7 @@ class StationLinkActivityLogSerializer(serializers.ModelSerializer):
             "station",
             # "station_id",  # optional
             "direction",
+            "status",
             "success",
             "message",
             "duration_ms",

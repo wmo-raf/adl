@@ -25,6 +25,7 @@ export default defineConfig({
         rollupOptions: {
             input: {
                 "task-monitor": resolve('./src/task-monitor.js'),
+                "network-activity": resolve('./src/network-activity.js'),
             },
             output: {
                 dir: '../static/vue/',

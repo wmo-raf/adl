@@ -60,6 +60,7 @@ class StationActivityPanel(Component):
             js=[
                 "js/vendor/vis-timeline-graph2d.min.js",
                 "js/monitoring.js",
+            
             ]
         )
         

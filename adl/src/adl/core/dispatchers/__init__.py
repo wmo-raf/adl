@@ -216,6 +216,7 @@ def run_dispatch_channel(dispatcher_id, station_link_ids=None):
             log.records_count = 0
             log.duration_ms = (time.monotonic() - start) * 1000
             log.message = "No data records to send"
+            log.status = StationLinkActivityLog.ActivityStatus.COMPLETED
             log.save()
             logger.info(f"[DISPATCH] No data records to send for station {station_id} on channel "
                         f"{dispatch_channel.name}.")
@@ -253,10 +254,14 @@ def run_dispatch_channel(dispatcher_id, station_link_ids=None):
                 log.obs_start_time = previous_sent_obs_time
             if last_sent_obs_time:
                 log.obs_end_time = last_sent_obs_time
+            
+            log.status = StationLinkActivityLog.ActivityStatus.COMPLETED
+            log.message = f"Sent {num_of_sent_records} records successfully."
         
         except Exception as e:
             log.success = False
             log.message = str(e)
+            log.status = StationLinkActivityLog.ActivityStatus.FAILED
             logger.error(f"[DISPATCH] Error while sending data for station {station_link} on channel "
                          f"{dispatch_channel.name}: {e}")
         finally:

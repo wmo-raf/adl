@@ -1,3 +1,4 @@
+import time
 from datetime import timedelta, datetime
 from datetime import timezone as py_tz
 from typing import Iterable, List, Dict, Any, Optional, Tuple
@@ -5,6 +6,7 @@ from typing import Iterable, List, Dict, Any, Optional, Tuple
 from django.core.exceptions import ImproperlyConfigured
 from django.utils import timezone as dj_timezone
 
+from .date_utils import make_record_timezone_aware
 from .logging import TaskLogger
 from .registry import Registry, Instance
 from .validators import StationRecordModel
@@ -252,11 +254,7 @@ class Plugin(Instance):
                 raise ValueError(msg)
             
             # Normalize to aware station-local time WITHOUT shifting the instant
-            if dj_timezone.is_aware(obs_time):
-                obs_time = obs_time.astimezone(tz)
-            else:
-                # Interpret naive as station-local
-                obs_time = dj_timezone.make_aware(obs_time, timezone=tz)
+            obs_time = make_record_timezone_aware(obs_time, tz)
             
             for mapping in variable_mappings:
                 adl_param = getattr(mapping, "adl_parameter", None)
@@ -367,34 +365,66 @@ class Plugin(Instance):
     
     # ---------- Orchestration ----------
     def process_station(self, station_link, initial_start_date=None, initial_end_date=None) -> int:
+        from adl.monitoring.models import StationLinkActivityLog
         log = self.get_logger()
-        start_date, end_date = self.get_dates_for_station(station_link)
         
-        if initial_start_date:
-            start_date = initial_start_date
+        start = time.monotonic()
+        activity_log = StationLinkActivityLog.objects.create(
+            time=dj_timezone.now(),
+            station_link=station_link,
+            direction='pull',
+        )
         
-        if initial_end_date:
-            end_date = initial_end_date
+        saved_obs_records_count = 0
         
-        log.info("Fetching %s from %s to %s.", station_link, start_date, end_date)
+        try:
+            start_date, end_date = self.get_dates_for_station(station_link)
+            
+            if initial_start_date:
+                start_date = initial_start_date
+            
+            if initial_end_date:
+                end_date = initial_end_date
+            
+            log.info("Fetching %s from %s to %s.", station_link, start_date, end_date)
+            
+            # get the station data
+            station_records = self.get_station_data(station_link, start_date=start_date, end_date=end_date)
+            
+            if not station_records:
+                log.info("No new data for %s.", station_link)
+                return 0
+            
+            earliest = min(station_records, key=lambda r: r["observation_time"])["observation_time"]
+            latest = max(station_records, key=lambda r: r["observation_time"])["observation_time"]
+            
+            earliest = make_record_timezone_aware(earliest, station_link.timezone)
+            latest = make_record_timezone_aware(latest, station_link.timezone)
+            
+            log.info("Fetched %d records for %s from %s to %s.",
+                     len(station_records), station_link, earliest, latest)
+            
+            # save the records to the database
+            saved_obs_records = self.save_records(station_link, station_records)
+            saved_obs_records_count = len(saved_obs_records) if saved_obs_records else 0
+            
+            activity_log.status = StationLinkActivityLog.ActivityStatus.COMPLETED
+            activity_log.success = True
+            activity_log.obs_start_time = earliest
+            activity_log.obs_end_time = latest
+            
+            activity_log.message = f"Processed {saved_obs_records_count} records."
         
-        # get the station data
-        station_records = self.get_station_data(station_link, start_date=start_date, end_date=end_date)
-        
-        if not station_records:
-            log.info("No new data for %s.", station_link)
-            return 0
-        
-        earliest = min(station_records, key=lambda r: r["observation_time"])["observation_time"]
-        latest = max(station_records, key=lambda r: r["observation_time"])["observation_time"]
-        
-        log.info("Fetched %d records for %s from %s to %s.",
-                 len(station_records), station_link, earliest, latest)
-        
-        # save the records to the database
-        saved_obs_records = self.save_records(station_link, station_records)
-        
-        saved_obs_records_count = len(saved_obs_records) if saved_obs_records else 0
+        except Exception as e:
+            error_msg = str(e)
+            activity_log.success = False
+            activity_log.message = error_msg
+            activity_log.status = StationLinkActivityLog.ActivityStatus.FAILED
+            log.error("Error processing station %s: %s", station_link, error_msg)
+        finally:
+            activity_log.duration_ms = (time.monotonic() - start) * 1000
+            activity_log.records_count = saved_obs_records_count
+            activity_log.save()
         
         return saved_obs_records_count
     
