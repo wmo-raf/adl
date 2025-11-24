@@ -258,13 +258,14 @@ const filteredStations = computed(() => {
           <Column header="Actions" style="width: 160px" alignFrozen="right">
             <template #body="{ data }">
               <div class="action-group">
-                <a :href="`${data.data_viewer_url}`" target="_blank" class="action-link" title="View Data">
-                  View Data
+                <a :href="`${data.logs_url}`" target="_blank" class="action-link" title="View Logs">
+                  View Logs
                 </a>
                 <span class="divider">|</span>
-                <a :href="`${data.logs_url}`" target="_blank" class="action-link" title="View Logs">
-                  Logs
+                <a :href="`${data.data_viewer_url}`" target="_blank" class="action-link" title="View Data">
+                  Data
                 </a>
+
               </div>
             </template>
           </Column>

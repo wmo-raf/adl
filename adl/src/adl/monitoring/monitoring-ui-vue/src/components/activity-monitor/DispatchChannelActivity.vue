@@ -182,7 +182,7 @@ const filteredStations = computed(() => {
       </div>
 
       <div class="table-wrapper">
-        <DataTable :value="filteredStations" :loading="loading" class="flat-table" paginator :rows="10">
+        <DataTable :value="filteredStations" :loading="loading" class="flat-table" paginator :rows="50">
 
           <Column header="Station Name" style="min-width: 250px">
             <template #body="{ data }">
@@ -246,12 +246,11 @@ const filteredStations = computed(() => {
             <template #body="{ data }">
               <div class="action-group">
                 <a :href="`${data.logs_url}`" target="_blank" class="action-link" title="View Logs">
-                  Logs
+                  View Logs
                 </a>
               </div>
             </template>
           </Column>
-
           <template #empty>
             <div class="empty-state">
               <p>No stations found for this channel.</p>
