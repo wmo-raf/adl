@@ -1,11 +1,68 @@
 {% load wagtailadmin_tags i18n vue_utils static %}
 
-<div class="station-activity-container">
-    {% for network_connection in network_connections %}
-        <div id="network-activity-{{ network_connection.id }}" data-connection-id="{{ network_connection.id }}">
-        </div>
-    {% endfor %}
-    <script type="module" crossorigin src="{% vue_bundle_url 'network-activity' %}"></script>
+<style>
+    .adl-monitoring-tabs .w-tabs__list {
+        padding: 0 !important;
+    }
+
+    .adl-monitoring-tabs .w-tabs__tab {
+        display: flex;
+        gap: 8px;
+        flex-direction: row-reverse;
+    }
+
+    .adl-monitoring-tabs .w-tabs__tab .icon {
+        height: 24px;
+        width: 24px;
+    }
+
+    .adl-monitoring-tabs .tab-content {
+        padding: 0 !important;
+        margin: 40px 0;
+    }
+
+</style>
+<div class="w-tabs adl-monitoring-tabs" data-controller="w-tabs" data-w-tabs-active-class="animate-in"
+     data-w-tabs-active-panel-id-value="tab-pulling">
+    <div class="w-tabs__list" role="tablist"
+         data-action="keydown.right-&gt;w-tabs#selectNext keydown.left-&gt;w-tabs#selectPrevious keydown.home-&gt;w-tabs#selectFirst keydown.end-&gt;w-tabs#selectLast">
+        <a id="tab-label-pulling" href="#tab-pulling" class="w-tabs__tab " role="tab" tabindex="0"
+           data-action="w-tabs#select:prevent" data-w-tabs-target="trigger" aria-controls="tab-pulling"
+           aria-selected="true">
+            Data Pulling
+            {% icon name="plug" %}
+        </a>
+        <a id="tab-label-pushing" href="#tab-pushing" class="w-tabs__tab " role="tab" tabindex="-1"
+           data-action="w-tabs#select:prevent" data-w-tabs-target="trigger" aria-controls="tab-pushing">
+            Data Pushing
+            {% icon name="resubmit" %}
+        </a>
+    </div>
+    <div class="tab-content">
+        <section class="w-min-h-24 w-tabs__panel animate-in" id="tab-pulling" role="tabpanel"
+                 aria-labelledby="tab-label-pulling" data-w-tabs-target="panel"
+                 data-action="w-focus:focus-&gt;w-tabs#selectInside">
+            <div class="station-activity-container">
+                {% for network_connection in network_connections %}
+                    <div id="network-activity-{{ network_connection.id }}"
+                         data-connection-id="{{ network_connection.id }}">
+                    </div>
+                {% endfor %}
+            </div>
+        </section>
+        <section class="w-min-h-24 w-tabs__panel" id="tab-pushing" role="tabpanel"
+                 aria-labelledby="tab-label-pushing" data-w-tabs-target="panel"
+                 data-action="w-focus:focus-&gt;w-tabs#selectInside" hidden="">
+            <div class="dispatch-channels-activity-container">
+                {% for channel in dispatch_channels %}
+                    <div id="dispatch-activity-{{ channel.id }}"
+                         data-channel-id="{{ channel.id }}">
+                    </div>
+                {% endfor %}
+            </div>
+        </section>
+    </div>
+    <script type="module" crossorigin src="{% vue_bundle_url 'activity-monitor' %}"></script>
 </div>
 
 
