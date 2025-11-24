@@ -215,21 +215,21 @@ const filteredStations = computed(() => {
                     :class="['status-indicator', getSeverityClass(data.pipeline_status)]"
                     :title="`Pipeline: ${data.pipeline_status}`"
                 >
-                  <i class="pi pi-cog"></i>
+                  <i class="pi pi-server"></i>
                 </div>
 
                 <div
                     :class="['status-indicator', getSeverityClass(data.data_status)]"
                     :title="`Data Freshness: ${data.data_status}`"
                 >
-                  <i class="pi pi-wifi"></i>
+                  <i class="pi pi-database"></i>
                 </div>
 
               </div>
             </template>
           </Column>
 
-          <Column header="Last Check (Pipeline)" style="width: 180px">
+          <Column header="Last Check" style="width: 180px">
             <template #body="{ data }">
               <div class="time-cell">
                 <span class="time-main" :class="{'text-danger': data.pipeline_status === 'error'}">
@@ -258,11 +258,12 @@ const filteredStations = computed(() => {
           <Column header="Actions" style="width: 160px" alignFrozen="right">
             <template #body="{ data }">
               <div class="action-group">
-                <a :href="`${data.data_viewer_url}`" target="_blank" class="action-icon" title="View Data">
-                  <i class="pi pi-table"></i>
+                <a :href="`${data.data_viewer_url}`" target="_blank" class="action-link" title="View Data">
+                  View Data
                 </a>
-                <a :href="`${data.logs_url}`" target="_blank" class="action-icon" title="View Logs">
-                  <i class="pi pi-list"></i>
+                <span class="divider">|</span>
+                <a :href="`${data.logs_url}`" target="_blank" class="action-link" title="View Logs">
+                  Logs
                 </a>
               </div>
             </template>
@@ -496,17 +497,10 @@ const filteredStations = computed(() => {
 
 /* REFRESH BUTTON */
 .refresh-btn {
-  background: #fff !important;
-  color: #0f172a !important;
   border: 1px solid #cbd5e1 !important;
   font-weight: 600 !important;
   font-size: 13px !important;
-  height: 40px;
-}
-
-.refresh-btn:hover {
-  background: #f1f5f9 !important;
-  border-color: #94a3b8 !important;
+  height: 30px;
 }
 
 /* TABLE STYLES */
@@ -562,13 +556,11 @@ const filteredStations = computed(() => {
 .cell-title {
   font-weight: 600;
   font-size: 14px;
-  color: #0f172a;
   text-decoration: none;
 }
 
 .station-link:hover {
   text-decoration: underline;
-  color: #2563eb;
 }
 
 /* NEW DUAL STATUS STYLES */
@@ -648,22 +640,16 @@ const filteredStations = computed(() => {
   justify-content: flex-end;
 }
 
-.action-icon {
-  width: 32px;
-  height: 32px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 4px;
-  color: #64748b;
-  background: transparent;
+.action-link {
   text-decoration: none;
-  transition: all 0.2s;
+  font-weight: 600;
+  font-size: 12px;
+  cursor: pointer;
+  transition: color 0.1s;
 }
 
-.action-icon:hover {
-  background: #f1f5f9;
-  color: #2563eb;
+.action-link:hover {
+  text-decoration: underline;
 }
 
 /* EMPTY STATE */
