@@ -64,11 +64,13 @@ services:
         - UID=${UID}
         - GID=${GID}
         - DOCKER_COMPOSE_WAIT_PLATFORM_SUFFIX=${DOCKER_COMPOSE_WAIT_PLATFORM_SUFFIX:-}
+        - ADL_PLUGIN_GIT_REPOS=${ADL_PLUGIN_GIT_REPOS}
     restart: always
     command: gunicorn wsgi
     environment:
       <<: *backend-variables
       ADL_PG_TILESERV_BASE_URL: ${ADL_PG_TILESERV_BASE_URL:-http://adl_pg_tileserv:7800}
+      ADL_DISABLE_PLUGIN_INSTALL_ON_STARTUP: "true"
     expose:
       - "8000"
     depends_on:
@@ -91,12 +93,14 @@ services:
         - UID=${UID}
         - GID=${GID}
         - DOCKER_COMPOSE_WAIT_PLATFORM_SUFFIX=${DOCKER_COMPOSE_WAIT_PLATFORM_SUFFIX:-}
+        - ADL_PLUGIN_GIT_REPOS=${ADL_PLUGIN_GIT_REPOS}
     restart: always
     init: true
     command: celery-worker
     environment:
       <<: *backend-variables
       WAIT_HOSTS: adl_db:5432,adl_redis:6379,adl:8000
+      ADL_DISABLE_PLUGIN_INSTALL_ON_STARTUP: "true"
     depends_on:
       - adl_db
       - adl_redis
@@ -115,12 +119,14 @@ services:
         - UID=${UID}
         - GID=${GID}
         - DOCKER_COMPOSE_WAIT_PLATFORM_SUFFIX=${DOCKER_COMPOSE_WAIT_PLATFORM_SUFFIX:-}
+        - ADL_PLUGIN_GIT_REPOS=${ADL_PLUGIN_GIT_REPOS}
     restart: always
     init: true
     command: celery-beat
     environment:
       <<: *backend-variables
       WAIT_HOSTS: adl_db:5432,adl_redis:6379,adl:8000
+      ADL_DISABLE_PLUGIN_INSTALL_ON_STARTUP: "true"
     depends_on:
       - adl_db
       - adl_redis

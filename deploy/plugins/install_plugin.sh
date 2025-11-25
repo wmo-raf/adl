@@ -14,7 +14,7 @@ Usage: install_plugin.sh [-d] [-f <plugin folder>]
   -o, --overwrite                     If provided any existing plugin of the same name will be overwritten and force re-installed, built and/or setup.
   -h, --help                          Show this help message and exit.
 
-A WIS2Box plugin is a folder named after the plugin. This must be a valid Python package.
+An ADL plugin is a folder named after the plugin. This must be a valid Python package.
 """
 }
 
@@ -229,10 +229,12 @@ if [[ -d "$folder" ]]; then
 
       cd /adl
 
+      VENV_PIP="/adl/venv/bin/pip"
+
       if [[ "$dev" == true ]]; then
-          run_as_docker_user pip3 install -e "$folder"
+          run_as_docker_user "$VENV_PIP" install -e "$folder"
       else
-          run_as_docker_user pip3 install "$folder"
+          run_as_docker_user "$VENV_PIP" install "$folder"
       fi
 
       check_and_run_script "$folder" build.sh
