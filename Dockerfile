@@ -54,6 +54,22 @@ RUN /adl/venv/bin/pip install --no-cache-dir -e /adl/app/
 
 COPY --chown=$UID:$GID ./docker-entrypoint.sh /adl/docker-entrypoint.sh
 
+# Define plugin git repos to be installed at build time
+ARG ADL_PLUGIN_GIT_REPOS=""
+
+# Install any specified plugins
+RUN --mount=type=cache,mode=777,target=$PIP_CACHE_DIR,uid=$UID,gid=$GID \
+    if [ -n "$ADL_PLUGIN_GIT_REPOS" ]; then \
+        echo "Baking in plugins: $ADL_PLUGIN_GIT_REPOS"; \
+        plugin_list=$(echo "$ADL_PLUGIN_GIT_REPOS" | tr ',' ' '); \
+        for repo in $plugin_list; do \
+            echo "Processing: $repo"; \
+            /bin/bash /adl/plugins/install_plugin.sh --git "$repo" || exit 1; \
+        done \
+    else \
+        echo "No plugins specified for build."; \
+    fi
+
 ENV DJANGO_SETTINGS_MODULE='adl.config.settings.production'
 
 # Add the venv to the path
