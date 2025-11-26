@@ -31,7 +31,8 @@ different receiving systems.
 | 20  | 🇸🇩 [Sudan](https://meteosudan.sd)               | ADL CIMAWebDrops Plugin                                                   | —                                                           | ⏳ In Progress |
 | 21  | 🇺🇬 Uganda                                       | ADL ADCON DB Plugin                                                       | Uganda Wis2box                                              | ⏳ In Progress |
 | 22  | 🇬🇲 Gambia                                       | —                                                                         | —                                                           | ⏳ In Progress |
-| 23  | 🇱🇷 Liberia                                      | —                                                                         | —                                                           | ⏳ In Progress |
+| 23  | 🇱🇷 Liberia                                      | ADL ADCON Plugin                                                          | —                                                           | ⏳ In Progress |
+| 24  | 🇿🇲 Zambia                                       | ADL FTP Plugin                                                            |                                                             | ⏳ In Progress |
 
 ## List of Plugins
 
