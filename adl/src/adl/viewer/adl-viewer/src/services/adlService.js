@@ -41,3 +41,14 @@ export const fetchStationLinkTimeseriesData = (axios, stationLinkId, {
     })
 }
 
+export const fetchQCSummary = (axios, month, year) => {
+    return axios.get('/qc/summary/', {
+        params: {month, year}
+    })
+}
+
+export const fetchInspectionData = (axios, stationId, month, year) => {
+    return axios.get(`/qc/inspection/${stationId}/`, {
+        params: {month, year}
+    })
+}

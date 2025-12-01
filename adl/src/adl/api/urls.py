@@ -1,5 +1,9 @@
 from django.urls import path
 
+from adl.viewer.views import (
+    get_qc_summary,
+    get_station_qc_inspection
+)
 from .views import (
     get_network_connections,
     get_network_connection_station_links,
@@ -21,4 +25,6 @@ urlpatterns = [
     path("data/latest/<int:station_link_id>/", get_station_link_latest_data, name="station_link_latest_data"),
     path("data/timeseries/<int:station_link_id>/", get_station_link_timeseries_data,
          name="station_link_timeseries_data"),
+    path("qc/summary/", get_qc_summary, name="qc_summary"),
+    path("qc/inspection/<int:station_id>/", get_station_qc_inspection, name="qc_inspection")
 ]
