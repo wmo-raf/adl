@@ -1,0 +1,29 @@
+{% extends "wagtailadmin/generic/base.html" %}
+{% load wagtailadmin_tags i18n vue_utils %}
+
+{% get_current_language as LANGUAGE_CODE %}
+
+{% block extra_css %}
+    <style>
+        .content {
+            padding: 0 !important;
+            height: 100%;
+            width: 100%;
+        }
+    </style>
+{% endblock %}
+
+{% block content %}
+    <div id="qc-inspect" data-api-url="{{ api_url }}"
+         data-station-id="{{ station_id }}"
+         data-language-code="{{ LANGUAGE_CODE }}"
+         data-api-year="{{ api_year }}"
+         data-api-month="{{ api_month }}"
+    >
+    </div>
+{% endblock %}
+
+{% block extra_js %}
+    {{ block.super }}
+    <script type="module" crossorigin src="{% vue_bundle_url 'qc-inspect' %}"></script>
+{% endblock %}

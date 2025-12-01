@@ -11,6 +11,7 @@ from .views import pg_tileserver_settings
 def register_icons(icons):
     return icons + [
         'wagtailfontawesomesvg/solid/chart-line.svg',
+        'wagtailfontawesomesvg/solid/clipboard-check.svg',
     ]
 
 
@@ -32,7 +33,8 @@ def register_viewer_menu_item():
         MenuItem(_('Table'), reverse_lazy('viewer_table'), icon_name='table'),
         MenuItem(_('Chart'), reverse_lazy('viewer_chart'), icon_name='chart-line'),
         MenuItem(_('Map'), reverse_lazy("viewer_map"), icon_name='site'),
+        MenuItem(_('Quality Control'), reverse_lazy("qc_view"), icon_name='clipboard-check'),
         SubmenuMenuItem(_('Settings'), settings_submenu, icon_name='cog'),
     ])
     
-    return SubmenuMenuItem(_("Data Viewer"), submenu, icon_name='site')
+    return SubmenuMenuItem(_("Data"), submenu, icon_name='site')

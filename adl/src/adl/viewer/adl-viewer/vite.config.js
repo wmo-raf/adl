@@ -27,6 +27,8 @@ export default defineConfig({
                 "table-view": resolve('./src/table-view.js'),
                 "chart-view": resolve('./src/chart-view.js'),
                 "map-view": resolve('./src/map-view.js'),
+                "qc-status": resolve('./src/qc-status.js'),
+                "qc-inspect": resolve('./src/qc-inspect.js'),
             },
             output: {
                 dir: '../static/vue/',

@@ -6,6 +6,8 @@ import {createI18n} from "vue-i18n";
 import {createApp} from "vue";
 import PrimeVue from "primevue/config";
 import {createAxiosInstance} from "@/utils/axios.js";
+import HighchartsVue from "highcharts-vue";
+import Tooltip from 'primevue/tooltip'
 
 const WagtailThemePreset = definePreset(Aura, {
     semantic: {
@@ -59,9 +61,12 @@ export const createViewerApp = (rootElementId, RootComponent) => {
 
         pinia.use(() => ({axios: axiosInstance}))
 
+        app.directive('tooltip', Tooltip)
+
         app.use(pinia)
         app.use(i18n)
         app.use(DjangoUtilsPlugin, {rootElement: el})
+        app.use(HighchartsVue);
         app.mount(el)
     } else {
         console.error(`Element with id ${rootElementId} not found`)
