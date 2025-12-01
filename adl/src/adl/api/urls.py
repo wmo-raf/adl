@@ -1,6 +1,7 @@
 from django.urls import path
 
-from adl.viewer.views import (
+from adl.viewer.views.availability import DataAvailabilitySummaryView
+from adl.viewer.views.qc import (
     get_qc_summary,
     get_station_qc_inspection
 )
@@ -26,5 +27,6 @@ urlpatterns = [
     path("data/timeseries/<int:station_link_id>/", get_station_link_timeseries_data,
          name="station_link_timeseries_data"),
     path("qc/summary/", get_qc_summary, name="qc_summary"),
-    path("qc/inspection/<int:station_id>/", get_station_qc_inspection, name="qc_inspection")
+    path("qc/inspection/<int:station_id>/", get_station_qc_inspection, name="qc_inspection"),
+    path('data-availability/summary/', DataAvailabilitySummaryView.as_view(), name='data-availability-summary'),
 ]

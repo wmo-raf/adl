@@ -29,6 +29,7 @@ export default defineConfig({
                 "map-view": resolve('./src/map-view.js'),
                 "qc-status": resolve('./src/qc-status.js'),
                 "qc-inspect": resolve('./src/qc-inspect.js'),
+                "data-availability-summary": resolve('./src/data-availability-summary.js'),
             },
             output: {
                 dir: '../static/vue/',

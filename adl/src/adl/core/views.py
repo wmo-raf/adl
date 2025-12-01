@@ -383,7 +383,7 @@ def import_oscar_station(request, wigos_id):
 
 
 def connections_list(request):
-    connections = NetworkConnection.objects.all().order_by("name")
+    connections = NetworkConnection.objects.all()
     
     # Group connections by plugin
     grouped_connections = defaultdict(list)

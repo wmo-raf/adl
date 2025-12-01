@@ -52,3 +52,10 @@ export const fetchInspectionData = (axios, stationId, month, year) => {
         params: {month, year}
     })
 }
+
+export const fetchAvailabilitySummary = (axios, connectionId) => {
+    return axios.get('/data-availability/summary/', {
+        params: {connection_id: connectionId}
+    })
+}
+

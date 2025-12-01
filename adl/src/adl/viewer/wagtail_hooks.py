@@ -4,7 +4,7 @@ from rest_framework.reverse import reverse_lazy
 from wagtail import hooks
 from wagtail.admin.menu import Menu, MenuItem, SubmenuMenuItem
 
-from .views import pg_tileserver_settings
+from .views.tileserv import pg_tileserver_settings
 
 
 @hooks.register("register_icons")
@@ -12,6 +12,7 @@ def register_icons(icons):
     return icons + [
         'wagtailfontawesomesvg/solid/chart-line.svg',
         'wagtailfontawesomesvg/solid/clipboard-check.svg',
+        'wagtailfontawesomesvg/solid/calendar-check.svg',
     ]
 
 
@@ -33,6 +34,7 @@ def register_viewer_menu_item():
         MenuItem(_('Table'), reverse_lazy('viewer_table'), icon_name='table'),
         MenuItem(_('Chart'), reverse_lazy('viewer_chart'), icon_name='chart-line'),
         MenuItem(_('Map'), reverse_lazy("viewer_map"), icon_name='site'),
+        MenuItem(_('Data Availability'), reverse_lazy("data_availability_summary"), icon_name='calendar-check'),
         MenuItem(_('Quality Control'), reverse_lazy("qc_view"), icon_name='clipboard-check'),
         SubmenuMenuItem(_('Settings'), settings_submenu, icon_name='cog'),
     ])
