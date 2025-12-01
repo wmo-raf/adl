@@ -461,7 +461,7 @@ class Plugin(Instance):
         else:
             qc_checks = adl_param.qc_checks
         
-        if qc_checks:
+        if not qc_checks:
             return QCBits(0), QCStatus.NOT_EVALUATED, []
         
         # Create cache key with parameter version
