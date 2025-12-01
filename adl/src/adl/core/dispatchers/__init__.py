@@ -72,7 +72,7 @@ def get_dispatch_channel_data(dispatch_channel, station_link_ids=None):
     if not parameter_mappings:
         logger.error(
             f"[DISPATCH] No parameter mappings found for dispatch channel {channel_name}. Skipping...")
-        return
+        return {}
     
     parameter_mappings_ids = parameter_mappings.values_list("parameter_id", flat=True)
     
