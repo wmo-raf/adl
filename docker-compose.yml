@@ -66,7 +66,7 @@ services:
         - DOCKER_COMPOSE_WAIT_PLATFORM_SUFFIX=${DOCKER_COMPOSE_WAIT_PLATFORM_SUFFIX:-}
         - ADL_PLUGIN_GIT_REPOS=${ADL_PLUGIN_GIT_REPOS}
     restart: always
-    command: gunicorn wsgi
+    command: gunicorn-wsgi
     environment:
       <<: *backend-variables
       ADL_PG_TILESERV_BASE_URL: ${ADL_PG_TILESERV_BASE_URL:-http://adl_pg_tileserv:7800}
