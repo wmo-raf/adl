@@ -1,7 +1,14 @@
+"""
+ADL Plugin Registry - Optimized for Memory Efficiency
+
+This module provides generator-based processing to handle large datasets
+without loading everything into memory at once.
+"""
+
 import time
 from datetime import timedelta, datetime
 from datetime import timezone as py_tz
-from typing import Iterable, List, Dict, Any, Optional, Tuple
+from typing import Iterable, List, Dict, Any, Optional, Tuple, Generator
 
 from django.core.exceptions import ImproperlyConfigured
 from django.utils import timezone as dj_timezone
@@ -14,20 +21,26 @@ from .validators import StationRecordModel
 
 class Plugin(Instance):
     """
-     Base class for ADL data-source plugins.
- 
-     Child plugins must:
-       - set `label` (human-readable)
-       - implement `get_station_data(station_link, start_date, end_date)`
- 
-     Contract for `get_station_data`:
-       - Input dates are timezone-aware (station timezone) or None.
-       - Return an iterable of records. Each record MUST contain:
-           - "observation_time": datetime (aware or naive interpreted as station tz)
-         And MAY contain any number of source-parameter fields whose names match
-         StationVariableMapping.source_parameter_name.
-     """
+    Base class for ADL data-source plugins - Optimized for memory efficiency.
+
+    Child plugins must:
+      - set `label` (human-readable)
+      - implement `get_station_data(station_link, start_date, end_date)`
+
+    Contract for `get_station_data`:
+      - Input dates are timezone-aware (station timezone) or None.
+      - Return/yield an iterable of records. Each record MUST contain:
+          - "observation_time": datetime (aware or naive interpreted as station tz)
+        And MAY contain any number of source-parameter fields whose names match
+        StationVariableMapping.source_parameter_name.
+        
+    OPTIMIZATION: get_station_data should yield records (generator) rather than
+    returning a complete list to minimize memory usage.
+    """
     label = ""
+    
+    # Configurable chunk size for batch processing
+    SAVE_CHUNK_SIZE = 500
     
     # ---------- Lifecycle ----------
     def __init__(self):
@@ -43,7 +56,6 @@ class Plugin(Instance):
     def get_logger(self) -> TaskLogger:
         """Get or create task logger"""
         if self._task_logger is None:
-            # Use standard logger without task_id
             self._task_logger = TaskLogger(plugin_label=self.label)
         return self._task_logger
     
@@ -75,7 +87,6 @@ class Plugin(Instance):
         :return: A list containing the urls.
         :rtype: list
         """
-        
         return []
     
     def after_save_records(self, station_link, station_records, saved_records, qc_fail_results=None) -> None:
@@ -126,6 +137,9 @@ class Plugin(Instance):
         Fetch raw observations for a station between [start_date, end_date).
        
         Must be implemented by child plugins.
+        
+        OPTIMIZATION: Should yield records one at a time (generator) rather than
+        returning a complete list to minimize memory usage.
         """
         raise NotImplementedError
     
@@ -136,10 +150,7 @@ class Plugin(Instance):
         """
         timezone = station_link.timezone
         end_date = dj_timezone.localtime(timezone=timezone)
-        
-        # set the end date to the start of the next hour
         end_date = end_date.replace(minute=0, second=0, microsecond=0) + timedelta(hours=1)
-        
         return end_date
     
     def get_default_start_date(self, station_link) -> datetime:
@@ -147,7 +158,6 @@ class Plugin(Instance):
         One hour window ending at default_end_date.
         """
         end_date = self.get_default_end_date(station_link)
-        # set to end_date of the previous hour
         start_date = end_date - timedelta(hours=1)
         return start_date
     
@@ -201,170 +211,278 @@ class Plugin(Instance):
         if end_date == start_date:
             end_date += timedelta(hours=1)
         
-        # localize to station tz (safe if already aware)
         tz = station_link.timezone
         start_date = dj_timezone.localtime(start_date, timezone=tz)
         end_date = dj_timezone.localtime(end_date, timezone=tz)
         
         return start_date, end_date
     
-    # ---------- Persistence ----------
+    # ---------- Iterator utilities ----------
+    def _chunk_iterator(self, iterable: Iterable, chunk_size: int) -> Generator[List, None, None]:
+        log = self.get_logger()
+        chunk = []
+        total = 0
+        
+        for item in iterable:
+            chunk.append(item)
+            total += 1
+            
+            if len(chunk) >= chunk_size:
+                log.info(f"Yielding chunk of {len(chunk)} records (total so far: {total})")
+                yield chunk
+                chunk = []
+        
+        if chunk:
+            log.info(f"Yielding final chunk of {len(chunk)} records (total: {total})")
+            yield chunk
     
-    def save_records(self, station_link, station_records: Iterable[Dict[str, Any]]) -> Optional[List[Any]]:
+    # ---------- Persistence (Chunked) ----------
+    
+    def _process_single_record(
+            self,
+            record: Dict[str, Any],
+            station_link,
+            station,
+            variable_mappings: List,
+            tz,
+            log: TaskLogger
+    ) -> Tuple[List[Any], Dict[str, List], Optional[datetime]]:
         """
-        Normalize and upsert observations into ObservationRecord using QCPipeline system.
+        Process a single raw record into ObservationRecord objects.
+        
+        Returns:
+            - List of ObservationRecord objects (not yet saved)
+            - Dict of QC results keyed by time+param
+            - The observation time (for tracking earliest/latest)
         """
         from adl.core.models import ObservationRecord
         
-        log = self.get_logger()  # Get logger once
-        
-        station = station_link.station
-        variable_mappings = list(station_link.get_variable_mappings() or [])
-        
-        if not variable_mappings:
-            log.warning("No variable mappings for station %s.", station.name)
-            return None
-        
-        observation_records = {}
-        tz = station_link.timezone
+        observation_records = []
         qc_results = {}
         
-        # Initialize QC pipeline cache
-        if not hasattr(self, '_qc_pipelines_cache'):
-            self._qc_pipelines_cache = {}
+        try:
+            rec = StationRecordModel(
+                observation_time=record.get("observation_time"),
+                values={k: v for k, v in record.items() if k != "observation_time"}
+            )
+        except Exception as e:
+            log.warning("Bad record for station %s: %s", station.name, e)
+            return [], {}, None
         
-        for record in (station_records or []):
+        obs_time = rec.observation_time
+        
+        if not obs_time:
+            log.warning("Missing observation_time for station %s.", station.name)
+            return [], {}, None
+        
+        if not isinstance(obs_time, datetime):
+            log.error(
+                "observation_time for station %s must be datetime, got %s: %r",
+                station.name, type(obs_time), obs_time
+            )
+            return [], {}, None
+        
+        # Normalize to aware station-local time
+        obs_time = make_record_timezone_aware(obs_time, tz)
+        
+        for mapping in variable_mappings:
+            adl_param = getattr(mapping, "adl_parameter", None)
+            src_name = getattr(mapping, "source_parameter_name", None)
+            src_unit = getattr(mapping, "source_parameter_unit", None)
+            
+            if not (adl_param and src_name and src_unit):
+                continue
+            
+            src_name = str(src_name)
+            
+            if src_name not in rec.values:
+                continue
+            
+            value = rec.values.get(src_name)
+            
+            if value is None or not isinstance(value, (int, float)):
+                continue
+            
+            # Unit conversion
             try:
-                rec = StationRecordModel(observation_time=record.get("observation_time"),
-                                         values={k: v for k, v in record.items() if k != "observation_time"})
+                if adl_param.unit != src_unit:
+                    value = adl_param.convert_value_from_units(value, src_unit)
             except Exception as e:
-                log.warning("Bad record for station %s: %s", station.name, e)
+                log.warning(
+                    "Unit conversion failed for %s (%s→%s) on station %s: %s",
+                    adl_param.name, src_unit, adl_param.unit, station.name, e
+                )
                 continue
             
-            obs_time = rec.observation_time
+            time_key = dj_timezone.localtime(obs_time, timezone=py_tz.utc).isoformat()
+            utc_obs_key_with_param = f"{time_key}_{adl_param.id}"
             
-            if not obs_time:
-                log.warning("Missing observation_time for station %s.", station.name)
-                continue
+            # QC checks
+            qc_bits, qc_status, qc_messages = self.perform_qc_checks_with_pipeline(
+                value=value,
+                variable_mapping=mapping,
+                adl_param=adl_param,
+                station_link=station_link,
+                obs_time=obs_time
+            )
             
-            if not isinstance(obs_time, datetime):
-                msg = (f"observation_time for station {station.name} must be datetime, "
-                       f"got {type(obs_time)}: {obs_time!r}")
-                log.error(msg)
-                raise ValueError(msg)
+            if qc_messages:
+                if utc_obs_key_with_param not in qc_results:
+                    qc_results[utc_obs_key_with_param] = []
+                qc_results[utc_obs_key_with_param].extend(qc_messages)
             
-            # Normalize to aware station-local time WITHOUT shifting the instant
-            obs_time = make_record_timezone_aware(obs_time, tz)
-            
-            for mapping in variable_mappings:
-                adl_param = getattr(mapping, "adl_parameter", None)
-                src_name = getattr(mapping, "source_parameter_name", None)
-                src_unit = getattr(mapping, "source_parameter_unit", None)
-                
-                # Validate required mapping attributes
-                if not (adl_param and src_name and src_unit):
-                    log.warning(
-                        "Bad variable mapping for station %s (id=%s): adl=%s src=%s unit=%s",
-                        station.name, getattr(mapping, "id", "?"),
-                        bool(adl_param), bool(src_name), bool(src_unit),
-                    )
-                    continue
-                
-                # convert to string for consistency
-                src_name = str(src_name)
-                
-                if src_name not in rec.values:
-                    # Fine to skip silently; use debug
-                    log.debug(
-                        "No value for parameter %s (%s) in station %s at %s. Skipping.",
-                        adl_param.name, src_name, station.name, obs_time
-                    )
-                    continue
-                
-                value = rec.values.get(src_name)
-                
-                # Skip if value is None or not a number
-                if value is None or not (isinstance(value, (int, float))):
-                    continue
-                
-                # Unit conversion if needed
-                try:
-                    if adl_param.unit != src_unit:
-                        value = adl_param.convert_value_from_units(value, src_unit)
-                except Exception as e:
-                    log.warning(
-                        "Unit conversion failed for %s (%s→%s) on station %s: %s",
-                        adl_param.name, src_unit, adl_param.unit, station.name, e
-                    )
-                    continue
-                
-                time_key = dj_timezone.localtime(obs_time, timezone=py_tz.utc).isoformat()
-                utc_obs_key_with_param = f"{time_key}_{adl_param.id}"
-                
-                # QC PIPELINE SYSTEM: QC checks using pipeline
-                qc_bits, qc_status, qc_messages = self.perform_qc_checks_with_pipeline(
-                    value=value,
-                    variable_mapping=mapping,
-                    adl_param=adl_param,
-                    station_link=station_link,
-                    obs_time=obs_time
-                )
-                
-                # Store QC results for message creation
-                if qc_messages:
-                    if utc_obs_key_with_param not in qc_results:
-                        qc_results[utc_obs_key_with_param] = []
-                    qc_results[utc_obs_key_with_param].extend(qc_messages)
-                
-                # Use a dict key to deduplicate in case of multiple records for same time/param
-                if utc_obs_key_with_param in observation_records:
-                    log.info(
-                        "Duplicate observation for station %s, time %s, parameter %s. Overwriting previous value.",
-                        self.label, station.name, obs_time, adl_param.name
-                    )
-                
-                observation_records[utc_obs_key_with_param] = ObservationRecord(
-                    station=station,
-                    parameter=adl_param,
-                    time=obs_time,
-                    value=value,
-                    connection=station_link.network_connection,
-                    is_daily=station_link.network_connection.is_daily_data,
-                    qc_status=qc_status,
-                    qc_bits=int(qc_bits),
-                    qc_version=1,
-                )
+            observation_records.append(ObservationRecord(
+                station=station,
+                parameter=adl_param,
+                time=obs_time,
+                value=value,
+                connection=station_link.network_connection,
+                is_daily=station_link.network_connection.is_daily_data,
+                qc_status=qc_status,
+                qc_bits=int(qc_bits),
+                qc_version=1,
+            ))
         
-        observation_records_list = list(observation_records.values())
+        return observation_records, qc_results, obs_time
+    
+    def _save_chunk(
+            self,
+            station_link,
+            chunk_records: List[Dict[str, Any]],
+            variable_mappings: List,
+            log: TaskLogger
+    ) -> Tuple[int, Optional[datetime], Optional[datetime]]:
+        """
+        Process and save a chunk of records.
         
-        if not observation_records_list:
-            log.warning("No valid observation records for station %s.", station.name)
-            return None
+        Returns:
+            - Number of saved records
+            - Earliest observation time in chunk
+            - Latest observation time in chunk
+        """
+        from adl.core.models import ObservationRecord
+        
+        station = station_link.station
+        tz = station_link.timezone
+        
+        all_observation_records = {}  # Dedupe by time+param
+        all_qc_results = {}
+        chunk_earliest = None
+        chunk_latest = None
+        
+        for record in chunk_records:
+            obs_records, qc_results, obs_time = self._process_single_record(
+                record, station_link, station, variable_mappings, tz, log
+            )
+            
+            if obs_time:
+                if chunk_earliest is None or obs_time < chunk_earliest:
+                    chunk_earliest = obs_time
+                if chunk_latest is None or obs_time > chunk_latest:
+                    chunk_latest = obs_time
+            
+            # Merge into chunk collections (dedupe)
+            for obs_record in obs_records:
+                time_key = dj_timezone.localtime(obs_record.time, timezone=py_tz.utc).isoformat()
+                key = f"{time_key}_{obs_record.parameter_id}"
+                all_observation_records[key] = obs_record
+            
+            all_qc_results.update(qc_results)
+        
+        if not all_observation_records:
+            return 0, chunk_earliest, chunk_latest
+        
+        observation_records_list = list(all_observation_records.values())
         
         saved_records = ObservationRecord.objects.bulk_create(
             observation_records_list,
             update_conflicts=True,
             update_fields=["value", "is_daily", "qc_status", "qc_bits", "qc_version"],
             unique_fields=["time", "station", "connection", "parameter"],
-            batch_size=1000
+            batch_size=500  # Smaller batch for bulk_create itself
         )
         
-        if saved_records:
-            if qc_results:
-                self._create_qc_messages(saved_records, qc_results)
-            
-            try:
-                self.after_save_records(station_link, station_records, saved_records)
-            except Exception as e:
-                log.error(
-                    "after_save_records hook failed for station %s: %s",
-                    station.name, e
-                )
+        if saved_records and all_qc_results:
+            self._create_qc_messages(saved_records, all_qc_results)
         
-        return saved_records
+        return len(saved_records), chunk_earliest, chunk_latest
+    
+    def save_records(
+            self,
+            station_link,
+            station_records: Iterable[Dict[str, Any]],
+            chunk_size: Optional[int] = None
+    ) -> Tuple[int, Optional[datetime], Optional[datetime]]:
+        """
+        Normalize and upsert observations into ObservationRecord using chunked processing.
+        
+        This method processes records in chunks to minimize memory usage.
+        
+        Args:
+            station_link: The station link configuration
+            station_records: Iterable (can be generator) of raw records
+            chunk_size: Override default chunk size (self.SAVE_CHUNK_SIZE)
+        
+        Returns:
+            Tuple of (total_saved_count, earliest_time, latest_time)
+        """
+        log = self.get_logger()
+        
+        station = station_link.station
+        variable_mappings = list(station_link.get_variable_mappings() or [])
+        
+        if not variable_mappings:
+            log.warning("No variable mappings for station %s.", station.name)
+            return 0, None, None
+        
+        chunk_size = chunk_size or self.SAVE_CHUNK_SIZE
+        
+        total_saved = 0
+        overall_earliest = None
+        overall_latest = None
+        chunk_count = 0
+        
+        # Process in chunks - works with both generators and lists
+        for chunk in self._chunk_iterator(station_records, chunk_size):
+            chunk_count += 1
+            
+            saved_count, chunk_earliest, chunk_latest = self._save_chunk(
+                station_link, chunk, variable_mappings, log
+            )
+            
+            total_saved += saved_count
+            
+            # Track overall time range
+            if chunk_earliest:
+                if overall_earliest is None or chunk_earliest < overall_earliest:
+                    overall_earliest = chunk_earliest
+            if chunk_latest:
+                if overall_latest is None or chunk_latest > overall_latest:
+                    overall_latest = chunk_latest
+            
+            log.debug(
+                "Processed chunk %d for station %s: %d records saved",
+                chunk_count, station.name, saved_count
+            )
+        
+        if total_saved == 0:
+            log.warning("No valid observation records for station %s.", station.name)
+        else:
+            log.info(
+                "Saved %d total records for station %s in %d chunks",
+                total_saved, station.name, chunk_count
+            )
+        
+        return total_saved, overall_earliest, overall_latest
     
     # ---------- Orchestration ----------
     def process_station(self, station_link, initial_start_date=None, initial_end_date=None) -> int:
+        """
+        Process a single station - optimized for memory efficiency.
+        
+        Key optimization: Uses generator-based data fetching and chunked saving
+        to avoid loading all records into memory at once.
+        """
         from adl.monitoring.models import StationLinkActivityLog
         log = self.get_logger()
         
@@ -376,44 +494,51 @@ class Plugin(Instance):
         )
         
         saved_obs_records_count = 0
+        earliest_time = None
+        latest_time = None
         
         try:
             start_date, end_date = self.get_dates_for_station(station_link)
             
             if initial_start_date:
                 start_date = initial_start_date
-            
             if initial_end_date:
                 end_date = initial_end_date
             
             log.info("Fetching %s from %s to %s.", station_link, start_date, end_date)
             
-            # get the station data
-            station_records = self.get_station_data(station_link, start_date=start_date, end_date=end_date)
+            # Get station data - should be a generator for memory efficiency
+            station_records = self.get_station_data(
+                station_link,
+                start_date=start_date,
+                end_date=end_date
+            )
             
-            if not station_records:
+            if station_records is None:
                 log.info("No new data for %s.", station_link)
                 return 0
             
-            earliest = min(station_records, key=lambda r: r["observation_time"])["observation_time"]
-            latest = max(station_records, key=lambda r: r["observation_time"])["observation_time"]
+            # Use chunked save - handles generators efficiently
+            saved_obs_records_count, earliest_time, latest_time = self.save_records(
+                station_link,
+                station_records
+            )
             
-            earliest = make_record_timezone_aware(earliest, station_link.timezone)
-            latest = make_record_timezone_aware(latest, station_link.timezone)
-            
-            log.info("Fetched %d records for %s from %s to %s.",
-                     len(station_records), station_link, earliest, latest)
-            
-            # save the records to the database
-            saved_obs_records = self.save_records(station_link, station_records)
-            saved_obs_records_count = len(saved_obs_records) if saved_obs_records else 0
-            
-            activity_log.status = StationLinkActivityLog.ActivityStatus.COMPLETED
-            activity_log.success = True
-            activity_log.obs_start_time = earliest
-            activity_log.obs_end_time = latest
-            
-            activity_log.message = f"Processed {saved_obs_records_count} records."
+            if saved_obs_records_count == 0:
+                log.info("No records saved for %s.", station_link)
+                activity_log.status = StationLinkActivityLog.ActivityStatus.COMPLETED
+                activity_log.success = True
+                activity_log.message = "No new records to save."
+            else:
+                log.info(
+                    "Saved %d records for %s from %s to %s.",
+                    saved_obs_records_count, station_link, earliest_time, latest_time
+                )
+                activity_log.status = StationLinkActivityLog.ActivityStatus.COMPLETED
+                activity_log.success = True
+                activity_log.obs_start_time = earliest_time
+                activity_log.obs_end_time = latest_time
+                activity_log.message = f"Processed {saved_obs_records_count} records."
         
         except Exception as e:
             error_msg = str(e)
@@ -432,21 +557,23 @@ class Plugin(Instance):
         log = self.get_logger()
         
         station_links = network_connection.station_links.all()
-        
         results: Dict[int, int] = {}
         
         log.info("Processing %d station links for %s.", len(station_links), network_connection.name)
         
-        # process each station link
         for station_link in station_links:
             if not station_link.enabled:
                 log.info("Skipping disabled station link: %s", station_link)
                 continue
             
-            results[station_link.station.id] = self.process_station(station_link, initial_start_date=initial_start_date)
+            results[station_link.station.id] = self.process_station(
+                station_link,
+                initial_start_date=initial_start_date
+            )
         
         return results
     
+    # ---------- QC Methods (unchanged) ----------
     def perform_qc_checks_with_pipeline(self, value: float, variable_mapping, adl_param, station_link,
                                         obs_time: datetime):
         """Perform QC checks using the QCPipeline system with optimized history fetching"""
@@ -605,8 +732,7 @@ class Plugin(Instance):
 
 class PluginRegistry(Registry):
     """
-    With the plugin registry it is possible to register new plugins. A plugin is an
-    abstraction made specifically for ADL. It allows to develop specific functionalities for different data sources
+    Plugin registry for ADL data-source plugins.
     """
     
     name = "adl_plugin"
@@ -634,13 +760,6 @@ class CustomUnitContextRegistry(Registry):
     name = "adl_unit_context_registry"
     
     def get_choices(self):
-        """
-        Returns the choices for the custom unit context.
-
-        :return: The choices for the custom unit context.
-        :rtype: List[Tuple[str, str]]
-        """
-        
         return [(k, v.label) for k, v in self.registry.items()]
 
 
