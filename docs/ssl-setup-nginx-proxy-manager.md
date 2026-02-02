@@ -87,7 +87,7 @@ This ensures that NPM is on the same Docker network as your ADL stack.
 Run the following command to start NPM:
 
 ```shell
-docker-compose up -d
+docker compose up -d
 ```
 
 ### 4. Access and Configure Nginx Proxy Manager
@@ -115,6 +115,25 @@ After logging in, navigate to the "Proxy Hosts" section and click on "Add Proxy 
 - Agree to the Let's Encrypt Terms of Service
 
 Click "Save" to create the proxy host and obtain the SSL certificate.
+
+### 6. Update ADL `ALLOWED_HOSTS` and `CSRF_TRUSTED_ORIGINS`
+
+To ensure ADL accepts requests from your domain, update the `ALLOWED_HOSTS` and `CSRF_TRUSTED_ORIGINS` in your `.env`
+file:
+
+```text
+ALLOWED_HOSTS=adl.yourdomain.com
+CSRF_TRUSTED_ORIGINS=https://adl.yourdomain.com
+```
+
+### 7. Restart ADL Stack
+
+After making changes to the `.env` file, restart your ADL stack to apply the changes:
+
+```shell
+docker compose down
+docker compose up -d
+```
 
 ## Troubleshooting
 
