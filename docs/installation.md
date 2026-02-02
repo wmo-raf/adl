@@ -34,7 +34,24 @@ nano .env
 
 See environmental variables' section below for more details on the required variables
 
-### 3. Create Wagtail static and media directories on the host machine and set correct permissions
+### 3. Create Docker Network
+
+Create a Docker network for the containers to communicate with each other. This will be the default network name used in
+the `docker-compose.yml` file.
+
+```sh
+docker network create adl
+```
+
+Then in the `.env` file, set the `ADL_NETWORK_NAME` variable to `adl`.
+
+```text
+ADL_NETWORK_NAME=adl
+```
+
+You can replace `adl` with any name you prefer, but ensure to update the `.env` file accordingly.
+
+### 4. Create Wagtail static and media directories on the host machine and set correct permissions
 
 Ensure you are using the correct paths as set in the `.env` file for the `ADL_STATIC_VOLUME`
 and `ADL_MEDIA_VOLUME` variables.
@@ -66,7 +83,7 @@ below:
 sudo chown 1000:1000 ./docker/db_data
 ```
 
-### 4. Build and Run the Docker Containers
+### 5. Build and Run the Docker Containers
 
 ```sh
 docker compose build
@@ -82,7 +99,7 @@ To run the containers in the background, use the `-d` flag
 docker compose up -d
 ```
 
-### 5. Create Superuser
+### 6. Create Superuser
 
 ```sh
 docker compose exec adl /bin/bash
