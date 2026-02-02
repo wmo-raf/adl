@@ -34,6 +34,8 @@ Index
    core_concepts
    installation
    environmental_variables
+   ssl-setup-nginx-proxy-manager
+   wis2box-adl-nginx-proxy-manager
    user_guide/index
    plugins/index
 
