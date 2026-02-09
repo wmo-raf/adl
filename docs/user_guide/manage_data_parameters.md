@@ -1,8 +1,23 @@
 # Manage Data Parameters
 
-ADL is dynamic and allows you to add data parameters that are required for your stations data. This means that before
-you can start collecting data, you need to know the observation data parameters that your stations are collecting, and
-define them in the system. A data parameter also contains unit information for data conversion purposes
+## Overview
+
+Data parameters define the types of observations your weather stations collect. Before ADL can store or process station
+data, it needs to know what measurements to expect - temperature, rainfall, wind speed, humidity, etc.
+
+Each data parameter includes:
+
+- **Name and description**: What the parameter measures
+- **Unit information**: For data conversion and standardization
+- **Metadata**: Additional context for the observation type
+
+**Why define parameters upfront?**
+When plugins fetch data from your stations, they map the incoming observations to these predefined parameters. This
+ensures:
+
+- Consistent data structure across different station types
+- Proper unit conversions when stations report in different units
+- Accurate data validation and quality control
 
 ![Add Data Parameter](../_static/images/user/add_data_parameters.png)
 
