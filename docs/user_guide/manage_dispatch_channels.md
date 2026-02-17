@@ -88,16 +88,142 @@ instructions.
 
 Map ADL data parameters to the format expected by the destination system:
 
-![Parameter Mappings](../_static/images/user/05_dc_edit_part_c.png)
+![Parameter Mappings](../_static/images/user/dispatch/05_dc_edit_part_c.png)
+
+#### Parameter Mapping Configuration
 
 For each parameter mapping:
 
-- **Parameter**: Select the ADL data parameter (e.g., Temperature, Rainfall)
-- **Channel Parameter**: Enter the parameter name expected by the destination system
-- **Channel Unit**: Specify the unit expected by the destination (leave empty if same as ADL)
-- **Aggregation Measure**: Select how to aggregate the data (Average Value, Sum, Min, Max, etc.)
+- **Parameter**  
+  Select the ADL internal data parameter (e.g., *Temperature*, *Rainfall*).  
+  You can add additional parameters under **Settings > Data Parameters**.  
+  See: [Manage Data Parameters](manage_data_parameters.md).
 
-Click **Add Parameter Mappings** to add additional parameter mappings as needed.
+- **Channel Parameter**  
+  Enter the parameter name expected by the destination system.  
+  For example, for a **wis2box** channel, this should match the corresponding **Column** defined in the  
+  [csv2bufr AWS Template](https://training.wis2box.wis.wmo.int/csv2bufr-templates/aws-template/).
+
+- **Channel Unit**  
+  Specify the unit required by the destination system.  
+  Leave this field empty if it is the same as the ADL unit.  
+  If the required unit does not exist, you can add it under **Settings > Units**.  
+  See: [Manage Data Parameters](manage_data_parameters.md).
+
+- **Aggregation Measure**  
+  Choose how the data should be aggregated before transmission  
+  (e.g., Average, Sum, Minimum, Maximum).
+
+#### Example: Mapping ADL Parameters to a wis2box AWS Template
+
+The example below shows how ADL parameters are mapped to the corresponding
+columns defined in the
+wis2box [csv2bufr AWS Template](https://training.wis2box.wis.wmo.int/csv2bufr-templates/aws-template/).
+
+![Example Parameter Mapping](../_static/images/user/dispatch/07_dc_sample_destination_config.png)
+
+![ADL Dispatch Parameter Mapping Example](../_static/images/user/dispatch/07_dc_sample_filled_pm.png)
+
+In this example:
+
+- **Pressure – hPa (ADL)**
+    - Channel Parameter: `station_pressure`
+    - Channel Unit: `Pa`
+
+- **Temperature – °C (ADL)**
+    - Channel Parameter: `air_temperature`
+    - Channel Unit: `Kelvin`
+
+#### ⚠ Important: Unit Conversion
+
+The **Channel Unit** must match the unit expected by the destination system.
+
+The wis2box AWS Template requires:
+
+- `station_pressure` → **Pa (Pascal)**
+- `air_temperature` → **Kelvin**
+
+However, ADL may store values in different units:
+
+- Pressure may be stored as **hPa**
+- Temperature may be stored as **°C**
+
+If the ADL unit differs from the required channel unit:
+
+- ADL will automatically convert the value before dispatch (most of the common conversions are supported).
+- You must explicitly select the correct **Channel Unit**.
+- Ensure that the unit exists under **Settings > Units**.
+
+#### Example Conversions done by ADL
+
+- **Pressure:**  
+  `1013.2 hPa` → `101320 Pa`
+
+- **Temperature:**  
+  `25 °C` → `298.15 K`
+
+Incorrect unit configuration may result in:
+
+- Rejected BUFR messages
+- Physically incorrect values
+- Downstream validation errors
+
+Always verify the required unit from the official template before saving the mapping.
+
+#### Aggregation Measure
+
+![Aggregation Measure Example](../_static/images/user/dispatch/07_dc_aggregation_measure.png)
+
+The **Aggregation Measure** defines how ADL processes observations over the selected reporting period before sending
+them to the destination system.
+
+This setting is critical and must match the expected meaning of the parameter in the destination template.
+
+#### Common Aggregation Types
+
+- **Average Value**  
+  Used for parameters such as:
+    - Air temperature
+    - Pressure
+    - Wind speed  
+      The mean value over the reporting interval is transmitted.
+
+- **Sum Value**  
+  Used for accumulated parameters such as:
+    - Rainfall / Precipitation  
+      The total amount over the reporting period is transmitted.
+
+- **Minimum / Maximum**  
+  Used when the destination expects extreme values within the reporting interval.
+
+#### ⚠ Important: Rainfall Requires `Sum`
+
+In the example shown:
+
+- **Parameter:** Rainfall – mm
+- **Channel Parameter:** `total_precipitation_1_hour`
+- **Aggregation Measure:** **Sum Value**
+
+Rainfall is an accumulated quantity.  
+If you select **Average** instead of **Sum**, the reported value will be physically incorrect and may cause validation
+errors in downstream systems.
+
+For example:
+
+If rainfall measurements within 1 hour are: `0.2 mm, 0.5 mm, 0.3 mm`
+
+- **Correct (Sum):** 1.0 mm
+- **Incorrect (Average):** 0.33 mm
+
+#### Best Practice
+
+Always verify:
+
+1. What the destination template expects (instantaneous, accumulated, min, max, etc.).
+2. The reporting interval (e.g., 10 minutes, 1 hour, 24 hours).
+3. That the selected Aggregation Measure matches the physical meaning of the parameter.
+
+After completing a mapping, click **Add Parameter Mappings** to define additional parameters as needed.
 
 ```{note}
 The parameter mapping section allows you to transform ADL's internal parameter names and units to match what 
@@ -117,6 +243,8 @@ After creating a dispatch channel, link stations whose data should be dispatched
 3. Save your selection
 
 ![Stations Link](../_static/images/user/dispatch/06_dc_stations_link.png)
+
+![Stations Link Check](../_static/images/user/dispatch/08_dc_station_link_select.png)
 
 ```{note}
 A single station can be linked to multiple dispatch channels, and a dispatch channel 
