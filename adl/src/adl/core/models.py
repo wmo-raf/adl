@@ -177,7 +177,7 @@ class Station(models.Model):
         ]
     
     def __str__(self):
-        return self.name
+        return f"{self.name} - {self.network}"
     
     @property
     def wigos_id(self):
