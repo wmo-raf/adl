@@ -72,11 +72,7 @@ def get_station_link_detail(request, station_link_id):
         }
     })
     
-    variable_mappings = None
-    if hasattr(station_link.network_connection, 'variable_mappings'):
-        variable_mappings = station_link.network_connection.variable_mappings.all()
-    elif hasattr(station_link, 'variable_mappings'):
-        variable_mappings = station_link.variable_mappings.all()
+    variable_mappings = station_link.get_variable_mappings()
     
     if variable_mappings:
         data_parameters = []
