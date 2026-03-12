@@ -58,8 +58,8 @@ start_celery_worker() {
 
     EXTRA_CELERY_ARGS=()
 
-    if [[ -n "$ADL_GUNICORN_NUM_OF_WORKERS" ]]; then
-        EXTRA_CELERY_ARGS+=(--concurrency "$ADL_GUNICORN_NUM_OF_WORKERS")
+    if [[ -n "$ADL_CELERY_WORKER_CONCURRENCY" ]]; then
+        EXTRA_CELERY_ARGS+=(--concurrency "$ADL_CELERY_WORKER_CONCURRENCY")
     fi
     exec celery -A adl worker "${EXTRA_CELERY_ARGS[@]}" -l "${ADL_CELERY_WORKER_LOG_LEVEL}" "$@"
 }
