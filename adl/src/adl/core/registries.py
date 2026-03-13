@@ -245,6 +245,8 @@ class Plugin(Instance):
             station,
             variable_mappings: List,
             tz,
+            start_date,
+            end_date,
             log: TaskLogger
     ) -> Tuple[List[Any], Dict[str, List], Optional[datetime]]:
         """
@@ -284,6 +286,20 @@ class Plugin(Instance):
         
         # Normalize to aware station-local time
         obs_time = make_record_timezone_aware(obs_time, tz)
+        
+        if obs_time < start_date:
+            log.warning(
+                "Rejected timestamp %s before start_date %s for station %s",
+                obs_time, start_date, station.name
+            )
+            return [], {}, None
+        
+        if obs_time > end_date:
+            log.warning(
+                "Rejected timestamp %s after end_date %s for station %s",
+                obs_time, end_date, station.name
+            )
+            return [], {}, None
         
         now = dj_timezone.now()
         if obs_time > now:
@@ -359,6 +375,8 @@ class Plugin(Instance):
             station_link,
             chunk_records: List[Dict[str, Any]],
             variable_mappings: List,
+            start_date,
+            end_date,
             log: TaskLogger
     ) -> Tuple[int, Optional[datetime], Optional[datetime]]:
         """
@@ -381,7 +399,7 @@ class Plugin(Instance):
         
         for record in chunk_records:
             obs_records, qc_results, obs_time = self._process_single_record(
-                record, station_link, station, variable_mappings, tz, log
+                record, station_link, station, variable_mappings, tz, start_date, end_date, log
             )
             
             if obs_time:
@@ -420,6 +438,8 @@ class Plugin(Instance):
             self,
             station_link,
             station_records: Iterable[Dict[str, Any]],
+            start_date,
+            end_date,
             chunk_size: Optional[int] = None
     ) -> Tuple[int, Optional[datetime], Optional[datetime]]:
         """
@@ -456,7 +476,7 @@ class Plugin(Instance):
             chunk_count += 1
             
             saved_count, chunk_earliest, chunk_latest = self._save_chunk(
-                station_link, chunk, variable_mappings, log
+                station_link, chunk, variable_mappings, start_date, end_date, log
             )
             
             total_saved += saved_count
@@ -530,7 +550,9 @@ class Plugin(Instance):
             # Use chunked save - handles generators efficiently
             saved_obs_records_count, earliest_time, latest_time = self.save_records(
                 station_link,
-                station_records
+                station_records,
+                start_date,
+                end_date
             )
             
             if saved_obs_records_count == 0:
