@@ -285,6 +285,15 @@ class Plugin(Instance):
         # Normalize to aware station-local time
         obs_time = make_record_timezone_aware(obs_time, tz)
         
+        now = dj_timezone.now()
+        if obs_time > now:
+            log.warning(
+                "Rejected futuristic timestamp %s for station %s (now=%s)",
+                obs_time, station.name, now
+            )
+            
+            return [], {}, None
+        
         for mapping in variable_mappings:
             adl_param = getattr(mapping, "adl_parameter", None)
             src_name = getattr(mapping, "source_parameter_name", None)
