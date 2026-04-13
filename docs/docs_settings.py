@@ -16,8 +16,6 @@ INSTALLED_APPS = [
     "taggit",
     "django_celery_beat",
     "django_celery_results",
-    "adl.core",
-    "adl.monitoring",
 
 ]
 DATABASES = {
