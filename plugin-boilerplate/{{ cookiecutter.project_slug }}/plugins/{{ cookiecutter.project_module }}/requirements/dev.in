@@ -1,5 +1,6 @@
 -r base.in
-flake8==7.0.0
-pip-tools==7.4.1
+flake8
+pip-tools==7.5.3
 # build is used to compile a wheel package with `python -m build .` command.
 build
+wheel==0.46.2

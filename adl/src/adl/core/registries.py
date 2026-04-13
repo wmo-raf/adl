@@ -130,6 +130,8 @@ class Plugin(Instance):
                     path("my-plugin/", include(plugin_urls, namespace=self.type)),
                 ]
             """
+        
+        return []
     
     def after_save_records(self, station_link, station_records, saved_records, qc_fail_results=None) -> None:
         """
