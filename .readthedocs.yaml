@@ -14,6 +14,7 @@ build:
     - libgdal-dev
     - libgeos-dev
     - libproj-dev
+    - libpq-dev
 
 # Build documentation in the "docs/" directory with Sphinx
 sphinx:
