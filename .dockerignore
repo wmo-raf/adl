@@ -42,3 +42,11 @@ wis2boxadl-plugins
 docker/
 docs
 plugin-boilerplate
+
+.idea/
+docker-compose.override.yml
+
+adl/src/adl/static
+adl/src/adl/media
+
+backup/
