@@ -12,20 +12,7 @@ sphinxcontrib-mermaid
 sphinxcontrib-django
 sphinx-autodoc-typehints
 
-django-polymorphic
-django-countries
-wagtail-modeladmin
-djangorestframework
-django-timezone-field
-django-environ
-django-celery-beat
-django-celery-results
-django-eventstream
-drf-spectacular
-djangorestframework-api-key
-djangorestframework-simplejwt
-django-oauth-toolkit
-django-allauth
-channels
-wagtailgeowidget
-django-enum.IntFlag-field
+psycopg2-binary
+django-timescaledb
+psycopg2-binary
+-e ./adl
