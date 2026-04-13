@@ -9,3 +9,6 @@ Django
 wagtail
 sphinx-intl
 sphinxcontrib-mermaid
+sphinxcontrib-django
+sphinx-autodoc-typehints
+-e ./adl

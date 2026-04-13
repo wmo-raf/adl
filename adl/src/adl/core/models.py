@@ -37,6 +37,14 @@ from .widgets import PluginSelectWidget
 
 
 class Network(models.Model):
+    """
+    An organisational grouping of stations sharing the same vendor type or
+    collection method.
+
+    A network carries no ingestion logic itself — it exists to scope station
+    lists in the admin and to group :class:`NetworkConnection` instances.
+    Examples: "National AWS Network", "TAHMO Stations", "Manual Synoptic Stations".
+    """
     WEATHER_STATION_TYPES = (
         ("automatic", _("Automatic Weather Stations")),
         ("manual", _("Manual Weather Stations")),
@@ -62,6 +70,19 @@ class Network(models.Model):
 
 
 class Station(models.Model):
+    """
+    A physical observing point with full WMO WIGOS identification metadata.
+
+    Each station belongs to one :class:`Network` and is identified by a
+    four-component WIGOS Station Identifier (WSI). The :attr:`wigos_id`
+    property returns the formatted WSI string. Stations are linked to upstream
+    data sources via :class:`StationLink` instances, and observations are
+    stored in :class:`ObservationRecord` keyed by station.
+
+    Location is stored as a PostGIS ``PointField`` (longitude, latitude).
+    Sensor height fields (thermometer, anemometer, rain gauge, barometer) are
+    used when encoding observations into WMO formats such as BUFR.
+    """
     STATION_TYPE_CHOICES = (
         (0, _("Automatic")),
         (1, _("Manned")),
@@ -185,6 +206,20 @@ class Station(models.Model):
 
 
 class Unit(models.Model):
+    """
+    A unit of measurement backed by the `pint <https://pint.readthedocs.io>`_
+    unit registry.
+    
+    The ``symbol`` field must be a valid pint symbol. ADL uses pint to drive
+    automatic unit conversion when observations arrive in a unit that differs
+    from a :class:`DataParameter`'s canonical unit. Common valid symbols:
+    ``degC``, ``K``, ``m/s``, ``km/h``, ``mm``, ``hPa``, ``Pa``, ``%``,
+    ``W/m^2``.
+    
+    .. important::
+       If a unit conversion fails silently during ingestion, verify that the
+       symbol is recognised by pint before looking elsewhere.
+       """
     name = models.CharField(max_length=255, verbose_name=_("Name"), help_text=_("Name of the unit"), unique=True)
     symbol = models.CharField(max_length=255, verbose_name=_("Symbol"), help_text=_("Symbol of the unit"),
                               validators=[validate_unit], unique=True)
@@ -217,6 +252,31 @@ class Unit(models.Model):
 
 
 class DataParameter(ClusterableModel):
+    """
+    ADL's canonical representation of a measurable meteorological or
+    environmental variable.
+
+    A ``DataParameter`` names a variable (e.g. ``air_temperature``), declares
+    the :class:`Unit` in which values are stored, and drives automatic unit
+    conversion when observations arrive in a different unit. It also holds the
+    QC check configuration that is applied to every incoming value for this
+    parameter.
+
+    **Unit conversion** is performed by :meth:`convert_value_from_units` and
+    :meth:`convert_value_to_units` using pint. For conversions that are not
+    dimensionally straightforward (e.g. precipitation ``mm`` → ``kg/m²``),
+    set ``custom_unit_context`` to the appropriate pint context name.
+
+    **Aggregation** of stored observations into hourly summaries uses
+    ``aggregation_method``. Use ``circular`` for angular variables like wind
+    direction to avoid wrap-around errors (e.g. averaging 350° and 10° should
+    give 0°, not 180°).
+
+    .. warning::
+        Changing the ``unit`` of a parameter that already has
+        :class:`ObservationRecord` rows will raise a ``ValidationError``.
+        Create a new parameter instead, or delete the existing records first.
+        """
     CATEGORY_CHOICES = [
         ("meteorological", _("Meteorological")),
         ("environmental", _("Environmental")),
@@ -355,6 +415,27 @@ class OscarSurfaceStationLocal(models.Model):
 
 
 class NetworkConnection(PolymorphicModel, ClusterableModel):
+    """
+    Configuration for one upstream data integration — credentials, schedule,
+    timezone defaults, and the plugin type that performs ingestion.
+    
+    ``NetworkConnection`` is a Django-polymorphic base class. Each plugin
+    defines a concrete subclass that adds its own credential fields (API keys,
+    FTP details, database URLs, etc.). ADL uses the ``plugin`` field to look up
+    the registered :class:`~adl.core.registries.Plugin` instance at runtime.
+    
+    Celery Beat triggers :meth:`collect_data` on the interval set by
+    ``plugin_processing_interval``. Setting ``plugin_processing_enabled`` to
+    ``False`` pauses ingestion for the entire connection without deleting any
+    configuration.
+    
+    .. important::
+       Plugin subclasses **must** set ``station_link_model_string_label`` to
+       the ``"app_label.ModelName"`` string of their
+       :class:`StationLink` subclass. Without this, station links will not
+       appear in the admin and ingestion will silently do nothing.
+    """
+    
     name = models.CharField(max_length=255, unique=True, verbose_name=_("Name"), )
     network = models.ForeignKey(Network, on_delete=models.CASCADE, verbose_name=_("Network"))
     plugin = models.CharField(max_length=255, verbose_name=_("Plugin"),
@@ -439,6 +520,24 @@ class NetworkConnection(PolymorphicModel, ClusterableModel):
 
 
 class StationLink(PolymorphicModel, ClusterableModel):
+    """
+    Binds one :class:`Station` to one :class:`NetworkConnection` and holds all
+    per-station ingestion configuration.
+
+    ``StationLink`` is a Django-polymorphic base class. Each plugin defines a
+    concrete subclass that adds the upstream station identifier (e.g. a TAHMO
+    station code, an FTP filename pattern) and per-station variable mappings.
+
+    The effective timezone for a station link is resolved by the :attr:`timezone`
+    property: it returns the connection's ``stations_timezone`` when
+    ``use_connection_timezone`` is ``True``, otherwise the per-station
+    ``timezone_info``. ADL uses this timezone when computing date windows and
+    normalizing observation timestamps.
+
+    Setting ``enabled`` to ``False`` causes :meth:`~adl.core.registries.Plugin.run_process`
+    to skip this station without affecting any other stations on the same
+    connection.
+    """
     network_connection = models.ForeignKey(NetworkConnection, on_delete=models.CASCADE,
                                            verbose_name=_("Network Connection"),
                                            related_name="station_links")
@@ -560,6 +659,15 @@ class StationLink(PolymorphicModel, ClusterableModel):
 
 
 class QCStatus(models.IntegerChoices):
+    """
+    Integer enumeration of quality control outcomes stored on each
+    :class:`ObservationRecord`.
+
+    ``NOT_EVALUATED`` is the default and means no QC checks are configured
+    for the parameter. ``SUSPECT`` means one or more checks failed but the
+    value was retained. Failure details are stored in :class:`QCMessage`.
+    """
+    
     PASS = 0, "Pass"
     SUSPECT = 1, "Suspect"
     FAIL = 2, "Fail"
@@ -570,6 +678,16 @@ class QCStatus(models.IntegerChoices):
 
 
 class QCBits(IntFlag):
+    """
+    Bitmask flags indicating which QC checks failed for an
+    :class:`ObservationRecord`.
+    
+    Multiple bits can be set simultaneously when more than one check fails.
+    The bitmask is stored alongside :class:`QCStatus` — a non-zero
+    ``qc_bits`` value always corresponds to a ``qc_status`` of ``SUSPECT``.
+    Detailed failure messages for each set bit are stored in
+    :class:`QCMessage`.
+    """
     RANGE = auto()
     STEP = auto()
     PERSISTENCE = auto()
@@ -578,6 +696,26 @@ class QCBits(IntFlag):
 
 @register_snippet
 class ObservationRecord(TimescaleModel, ClusterableModel):
+    """
+    The atomic unit of stored observation data in ADL.
+    
+    Backed by `TimescaleDB <https://www.timescale.com>`_ for efficient
+    time-series queries. The ``time`` field (inherited from ``TimescaleModel``)
+    is always stored as UTC. Use the :attr:`utc_time` property to retrieve it
+    as a timezone-aware UTC datetime.
+    
+    Each row is uniquely identified by ``(time, station, connection,
+    parameter)``. ADL's ingestion pipeline uses
+    ``bulk_create(update_conflicts=True)`` against this constraint, so
+    re-ingesting an already-stored window updates the existing value rather
+    than raising an error.
+    
+    QC results are stored as a bitmask (:class:`QCBits`) and a status code
+    (:class:`QCStatus`). A ``qc_status`` of ``NOT_EVALUATED`` means no QC
+    checks are configured for the parameter, not that the value failed.
+    Failure messages are stored in related :class:`QCMessage` rows.`
+    """
+    
     # time field is inherited from TimescaleModel. We use it to store the observation time of the data
     created_at = models.DateTimeField(auto_now_add=True)
     modified_at = models.DateTimeField(auto_now=True)
@@ -620,6 +758,17 @@ class ObservationRecord(TimescaleModel, ClusterableModel):
 
 @register_snippet
 class QCMessage(models.Model):
+    """
+    A single QC failure message associated with one observation value.
+    
+    Created by the ingestion pipeline when a QC check fails. Multiple
+    ``QCMessage`` rows can exist for the same observation time and parameter
+    if more than one check failed. Keyed by ``obs_record_id`` and
+    ``obs_time`` / ``station_id`` for efficient lookup without a direct
+    foreign key to :class:`ObservationRecord` (which is a TimescaleDB
+    hypertable and does not support standard FK constraints).
+    """
+    
     obs_record_id = models.BigIntegerField(db_index=True)
     obs_time = models.DateTimeField(db_index=True)
     station_id = models.IntegerField()
@@ -637,6 +786,21 @@ class QCMessage(models.Model):
 
 @register_snippet
 class HourlyObsAgg(models.Model):
+    """
+    Read-only TimescaleDB continuous aggregate view providing pre-computed
+    hourly summaries of :class:`ObservationRecord` data.
+    
+    Backed by the database view ``obs_agg_1h_v``. Not a managed Django model
+    — ADL does not create or migrate it directly; TimescaleDB maintains it
+    incrementally from the underlying ``ObservationRecord`` hypertable.
+    
+    Use this model instead of querying ``ObservationRecord`` directly whenever
+    you need hourly aggregates over large time ranges — it is significantly
+    faster because the aggregates are pre-computed.
+    
+    The :attr:`time` property aliases ``bucket`` for API consistency with
+    :class:`ObservationRecord`.
+    """
     id = models.CharField(primary_key=True, max_length=32)  # md5 hex
     station = models.ForeignKey(Station, on_delete=models.DO_NOTHING)
     connection = models.ForeignKey(NetworkConnection, on_delete=models.DO_NOTHING)
@@ -666,6 +830,28 @@ class HourlyObsAgg(models.Model):
 
 
 class DispatchChannel(PolymorphicModel, ClusterableModel):
+    """
+    Base class for outbound data channels that push stored observations to
+    external systems.
+
+    ``DispatchChannel`` is a Django-polymorphic base class. Each destination
+    type (e.g. :class:`Wis2BoxUpload`) subclasses it and implements
+    :meth:`send_station_data`. ADL's dispatch Celery task calls
+    :meth:`get_data_records_by_station` on a schedule to fetch observations
+    that have not yet been sent, then calls :meth:`send_station_data` for
+    each eligible station.
+
+    A channel is linked to one or more :class:`NetworkConnection` instances
+    via ``network_connections``. All stations on those connections are
+    eligible for dispatch unless explicitly disabled via a
+    :class:`DispatchChannelStationLink` row with ``disabled=True``.
+
+    Parameter mappings (:class:`DispatchChannelParameterMapping`) translate
+    ADL's internal parameter names and units to whatever the destination
+    system expects, applying unit conversion and aggregation (avg, sum, min,
+    max) as configured.
+    """
+    
     AGGREGATION_PERIOD_CHOICES = (
         ("hourly", _("Hourly")),
         # ("daily", _("Daily")),
@@ -764,6 +950,24 @@ class DispatchChannel(PolymorphicModel, ClusterableModel):
 
 
 class DispatchChannelParameterMapping(Orderable):
+    """
+    Maps one ADL :class:`DataParameter` to the name and unit expected by a
+    :class:`DispatchChannel` destination.
+    
+    Controls three things for each parameter sent through the channel:
+    
+    - **Name translation** — ``channel_parameter`` is the parameter name the
+      destination system expects (e.g. ``total_precipitation_1_hour``).
+    - **Unit conversion** — ``channel_unit`` is the unit the destination
+      expects. Leave blank if it matches the parameter's canonical unit.
+      ADL converts automatically using pint.
+    - **Aggregation** — ``aggregation_measure`` determines how sub-hourly
+      observations are collapsed before sending (average, sum, min, or max).
+      Must match the physical meaning of the parameter: use ``sum_value`` for
+      accumulated quantities like precipitation, ``avg_value`` for
+      instantaneous quantities like temperature.
+    """
+    
     AGGREGATION_MEASURE_CHOICES = (
         ("avg_value", _("Average Value")),
         ("sum_value", _("Sum Value")),
@@ -799,6 +1003,15 @@ class DispatchChannelParameterMapping(Orderable):
 
 
 class DispatchChannelStationLink(Orderable):
+    """
+    Explicitly disables one :class:`StationLink` from a specific
+    :class:`DispatchChannel`.
+    
+    By default, all stations on a channel's ``network_connections`` are
+    eligible for dispatch. Creating a ``DispatchChannelStationLink`` row with
+    ``disabled=True`` excludes that station from the channel without removing
+    it from the network or connection.
+    """
     dispatch_channel = ParentalKey(DispatchChannel, on_delete=models.CASCADE, related_name="dispatch_station_links")
     station_link = models.ForeignKey(StationLink, on_delete=models.CASCADE, verbose_name=_("Station Link"),
                                      related_name="dispatch_channel_links")
@@ -812,6 +1025,19 @@ class DispatchChannelStationLink(Orderable):
 
 
 class Wis2BoxUpload(DispatchChannel):
+    """
+    A :class:`DispatchChannel` that uploads observation data to a
+    `wis2box <https://github.com/World-Meteorological-Organization/wis2box>`_
+    MinIO storage endpoint in BUFR format for WMO Information System 2.0
+    publication.
+
+    Connects to the wis2box MinIO instance using ``storage_endpoint``,
+    ``storage_username``, and ``storage_password``. The ``dataset_id``
+    identifies the WIS2 dataset topic the data belongs to.
+
+    Set ``secure=True`` when the storage endpoint uses HTTPS.
+    """
+    
     storage_endpoint = models.CharField(max_length=255, verbose_name=_("Storage Endpoint"))
     storage_username = models.CharField(max_length=255, verbose_name=_("Storage Username"))
     storage_password = models.CharField(max_length=255, verbose_name=_("Storage Password"))
@@ -848,6 +1074,15 @@ class Wis2BoxUpload(DispatchChannel):
 
 @register_snippet
 class StationChannelDispatchStatus(models.Model):
+    """
+    Tracks the last successfully dispatched observation time for each
+    ``(station, channel)`` pair.
+
+    Used by the dispatch pipeline to determine where to resume sending after
+    a gap or restart — analogous to how :meth:`~adl.core.registries.Plugin.get_start_date_from_db`
+    works for ingestion. One row per ``(channel, station)`` pair; updated
+    after each successful dispatch batch.
+    """
     created_at = models.DateTimeField(auto_now_add=True)
     modified_at = models.DateTimeField(auto_now=True)
     channel = models.ForeignKey(DispatchChannel, on_delete=models.CASCADE, verbose_name=_("Channel"),

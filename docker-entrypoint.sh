@@ -26,16 +26,19 @@ list-plugins    : Lists currently installed plugins.
 help            : Show this message
 
 SERVICE COMMANDS:
-gunicorn            : Start ADL django using a prod ready gunicorn server:
-                         * Waits for the postgres database to be available first.
+gunicorn-wsgi       : Start ADL using a prod ready gunicorn server:
+                         * Waits for the database and Redis to be available first.
                          * Automatically migrates the database on startup.
                          * Binds to 0.0.0.0
-celery-worker       : Start the celery worker queue which runs important async tasks
-celery-beat         : Start the celery beat service used to schedule periodic jobs
+celery-worker       : Start the Celery worker
+celery-worker-dev   : Start the Celery worker with auto-reload on code changes
+                      (requires the dev build target)
+celery-beat         : Start the Celery beat scheduler
 
 DEV COMMANDS:
-django-dev      : Start a normal ADL backend django development server, performs
-                  the same checks and setup as the gunicorn command above.
+django-dev          : Start the Django development server with auto-reload.
+                      Attaches to the process so Ctrl-C stops only the server.
+django-dev-no-attach: Start the Django development server without attaching.
 """
 }
 
@@ -46,7 +49,6 @@ run_setup_commands_if_configured(){
     /adl/app/src/adl/manage.py migrate
   fi
 
-  # collect staticfiles
   if [ "$COLLECT_STATICFILES_ON_STARTUP" = "true" ] ; then
     echo "python /adl/app/src/adl/manage.py collectstatic --noinput"
     /adl/app/src/adl/manage.py collectstatic --noinput
@@ -58,7 +60,7 @@ start_celery_worker() {
 
     EXTRA_CELERY_ARGS=()
 
-    if [[ -n "$ADL_CELERY_WORKER_CONCURRENCY" ]]; then
+    if [[ -n "${ADL_CELERY_WORKER_CONCURRENCY:-}" ]]; then
         EXTRA_CELERY_ARGS+=(--concurrency "$ADL_CELERY_WORKER_CONCURRENCY")
     fi
     exec celery -A adl worker "${EXTRA_CELERY_ARGS[@]}" -l "${ADL_CELERY_WORKER_LOG_LEVEL}" "$@"
@@ -84,13 +86,6 @@ run_server() {
         exit 1
     fi
 
-
-    # Gunicorn args explained in order:
-    #
-    # 1. See https://docs.gunicorn.org/en/stable/faq.html#blocking-os-fchmod for
-    #    why we set worker-tmp-dir to /dev/shm by default.
-    # 2. Log to stdout
-    # 3. Log requests to stdout
     exec gunicorn --workers="$ADL_GUNICORN_NUM_OF_WORKERS" \
         --worker-tmp-dir "${TMPDIR:-/dev/shm}" \
         --log-file=- \
@@ -114,7 +109,7 @@ fi
 
 source /adl/venv/bin/activate
 
-# wait for required services to be available, using docker-compose-wait
+# Wait for required services to be available, using docker-compose-wait
 /wait
 
 source /adl/plugins/utils.sh
@@ -145,6 +140,13 @@ shell)
     ;;
 celery-worker)
     start_celery_worker -Q celery -n default-worker@%h "${@:2}"
+    ;;
+celery-worker-dev)
+    startup_plugin_setup
+    exec watchfiles \
+        --filter python \
+        "celery -A adl worker -Q celery -n default-worker@%h -l ${ADL_CELERY_WORKER_LOG_LEVEL}" \
+        /adl/app/src/
     ;;
 celery-beat)
     exec celery -A adl beat -l "${ADL_CELERY_BEAT_DEBUG_LEVEL}" -S django_celery_beat.schedulers:DatabaseScheduler "${@:2}"

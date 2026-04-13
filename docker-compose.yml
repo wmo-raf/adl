@@ -60,6 +60,7 @@ services:
     build:
       context: .
       dockerfile: ${ADL_DOCKERFILE:-Dockerfile}
+      target: prod
       args:
         - UID=${UID}
         - GID=${GID}
@@ -89,6 +90,7 @@ services:
     build:
       context: .
       dockerfile: ${ADL_DOCKERFILE:-Dockerfile}
+      target: prod
       args:
         - UID=${UID}
         - GID=${GID}
@@ -116,6 +118,7 @@ services:
     build:
       context: .
       dockerfile: ${ADL_DOCKERFILE:-Dockerfile}
+      target: prod
       args:
         - UID=${UID}
         - GID=${GID}

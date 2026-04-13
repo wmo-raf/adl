@@ -1,15 +1,19 @@
-# syntax = docker/dockerfile:1.5
+# syntax=docker/dockerfile:1.5
 
-# use osgeo gdal ubuntu small 3.7 image.
-# pre-installed with GDAL 3.7.0 and Python 3.10.6
-FROM erickotenyo/adl-base:latest as base
+ARG UID=9999
+ARG GID=9999
+
+# =============================================================================
+# Builder — install dependencies and compile everything
+# =============================================================================
+FROM erickotenyo/adl-base:latest AS builder
 
 ARG UID
-ENV UID=${UID:-9999}
 ARG GID
-ENV GID=${GID:-9999}
 
-# Create or rename group to adl_docker_group with desired GID
+ENV DOCKER_USER=adl_docker_user
+
+# Create group and user
 RUN if getent group $GID > /dev/null; then \
         existing_group=$(getent group $GID | cut -d: -f1); \
         if [ "$existing_group" != "adl_docker_group" ]; then \
@@ -17,47 +21,36 @@ RUN if getent group $GID > /dev/null; then \
         fi; \
     else \
         groupadd -g $GID adl_docker_group; \
-    fi
-RUN useradd --shell /bin/bash -u $UID -g $GID -o -c "" -m adl_docker_user -l || exit 0
-ENV DOCKER_USER=adl_docker_user
+    fi && \
+    useradd --shell /bin/bash -u $UID -g $GID -o -c "" -m adl_docker_user -l || exit 0
 
-# install docker-compose wait
-ARG DOCKER_COMPOSE_WAIT_VERSION
-ENV DOCKER_COMPOSE_WAIT_VERSION=${DOCKER_COMPOSE_WAIT_VERSION:-2.12.1}
-ARG DOCKER_COMPOSE_WAIT_PLATFORM_SUFFIX
-ENV DOCKER_COMPOSE_WAIT_PLATFORM_SUFFIX=${DOCKER_COMPOSE_WAIT_PLATFORM_SUFFIX:-}
+# Install docker-compose wait
+ARG DOCKER_COMPOSE_WAIT_VERSION=2.12.1
+ARG DOCKER_COMPOSE_WAIT_PLATFORM_SUFFIX=""
 
 ADD https://github.com/ufoscout/docker-compose-wait/releases/download/$DOCKER_COMPOSE_WAIT_VERSION/wait${DOCKER_COMPOSE_WAIT_PLATFORM_SUFFIX} /wait
 RUN chmod +x /wait
 
 USER $UID:$GID
 
-# Install  dependencies into a virtual env.
+# Create venv and install Python dependencies
 COPY --chown=$UID:$GID ./adl/requirements.txt /adl/requirements.txt
-RUN python3 -m venv /adl/venv
+RUN python3 -m venv /adl/venv \
+    && /adl/venv/bin/pip install --upgrade pip setuptools wheel
 
 ENV PIP_CACHE_DIR=/tmp/adl_pip_cache
-RUN --mount=type=cache,mode=777,target=$PIP_CACHE_DIR,uid=$UID,gid=$GID . /adl/venv/bin/activate && pip3 install  -r /adl/requirements.txt
+RUN --mount=type=cache,mode=777,target=$PIP_CACHE_DIR,uid=$UID,gid=$GID \
+    /adl/venv/bin/pip install -r /adl/requirements.txt
 
-# Copy over code
+# Copy app code and install the package
 COPY --chown=$UID:$GID ./adl /adl/app
+RUN /adl/venv/bin/pip install --no-cache-dir /adl/app/
 
-WORKDIR /adl/app/src/adl
-
-# Ensure that Python outputs everything that's printed inside
-# the application rather than buffering it.
-ENV PYTHONUNBUFFERED 1
-
+# Copy plugin scripts
 COPY --chown=$UID:$GID ./deploy/plugins/*.sh /adl/plugins/
 
-RUN /adl/venv/bin/pip install --no-cache-dir -e /adl/app/
-
-COPY --chown=$UID:$GID ./docker-entrypoint.sh /adl/docker-entrypoint.sh
-
-# Define plugin git repos to be installed at build time
+# Install any plugins specified at build time
 ARG ADL_PLUGIN_GIT_REPOS=""
-
-# Install any specified plugins
 RUN --mount=type=cache,mode=777,target=$PIP_CACHE_DIR,uid=$UID,gid=$GID \
     if [ -n "$ADL_PLUGIN_GIT_REPOS" ]; then \
         echo "Baking in plugins: $ADL_PLUGIN_GIT_REPOS"; \
@@ -70,11 +63,93 @@ RUN --mount=type=cache,mode=777,target=$PIP_CACHE_DIR,uid=$UID,gid=$GID \
         echo "No plugins specified for build."; \
     fi
 
+
+# =============================================================================
+# Runtime base — shared between prod and dev
+# =============================================================================
+FROM erickotenyo/adl-base:latest AS runtime-base
+
+ARG UID
+ARG GID
+
+ENV DOCKER_USER=adl_docker_user
+
+# Create matching group and user
+RUN if getent group $GID > /dev/null; then \
+        existing_group=$(getent group $GID | cut -d: -f1); \
+        if [ "$existing_group" != "adl_docker_group" ]; then \
+            groupmod -n adl_docker_group "$existing_group"; \
+        fi; \
+    else \
+        groupadd -g $GID adl_docker_group; \
+    fi && \
+    useradd --shell /bin/bash -u $UID -g $GID -o -c "" -m adl_docker_user -l || exit 0
+
+# Install docker-compose wait
+ARG DOCKER_COMPOSE_WAIT_VERSION=2.12.1
+ARG DOCKER_COMPOSE_WAIT_PLATFORM_SUFFIX=""
+
+ADD https://github.com/ufoscout/docker-compose-wait/releases/download/$DOCKER_COMPOSE_WAIT_VERSION/wait${DOCKER_COMPOSE_WAIT_PLATFORM_SUFFIX} /wait
+RUN chmod +x /wait
+
+ENV PATH="/adl/venv/bin:$PATH" \
+    PYTHONUNBUFFERED=1
+
+
+# =============================================================================
+# Production target
+# =============================================================================
+FROM runtime-base AS prod
+
+ARG UID
+ARG GID
+
+USER $UID:$GID
+
+# Copy the fully built venv, app code, and plugin scripts from the builder
+COPY --from=builder --chown=$UID:$GID /adl/venv /adl/venv
+COPY --from=builder --chown=$UID:$GID /adl/app /adl/app
+COPY --from=builder --chown=$UID:$GID /adl/plugins /adl/plugins
+
+WORKDIR /adl/app/src/adl
+
+COPY --chown=$UID:$GID ./docker-entrypoint.sh /adl/docker-entrypoint.sh
+
 ENV DJANGO_SETTINGS_MODULE='adl.config.settings.production'
 
-# Add the venv to the path
-ENV PATH="/adl/venv/bin:$PATH"
+ENTRYPOINT ["/adl/docker-entrypoint.sh"]
+CMD ["gunicorn-wsgi"]
+
+
+# =============================================================================
+# Development target
+# Expects source code to be bind-mounted at /adl/app.
+# Includes dev tools and auto-reload support.
+# =============================================================================
+FROM runtime-base AS dev
+
+ARG UID
+ARG GID
+
+USER $UID:$GID
+
+# Copy venv and plugin scripts from builder — source code is bind-mounted
+COPY --from=builder --chown=$UID:$GID /adl/venv /adl/venv
+COPY --from=builder --chown=$UID:$GID /adl/plugins /adl/plugins
+
+# Install watchfiles for Celery auto-reload in dev
+ENV PIP_CACHE_DIR=/tmp/adl_pip_cache
+RUN --mount=type=cache,mode=777,target=$PIP_CACHE_DIR,uid=$UID,gid=$GID \
+    /adl/venv/bin/pip install --no-cache-dir watchfiles
+
+# Source is bind-mounted — add it to PYTHONPATH directly
+ENV PYTHONPATH="/adl/app/src:$PYTHONPATH"
+
+WORKDIR /adl/app/src/adl
+
+COPY --chown=$UID:$GID ./docker-entrypoint.sh /adl/docker-entrypoint.sh
+
+ENV DJANGO_SETTINGS_MODULE='adl.config.settings.dev'
 
 ENTRYPOINT ["/adl/docker-entrypoint.sh"]
-
-CMD ["gunicorn-wsgi"]
+CMD ["django-dev"]

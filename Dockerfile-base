@@ -2,6 +2,14 @@
 
 # use osgeo gdal ubuntu small 3.7 image.
 # pre-installed with GDAL 3.7.0 and Python 3.10.6
+
+# This Dockerfile builds the erickotenyo/adl-base base image that is pulled
+# by the main Dockerfile. Run this and push to Docker Hub only when base
+# dependencies change (GDAL version, Python version, system packages).
+#
+# docker build -f Dockerfile-base -t erickotenyo/adl-base:latest .
+# docker push erickotenyo/adl-base:latest
+
 FROM ghcr.io/osgeo/gdal:ubuntu-small-3.7.0 as base
 
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]

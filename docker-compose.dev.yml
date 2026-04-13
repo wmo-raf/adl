@@ -1,0 +1,30 @@
+services:
+  adl:
+    build:
+      target: dev
+    command: django-dev-no-attach
+    environment:
+      DEBUG: "True"
+      MIGRATE_ON_STARTUP: "true"
+      COLLECT_STATICFILES_ON_STARTUP: "true"
+    volumes:
+      - ./adl:/adl/app
+    ports:
+      - "8000:8000"
+
+  adl_celery_worker:
+    build:
+      target: dev
+    command: celery-worker-dev
+    environment:
+      DEBUG: "True"
+    volumes:
+      - ./adl:/adl/app
+
+  adl_celery_beat:
+    build:
+      target: dev
+    environment:
+      DEBUG: "True"
+    volumes:
+      - ./adl:/adl/app
