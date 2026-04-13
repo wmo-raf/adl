@@ -9,6 +9,11 @@ build:
   os: ubuntu-24.04
   tools:
     python: "3.13"
+  apt_packages:
+    - gdal-bin
+    - libgdal-dev
+    - libgeos-dev
+    - libproj-dev
 
 # Build documentation in the "docs/" directory with Sphinx
 sphinx:
