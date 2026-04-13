@@ -1,4 +1,4 @@
-## Available Dispatch Channel Types
+# Available Dispatch Channel Types
 
 ADL supports the following dispatch channel types:
 
