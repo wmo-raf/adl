@@ -5,17 +5,14 @@ from datetime import datetime
 import django
 
 # -- Path setup --------------------------------------------------------------
-# Make the adl package importable so autodoc can import it
-sys.path.insert(0, os.path.abspath(".."))
-sys.path.insert(0, os.path.abspath("../adl/src"))
-sys.path.insert(0, os.path.abspath("."))
+DOCS_DIR = os.path.abspath(os.path.dirname(__file__))
+
+sys.path.insert(0, os.path.join(DOCS_DIR, ".."))  # repo root
+sys.path.insert(0, os.path.join(DOCS_DIR, "../adl/src"))  # adl package
+sys.path.insert(0, DOCS_DIR)  # docs_settings.py
 
 # -- Django setup for autodoc ------------------------------------------------
-# autodoc must import ADL's modules to read their docstrings. Django models
-# won't import without a configured settings module, so we point at a minimal
-# docs-only settings file that has no database, Redis, or external service
-# dependencies. See docs/settings.py.
-os.environ.setdefault("DJANGO_SETTINGS_MODULE", "docs_settings")
+os.environ["DJANGO_SETTINGS_MODULE"] = "docs_settings"
 django.setup()
 
 # -- Project information -----------------------------------------------------
