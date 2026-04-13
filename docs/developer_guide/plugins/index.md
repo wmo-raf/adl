@@ -10,5 +10,6 @@ maxdepth: 1
 plugin_overview
 plugin_structure
 plugin_implementation
+plugin_reference
 plugin_installation
 ```

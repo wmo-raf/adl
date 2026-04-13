@@ -1,4 +1,4 @@
-# Plugin Structure
+# Plugin Structure and Boilerplate
 
 An ADL Plugin is fundamentally a folder named after the plugin. The folder should be
 a [Django/Wagtail App](https://docs.djangoproject.com/en/5.1/ref/applications/).
@@ -21,9 +21,6 @@ To instantiate the template, execute the following commands from the directory w
 pip install cookiecutter
 cookiecutter gh:wmo-raf/adl --directory plugin-boilerplate
 ```
-
-For more details on using the plugin boilerplate, you can check * :doc:`plugins/plugin_boilerplate` on
-creating a plugin using the plugin boilerplate.
 
 ## Plugin Installation API
 
