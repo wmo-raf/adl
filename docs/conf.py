@@ -1,8 +1,7 @@
 import os
 import sys
 from datetime import datetime
-
-import django
+from unittest.mock import MagicMock
 
 # -- Path setup --------------------------------------------------------------
 DOCS_DIR = os.path.abspath(os.path.dirname(__file__))
@@ -11,7 +10,36 @@ sys.path.insert(0, os.path.join(DOCS_DIR, ".."))  # repo root
 sys.path.insert(0, os.path.join(DOCS_DIR, "../adl/src"))  # adl package
 sys.path.insert(0, DOCS_DIR)  # docs_settings.py
 
+# -- Mock modules that require PostgreSQL/psycopg2 or other C extensions -----
+# django-timescaledb imports django.contrib.postgres at module level which
+# unconditionally loads psycopg2 — a C extension unavailable on ReadTheDocs.
+# Mocking these modules before django.setup() prevents the import chain
+# from failing.
+MOCK_MODULES = [
+    "psycopg2",
+    "psycopg2.extensions",
+    "psycopg2.errors",
+    "psycopg2.sql",
+    "psycopg",
+    "django.contrib.postgres",
+    "django.contrib.postgres.fields",
+    "django.contrib.postgres.forms",
+    "django.contrib.postgres.forms.ranges",
+    "timescale",
+    "timescale.db",
+    "timescale.db.models",
+    "timescale.db.models.models",
+    "timescale.db.models.managers",
+    "timescale.db.models.querysets",
+    "timescale.db.models.expressions",
+]
+
+for mod in MOCK_MODULES:
+    sys.modules[mod] = MagicMock()
+
 # -- Django setup for autodoc ------------------------------------------------
+import django
+
 os.environ["DJANGO_SETTINGS_MODULE"] = "docs_settings"
 django.setup()
 
@@ -36,23 +64,11 @@ extensions = [
     "sphinxcontrib_django",
 ]
 
-# autodoc settings
-# Keep methods in the order they appear in source rather than alphabetically
 autodoc_member_order = "bysource"
-
-# Render type hints as part of the parameter description rather than
-# cluttering the signature line
 autodoc_typehints = "description"
-
-# Only add type information for parameters that have a docstring entry,
-# avoiding noise for internal parameters that aren't documented
 autodoc_typehints_description_target = "documented"
-
-# Do not skip __init__ — some ADL base classes have meaningful __init__ docs
 autoclass_content = "both"
 
-# intersphinx: resolves cross-references to Django and Python docs
-# e.g. :class:`~django.db.models.Model` or :exc:`NotImplementedError`
 intersphinx_mapping = {
     "python": (
         "https://docs.python.org/3/",
@@ -64,22 +80,17 @@ intersphinx_mapping = {
     ),
 }
 
-# myst_parser settings
 source_suffix = {
     ".rst": "restructuredtext",
     ".md": "markdown",
 }
 
-# Allow {eval-rst} fences in .md files so autoclass/automethod directives
-# embedded in Markdown pages render correctly
 myst_enable_extensions = [
     "attrs_inline",
 ]
 
 templates_path = ["_templates"]
 exclude_patterns = ["_build", "Thumbs.db", ".DS_Store"]
-
-# -- HTML output -------------------------------------------------------------
 
 html_theme = "sphinx_wagtail_theme"
 html_static_path = ["_static"]
