@@ -1,7 +1,6 @@
 import os
 import sys
 from datetime import datetime
-from unittest.mock import MagicMock
 
 # -- Path setup --------------------------------------------------------------
 DOCS_DIR = os.path.abspath(os.path.dirname(__file__))
@@ -10,32 +9,34 @@ sys.path.insert(0, os.path.join(DOCS_DIR, ".."))  # repo root
 sys.path.insert(0, os.path.join(DOCS_DIR, "../adl/src"))  # adl package
 sys.path.insert(0, DOCS_DIR)  # docs_settings.py
 
-# -- Mock modules that require PostgreSQL/psycopg2 or other C extensions -----
-# django-timescaledb imports django.contrib.postgres at module level which
-# unconditionally loads psycopg2 — a C extension unavailable on ReadTheDocs.
-# Mocking these modules before django.setup() prevents the import chain
-# from failing.
-MOCK_MODULES = [
+# -- Autodoc mock imports ----------------------------------------------------
+# Sphinx mocks these before importing any modules for autodoc.
+# This handles C extensions and packages unavailable on ReadTheDocs
+# (psycopg2, timescale, GDAL-dependent packages etc.) without the
+# metaclass and __all__ issues caused by unittest.mock.
+autodoc_mock_imports = [
     "psycopg2",
-    "psycopg2.extensions",
-    "psycopg2.errors",
-    "psycopg2.sql",
     "psycopg",
-    "django.contrib.postgres",
-    "django.contrib.postgres.fields",
-    "django.contrib.postgres.forms",
-    "django.contrib.postgres.forms.ranges",
     "timescale",
-    "timescale.db",
-    "timescale.db.models",
-    "timescale.db.models.models",
-    "timescale.db.models.managers",
-    "timescale.db.models.querysets",
-    "timescale.db.models.expressions",
+    "django.contrib.postgres",
+    "django_eventstream",
+    "channels",
+    "daphne",
+    "wagtailgeowidget",
+    "wagtailiconchooser",
+    "wagtailfontawesomesvg",
+    "enum_intflagfield",
+    "timezone_field",
+    "polymorphic",
+    "django_countries",
+    "modelcluster",
+    "oauth2_provider",
+    "rest_framework",
+    "rest_framework_api_key",
+    "rest_framework_simplejwt",
+    "drf_spectacular",
+    "allauth",
 ]
-
-for mod in MOCK_MODULES:
-    sys.modules[mod] = MagicMock()
 
 # -- Django setup for autodoc ------------------------------------------------
 import django
@@ -64,10 +65,19 @@ extensions = [
     "sphinxcontrib_django",
 ]
 
+# Keep methods in the order they appear in source
 autodoc_member_order = "bysource"
+
+# Render type hints in the parameter description block
 autodoc_typehints = "description"
+
+# Only add type info for parameters that have a docstring entry
 autodoc_typehints_description_target = "documented"
+
+# Include __init__ docstrings alongside class docstrings
 autoclass_content = "both"
+
+# -- Intersphinx -------------------------------------------------------------
 
 intersphinx_mapping = {
     "python": (
@@ -80,17 +90,25 @@ intersphinx_mapping = {
     ),
 }
 
+# -- MyST parser -------------------------------------------------------------
+
 source_suffix = {
     ".rst": "restructuredtext",
     ".md": "markdown",
 }
 
+# Allow {eval-rst} fences in .md files so autoclass/automethod directives
+# embedded in Markdown pages render correctly
 myst_enable_extensions = [
     "attrs_inline",
 ]
 
+# -- General -----------------------------------------------------------------
+
 templates_path = ["_templates"]
 exclude_patterns = ["_build", "Thumbs.db", ".DS_Store"]
+
+# -- HTML output -------------------------------------------------------------
 
 html_theme = "sphinx_wagtail_theme"
 html_static_path = ["_static"]
