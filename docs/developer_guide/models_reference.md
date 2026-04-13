@@ -6,7 +6,7 @@ data issues.
 
 For the plugin-specific base classes ({class}`~adl.core.models.NetworkConnection`
 and {class}`~adl.core.models.StationLink`) see
-[Plugin Developer Reference](plugin_reference.md).
+[Plugin Developer Reference](plugins/plugin_reference.md).
 
 ---
 
