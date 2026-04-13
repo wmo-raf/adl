@@ -14,5 +14,5 @@ sphinx-autodoc-typehints
 
 psycopg2-binary
 django-timescaledb
-psycopg2-binary
+psycopg2-binary>=2.9.9
 -e ./adl
