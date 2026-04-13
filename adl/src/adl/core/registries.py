@@ -1,8 +1,19 @@
 """
-ADL Plugin Registry - Optimized for Memory Efficiency
+ADL Plugin Registry
 
-This module provides generator-based processing to handle large datasets
-without loading everything into memory at once.
+This module defines the :class:`Plugin` base class that all ADL data-source
+plugins must subclass, along with the :class:`PluginRegistry` singleton used
+to register and look up plugins at runtime.
+
+Plugins are Django apps that act as adapters between an upstream data source
+(HTTP API, FTP feed, database, serial port, etc.) and ADL's internal
+observation store. Each plugin is responsible for fetching raw records for a
+station over a time window; ADL handles scheduling, date windowing, timezone
+normalization, unit conversion, upserts, and logging.
+
+Processing is optimised for memory efficiency: :meth:`Plugin.get_station_data`
+should yield records as a generator, and :meth:`Plugin.save_records` processes
+them in configurable chunks rather than loading the full response into memory.
 """
 
 import time
@@ -21,21 +32,35 @@ from .validators import StationRecordModel
 
 class Plugin(Instance):
     """
-    Base class for ADL data-source plugins - Optimized for memory efficiency.
+    Base class for all ADL data-source plugins.
 
-    Child plugins must:
-      - set `label` (human-readable)
-      - implement `get_station_data(station_link, start_date, end_date)`
+    Subclasses must:
 
-    Contract for `get_station_data`:
-      - Input dates are timezone-aware (station timezone) or None.
-      - Return/yield an iterable of records. Each record MUST contain:
-          - "observation_time": datetime (aware or naive interpreted as station tz)
-        And MAY contain any number of source-parameter fields whose names match
-        StationVariableMapping.source_parameter_name.
-        
-    OPTIMIZATION: get_station_data should yield records (generator) rather than
-    returning a complete list to minimize memory usage.
+    - Set :attr:`type` — a unique string registry key (e.g. ``"adl_tahmo_plugin"``).
+    - Set :attr:`label` — a human-readable name shown in the admin UI and logs.
+      A blank ``label`` raises :exc:`~django.core.exceptions.ImproperlyConfigured`
+      on startup.
+    - Implement :meth:`get_station_data`.
+
+    All other methods have working defaults and can be overridden selectively.
+
+    **Minimal subclass example:**
+
+    .. code-block:: python
+
+        from adl.core.registries import Plugin
+
+        class MyPlugin(Plugin):
+            type = "my_plugin"
+            label = "My Data Source Plugin"
+
+            def get_station_data(self, station_link, start_date=None, end_date=None):
+                client = station_link.network_connection.get_api_client()
+                yield from client.get_measurements(
+                    station_link.station_code,
+                    start=start_date,
+                    end=end_date,
+                )
     """
     label = ""
     
@@ -54,52 +79,76 @@ class Plugin(Instance):
         self._task_logger = None
     
     def get_logger(self) -> TaskLogger:
-        """Get or create task logger"""
+        """
+        Return the :class:`~adl.core.logging.TaskLogger` for this plugin instance.
+    
+        Creates a new logger on first call, keyed to :attr:`label`. Subsequent
+        calls return the same instance unless :meth:`set_task_context` has been
+        called to replace it with a task-scoped logger.
+    
+        :return: The active task logger.
+        :rtype: TaskLogger
+        """
         if self._task_logger is None:
             self._task_logger = TaskLogger(plugin_label=self.label)
         return self._task_logger
     
     def set_task_context(self, task_id: str):
-        """Set the current task context for logging"""
+        """
+        Replace the current logger with one scoped to a specific Celery task ID.
+    
+        Called automatically by the ADL task runner before :meth:`run_process`
+        executes, so that all log entries for a given ingestion run are associated
+        with the same task. You do not normally need to call this directly.
+    
+        :param task_id: The Celery task ID string for the current ingestion run.
+        :type task_id: str
+        """
         self._task_logger = TaskLogger(task_id=task_id, plugin_label=self.label)
     
     # ---------- URL exposure ----------
     def get_urls(self) -> list:
         """
-        If needed root urls related to the plugin can be added here.
-
-        Example:
-
-            def get_urls(self):
-                from . import plugin_urls
-
-                return [
-                    path('some-url/', include(plugin_urls, namespace=self.type)),
-                ]
-
-            # plugin_urls.py
-            from django.urls import path
-
-            urlpatterns = [
-                path('plugin-name/some-view', SomeView.as_view(), name='some_view'),
-            ]
-
-        :return: A list containing the urls.
+        Return a list of Django URL patterns to include in the ADL URL configuration.
+    
+        The default implementation returns an empty list. Override this method if
+        your plugin needs to serve views outside the Wagtail admin namespace. For
+        views that belong inside the Wagtail admin, use the ``register_admin_urls``
+        hook in ``wagtail_hooks.py`` instead.
+    
+        :return: A list of Django URL patterns.
         :rtype: list
-        """
-        return []
+    
+        Example:
+    
+        .. code-block:: python
+    
+            def get_urls(self):
+                from django.urls import path, include
+                from . import plugin_urls
+                return [
+                    path("my-plugin/", include(plugin_urls, namespace=self.type)),
+                ]
+            """
     
     def after_save_records(self, station_link, station_records, saved_records, qc_fail_results=None) -> None:
         """
-        Hook called after saving ObservationRecord instances for a station.
-        Can be overridden by child plugins if needed.
-        
-        :param station_link: The StationLink instance for which records were saved.
-        :param station_records: List of raw station records that were processed.
-        :param saved_records: List of saved ObservationRecord instances.
-        :param qc_fail_results:
+        Hook called after each batch of :class:`~adl.core.models.ObservationRecord`
+        instances has been upserted for a station.
+    
+        The default implementation does nothing. Override this method if your plugin
+        needs to trigger side effects after data lands in the database — for example,
+        sending a notification, updating an external cache, or writing a
+        plugin-specific summary log.
+    
+        :param station_link: The ``StationLink`` instance that was just processed.
+        :param station_records: The raw record dicts as returned by
+            :meth:`get_station_data` for this station.
+        :param saved_records: The ``ObservationRecord`` instances that were upserted.
+        :param qc_fail_results: Dict of QC failure messages keyed by UTC ISO
+            timestamp string, or ``None`` if no QC checks are configured for this
+            parameter.
         """
-        pass
     
     def _create_qc_messages(self, saved_records, qc_results) -> None:
         from adl.core.models import QCMessage
@@ -134,19 +183,73 @@ class Plugin(Instance):
             end_date: Optional[datetime] = None,
     ) -> Iterable[Dict[str, Any]]:
         """
-        Fetch raw observations for a station between [start_date, end_date).
-       
-        Must be implemented by child plugins.
-        
-        OPTIMIZATION: Should yield records one at a time (generator) rather than
-        returning a complete list to minimize memory usage.
-        """
+        Fetch raw observations for one station over a time window.
+    
+        This is the only method subclasses **must** implement. ADL calls it with a
+        pre-resolved ``[start_date, end_date)`` window and expects back an iterable
+        of record dicts that it will normalize, convert, and upsert.
+    
+        :param station_link: The configured ``StationLink`` subclass instance for
+            this station. Provides upstream credentials via
+            ``station_link.network_connection``, the upstream station identifier,
+            variable mappings, and the station timezone.
+        :param start_date: Start of the fetch window, expressed in the station's
+            local timezone (aware datetime). Fetch records where
+            ``observation_time >= start_date``.
+        :type start_date: datetime, optional
+        :param end_date: End of the fetch window, expressed in the station's local
+            timezone (aware datetime). Fetch records where
+            ``observation_time < end_date``.
+        :type end_date: datetime, optional
+        :return: An iterable (preferably a generator) of record dicts. Each dict
+            **must** contain:
+    
+            - ``"observation_time"`` (:class:`datetime`) — aware datetimes are used
+              as-is; naive datetimes are interpreted as station-local time.
+    
+            And **may** contain any number of source-parameter fields whose keys
+            match ``mapping.source_parameter_name`` on the station link's variable
+            mappings, for example::
+    
+                {
+                    "observation_time": datetime(2025, 1, 1, 10, 0, tzinfo=utc),
+                    "te": 22.4,
+                    "rh": 78.0,
+                }
+    
+        :rtype: Iterable[Dict[str, Any]]
+        :raises NotImplementedError: If not overridden by the subclass.
+    
+        .. note::
+            Prefer ``yield``-ing records one at a time rather than returning a
+            complete list. :meth:`save_records` processes in chunks of
+            :attr:`SAVE_CHUNK_SIZE`, so a generator avoids loading the entire
+            upstream response into memory — important for large historical backfills.
+    
+        .. warning::
+            Records with a missing or non-:class:`datetime` ``observation_time``,
+            timestamps outside ``[start_date, end_date]``, or future timestamps are
+            silently dropped by :meth:`save_records`. No exception is raised.
+            """
         raise NotImplementedError
     
     # ---------- Date helpers ----------
     def get_default_end_date(self, station_link) -> datetime:
         """
-        Station-local 'top of next hour' as an aware datetime.
+        Return the default end date for a station's ingestion window.
+    
+        Computes the station-local "top of the next hour" as a timezone-aware
+        datetime. This is used as ``end_date`` for every ingestion run unless
+        overridden.
+    
+        :param station_link: The ``StationLink`` instance whose timezone is used
+            to localise the result.
+        :return: The top of the next hour in the station's local timezone, as an
+            aware datetime.
+        :rtype: datetime
+    
+        Override this method if your data source reports at a different resolution
+        — for example, to return the end of the current day for a daily-data source.
         """
         timezone = station_link.timezone
         end_date = dj_timezone.localtime(timezone=timezone)
@@ -155,7 +258,25 @@ class Plugin(Instance):
     
     def get_default_start_date(self, station_link) -> datetime:
         """
-        One hour window ending at default_end_date.
+        Return the default start date for a station's ingestion window.
+    
+        Used as the ``start_date`` fallback when no prior observations exist in the
+        database and no custom start date is set on the station link. The base
+        implementation returns one hour before :meth:`get_default_end_date`.
+    
+        :param station_link: The ``StationLink`` instance whose timezone is used
+            to localise the result.
+        :return: One hour before the default end date, in the station's local
+            timezone, as an aware datetime.
+        :rtype: datetime
+    
+        Override this method when your source's natural polling window differs from
+        one hour. For example, to fall back to the previous 24 hours:
+    
+        .. code-block:: python
+    
+            def get_default_start_date(self, station_link):
+                return self.get_default_end_date(station_link) - timedelta(days=1)
         """
         end_date = self.get_default_end_date(station_link)
         start_date = end_date - timedelta(hours=1)
@@ -163,8 +284,30 @@ class Plugin(Instance):
     
     def get_start_date_from_db(self, station_link) -> Optional[datetime]:
         """
-        Latest saved ObservationRecord.time for this station+connection.
-        Returns an aware UTC datetime (Django stores as UTC) or None.
+        Return the latest saved observation timestamp for this station and connection.
+    
+        Queries :class:`~adl.core.models.ObservationRecord` for the most recent
+        ``time`` value matching ``(station, network_connection)``. This is the
+        primary mechanism by which ingestion resumes from where it left off after
+        a restart or gap.
+    
+        :param station_link: The ``StationLink`` instance identifying the station
+            and connection to query.
+        :return: The latest saved observation time as a UTC-aware datetime, or
+            ``None`` if no records exist yet for this station and connection.
+        :rtype: datetime or None
+    
+        Override this method when your API uses an inclusive end bound — i.e. it
+        returns the record at exactly the timestamp you request — to avoid
+        re-fetching the boundary record. For example, to add a one-minute offset:
+    
+        .. code-block:: python
+    
+            def get_start_date_from_db(self, station_link):
+                start_date = super().get_start_date_from_db(station_link)
+                if start_date:
+                    start_date += timedelta(minutes=1)
+                return start_date
         """
         from adl.core.models import ObservationRecord
         
@@ -187,14 +330,37 @@ class Plugin(Instance):
     
     def get_dates_for_station(self, station_link, latest=False) -> Tuple[datetime, datetime]:
         """
-        Determine start_date based on priority:
-        
-        If latest=True:
-            → Always use the default start date (fresh fetch, ignore history)
-        Else:
-            → 1. Use the latest observation date from the DB (resume where left off)
-            → 2. If missing, use Station's first collection date (apply station timezone)
-            → 3. If still missing, use default start date (last resort)
+        Resolve the ``(start_date, end_date)`` window to pass to
+        :meth:`get_station_data`.
+    
+        You should not normally need to override this method. Override the
+        individual helpers (:meth:`get_default_start_date`,
+        :meth:`get_default_end_date`, :meth:`get_start_date_from_db`) instead.
+    
+        ``start_date`` is resolved in the following priority order:
+    
+        1. :meth:`get_start_date_from_db` — resume from the latest saved
+           observation (normal incremental ingestion).
+        2. ``station_link.get_first_collection_date()`` — the custom backfill
+           start date set on the station link, localised to the station timezone.
+        3. :meth:`get_default_start_date` — final fallback when no prior data
+           exists and no custom date is configured.
+    
+        When ``latest=True``, steps 1 and 2 are skipped and the default start
+        date is always used. This mode is used when fetching the most recent data
+        on demand rather than resuming normal ingestion.
+    
+        Both dates are always localised to the station's timezone before being
+        returned. If ``start_date`` equals ``end_date`` after resolution, one
+        hour is added to ``end_date`` to ensure a non-zero window.
+    
+        :param station_link: The ``StationLink`` instance to resolve dates for.
+        :param latest: If ``True``, skip DB and first-collection-date lookups and
+            always use the default start date. Defaults to ``False``.
+        :type latest: bool
+        :return: A ``(start_date, end_date)`` tuple, both timezone-aware and
+            expressed in the station's local timezone.
+        :rtype: Tuple[datetime, datetime]
         """
         
         if latest:
@@ -219,6 +385,7 @@ class Plugin(Instance):
     
     # ---------- Iterator utilities ----------
     def _chunk_iterator(self, iterable: Iterable, chunk_size: int) -> Generator[List, None, None]:
+        """Yield successive ``chunk_size``-length lists from ``iterable``."""
         log = self.get_logger()
         chunk = []
         total = 0
@@ -250,12 +417,13 @@ class Plugin(Instance):
             log: TaskLogger
     ) -> Tuple[List[Any], Dict[str, List], Optional[datetime]]:
         """
-        Process a single raw record into ObservationRecord objects.
-        
-        Returns:
-            - List of ObservationRecord objects (not yet saved)
-            - Dict of QC results keyed by time+param
-            - The observation time (for tracking earliest/latest)
+        Validate one raw record dict and produce unsaved ``ObservationRecord``
+        objects for each variable mapping that resolves successfully.
+    
+        Returns ``([], {}, None)`` for any record that fails validation
+        (missing or invalid ``observation_time``, out-of-window timestamp,
+        future timestamp). Unit conversion failures on individual mappings are
+        also silently skipped.
         """
         from adl.core.models import ObservationRecord
         
@@ -380,12 +548,12 @@ class Plugin(Instance):
             log: TaskLogger
     ) -> Tuple[int, Optional[datetime], Optional[datetime]]:
         """
-        Process and save a chunk of records.
-        
-        Returns:
-            - Number of saved records
-            - Earliest observation time in chunk
-            - Latest observation time in chunk
+        Process and bulk-upsert one chunk of raw records.
+    
+        Deduplicates by ``(utc_time, parameter_id)`` before calling
+        ``bulk_create(update_conflicts=True)``, so re-fetching an overlapping
+        window is safe. Returns ``(saved_count, earliest_time, latest_time)``
+        for the chunk.
         """
         from adl.core.models import ObservationRecord
         
@@ -443,18 +611,51 @@ class Plugin(Instance):
             chunk_size: Optional[int] = None
     ) -> Tuple[int, Optional[datetime], Optional[datetime]]:
         """
-        Normalize and upsert observations into ObservationRecord using chunked processing.
-        
-        This method processes records in chunks to minimize memory usage.
-        
-        Args:
-            station_link: The station link configuration
-            station_records: Iterable (can be generator) of raw records
-            chunk_size: Override default chunk size (self.SAVE_CHUNK_SIZE)
-        
-        Returns:
-            Tuple of (total_saved_count, earliest_time, latest_time)
+        Normalize and upsert raw observation records into
+        :class:`~adl.core.models.ObservationRecord`.
+    
+        Processes ``station_records`` in chunks of :attr:`SAVE_CHUNK_SIZE` (or
+        ``chunk_size`` if provided) to keep memory usage bounded — works correctly
+        with both lists and generators.
+    
+        For each record the method:
+    
+        1. Validates and normalizes ``observation_time`` to a timezone-aware
+           station-local datetime. Records with a missing, non-:class:`datetime`,
+           out-of-window, or future timestamp are silently dropped.
+        2. Iterates the station link's variable mappings and looks up
+           ``record[mapping.source_parameter_name]`` for each one.
+        3. Converts the value from ``mapping.source_parameter_unit`` to the ADL
+           parameter's canonical unit if they differ.
+        4. Runs any configured QC checks against the value.
+        5. Upserts an ``ObservationRecord`` row keyed on
+           ``(time, station, connection, parameter)``, updating ``value``,
+           ``is_daily``, ``qc_status``, ``qc_bits``, and ``qc_version`` on
+           conflict.
+    
+        You do not normally need to override or call this method directly. It is
+        called automatically by :meth:`process_station`.
+    
+        :param station_link: The ``StationLink`` instance whose variable mappings
+            and timezone are used for normalization.
+        :param station_records: An iterable (list or generator) of raw record dicts
+            as returned by :meth:`get_station_data`.
+        :param start_date: The inclusive start of the accepted time window. Records
+            before this are silently dropped.
+        :type start_date: datetime
+        :param end_date: The inclusive end of the accepted time window. Records
+            after this are silently dropped.
+        :type end_date: datetime
+        :param chunk_size: Number of records to process per database batch.
+            Defaults to :attr:`SAVE_CHUNK_SIZE`.
+        :type chunk_size: int, optional
+        :return: A three-tuple of ``(total_saved, earliest_time, latest_time)``
+            where ``total_saved`` is the number of rows upserted, and
+            ``earliest_time`` / ``latest_time`` are the observation timestamps of
+            the first and last saved records, or ``None`` if no records were saved.
+        :rtype: Tuple[int, Optional[datetime], Optional[datetime]]
         """
+        
         log = self.get_logger()
         
         station = station_link.station
@@ -507,10 +708,28 @@ class Plugin(Instance):
     # ---------- Orchestration ----------
     def process_station(self, station_link, initial_start_date=None, initial_end_date=None) -> int:
         """
-        Process a single station - optimized for memory efficiency.
-        
-        Key optimization: Uses generator-based data fetching and chunked saving
-        to avoid loading all records into memory at once.
+        Run the full ingestion pipeline for a single station link.
+    
+        Resolves the date window, calls :meth:`get_station_data`, passes the
+        results to :meth:`save_records`, and writes a
+        :class:`~adl.monitoring.models.StationLinkActivityLog` entry regardless
+        of outcome. Any exception raised during fetching or saving is caught,
+        logged, and recorded on the activity log without re-raising, so that a
+        failure on one station does not abort the rest of the connection's run.
+    
+        Called by :meth:`run_process` for each enabled station link. You do not
+        normally need to call or override this method directly.
+    
+        :param station_link: The ``StationLink`` instance to process.
+        :param initial_start_date: Override the resolved ``start_date`` with this
+            value if provided. Useful for manual or backfill invocations.
+        :type initial_start_date: datetime, optional
+        :param initial_end_date: Override the resolved ``end_date`` with this
+            value if provided.
+        :type initial_end_date: datetime, optional
+        :return: The number of ``ObservationRecord`` rows upserted, or ``0`` if
+            no data was available or an error occurred.
+        :rtype: int
         """
         from adl.monitoring.models import StationLinkActivityLog
         log = self.get_logger()
@@ -585,6 +804,25 @@ class Plugin(Instance):
         return saved_obs_records_count
     
     def run_process(self, network_connection, initial_start_date=None) -> Dict[int, int]:
+        """
+        Run the ingestion pipeline for all enabled station links on a connection.
+    
+        Iterates ``network_connection.station_links.all()``, skips any link where
+        ``enabled`` is ``False``, and calls :meth:`process_station` for each
+        remaining link. This is the entry point called by the Celery beat task on
+        the configured schedule.
+    
+        :param network_connection: The ``NetworkConnection`` instance whose station
+            links should be processed.
+        :param initial_start_date: If provided, passed through to every
+            :meth:`process_station` call as ``initial_start_date``, overriding the
+            normal DB-resume logic for all stations. Useful for bulk backfills.
+        :type initial_start_date: datetime, optional
+        :return: A dict mapping each processed ``station.id`` to the number of
+            ``ObservationRecord`` rows upserted for that station.
+        :rtype: Dict[int, int]
+        """
+        
         log = self.get_logger()
         
         station_links = network_connection.station_links.all()
@@ -607,7 +845,39 @@ class Plugin(Instance):
     # ---------- QC Methods (unchanged) ----------
     def perform_qc_checks_with_pipeline(self, value: float, variable_mapping, adl_param, station_link,
                                         obs_time: datetime):
-        """Perform QC checks using the QCPipeline system with optimized history fetching"""
+        """
+        Run the configured QC pipeline against a single observation value.
+    
+        Looks up the QC checks from ``variable_mapping.qc_checks`` if present,
+        falling back to ``adl_param.qc_checks``. If no checks are configured,
+        returns immediately with a ``NOT_EVALUATED`` status.
+    
+        QC pipelines are cached per ``(parameter_id, modified_at)`` to avoid
+        rebuilding them on every record. The cache is invalidated automatically
+        when a parameter's ``modified_at`` timestamp changes.
+    
+        Called internally by :meth:`save_records` for each mapping row. You do
+        not normally need to call this method directly.
+    
+        :param value: The converted observation value to check (in the ADL
+            canonical unit for ``adl_param``).
+        :type value: float
+        :param variable_mapping: The variable mapping instance for this
+            parameter, used to look up per-mapping QC overrides.
+        :param adl_param: The :class:`~adl.core.models.DataParameter` instance,
+            used as the fallback QC check source and for logging.
+        :param station_link: The ``StationLink`` instance, passed to the QC
+            context builder for station-level metadata.
+        :param obs_time: The timezone-aware observation timestamp, used to fetch
+            recent history for checks that require it (e.g. step, persistence).
+        :type obs_time: datetime
+        :return: A three-tuple of ``(qc_bits, qc_status, qc_messages)`` where
+            ``qc_bits`` is a :class:`~adl.core.models.QCBits` flag value,
+            ``qc_status`` is a :class:`~adl.core.models.QCStatus` choice, and
+            ``qc_messages`` is a list of failure message dicts (empty on pass).
+        :rtype: Tuple[QCBits, QCStatus, list]
+        """
+        
         from adl.core.models import QCBits, QCStatus
         from adl.core.qc.config import QCConfigConverter, build_qc_context
         from adl.core.qc.validators import QCFlag
@@ -709,7 +979,13 @@ class Plugin(Instance):
         return qc_bits, qc_status, qc_messages
     
     def _get_pipeline_history_requirements(self, pipeline) -> Dict[str, Any]:
-        """Determine history requirements for entire pipeline"""
+        """
+        Inspect all enabled validators in ``pipeline`` and return the aggregate
+        history requirements as ``{'needed': bool, 'limit': int, 'min_required': int}``.
+    
+        Used to avoid fetching recent observation history when no validator
+        in the pipeline actually needs it.
+        """
         if not pipeline.validators:
             return {'needed': False, 'limit': 0, 'min_required': 0}
         
@@ -735,7 +1011,14 @@ class Plugin(Instance):
         }
     
     def _get_recent_history_for_qc(self, station_link, adl_param, current_time: datetime, limit: int = 20):
-        """Get recent observation history for QC context"""
+        """
+        Return up to ``limit`` recent ``ObservationRecord`` values for
+        ``(station, connection, parameter)`` strictly before ``current_time``,
+        ordered newest-first.
+    
+        Returns an empty list on any query error so that a history-fetch failure
+        never aborts the QC check for the current record.
+        """
         from adl.core.models import ObservationRecord
         
         log = self.get_logger()
