@@ -11,4 +11,21 @@ sphinx-intl
 sphinxcontrib-mermaid
 sphinxcontrib-django
 sphinx-autodoc-typehints
--e ./adl
+
+django-polymorphic
+django-countries
+wagtail-modeladmin
+djangorestframework
+django-timezone-field
+django-environ
+django-celery-beat
+django-celery-results
+django-eventstream
+drf-spectacular
+djangorestframework-api-key
+djangorestframework-simplejwt
+django-oauth-toolkit
+django-allauth
+channels
+wagtailgeowidget
+django-enum.IntFlag-field
