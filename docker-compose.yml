@@ -33,6 +33,9 @@ x-backend-variables: &backend-variables
   ADL_PLUGIN_SETUP_ALREADY_RUN: ${ADL_PLUGIN_SETUP_ALREADY_RUN:-}
   ADL_DISABLE_PLUGIN_INSTALL_ON_STARTUP: ${ADL_DISABLE_PLUGIN_INSTALL_ON_STARTUP:-}
   SMARTMET_PARAMETER_NAMES: ${SMARTMET_PARAMETER_NAMES:-}
+  STATIC_ROOT: /adl/app/src/adl/static
+  MEDIA_ROOT: /adl/app/src/adl/media
+  BACKUP_ROOT: /adl/app/src/adl/backup
 
 services:
   adl_db:

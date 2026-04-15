@@ -50,8 +50,8 @@ run_setup_commands_if_configured(){
   fi
 
   if [ "$COLLECT_STATICFILES_ON_STARTUP" = "true" ] ; then
-    echo "python /adl/app/src/adl/manage.py collectstatic --noinput"
-    /adl/app/src/adl/manage.py collectstatic --noinput
+    echo "python /adl/app/src/adl/manage.py collectstatic --noinput --clear"
+    /adl/app/src/adl/manage.py collectstatic --noinput --clear
   fi
 }
 

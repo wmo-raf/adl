@@ -235,10 +235,10 @@ STATICFILES_DIRS = [
     os.path.join(PROJECT_DIR, "static"),
 ]
 
-STATIC_ROOT = os.path.join(BASE_DIR, "static")
+STATIC_ROOT = env.str("STATIC_ROOT", os.path.join(BASE_DIR, "static"))
 STATIC_URL = "/static/"
 
-MEDIA_ROOT = os.path.join(BASE_DIR, "media")
+MEDIA_ROOT = env.str("MEDIA_ROOT", os.path.join(BASE_DIR, "media"))
 MEDIA_URL = "/media/"
 
 # Default storage settings, with the staticfiles storage updated.
@@ -420,7 +420,9 @@ SPECTACULAR_SETTINGS = {
 }
 
 DBBACKUP_STORAGE = 'django.core.files.storage.FileSystemStorage'
-DBBACKUP_STORAGE_OPTIONS = {'location': os.path.join(BASE_DIR, "backup")}
+DBBACKUP_STORAGE_OPTIONS = {
+    'location': env.str("BACKUP_ROOT", os.path.join(BASE_DIR, "backup"))
+}
 DBBACKUP_CLEANUP_KEEP_MEDIA = 1
 DBBACKUP_CLEANUP_KEEP = 1
 DBBACKUP_CONNECTORS = {
