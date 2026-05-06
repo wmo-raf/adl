@@ -2,7 +2,7 @@
 
 ## Overview
 
-Once ADL (Automated Data Logger) is installed on your infrastructure, it becomes **your system**. WMO or anyone else has
+Once ADL (Automated Data Loader) is installed on your infrastructure, it becomes **your system**. WMO or anyone else has
 no ongoing access to your instance, and you have full control over who can access it, what data it collects, and where
 that data is sent.
 
@@ -33,9 +33,9 @@ ADL is built around a plugin architecture. Data enters the system through **sour
 [ Data Sources ]        [ ADL Core ]        [ Dispatch Channels ]
                                                 
   FTP / SFTP   ──┐                        ┌── WIS2box
-  Mobile App   ──┼──►  Ingestion &  ──────┼── S3 / MinIO (e.g. WFP)
-  Online Portal──┤     Storage            ├── OSCAR/Surface
-  Other vendors──┘                        └── Custom FTP / internal server
+  Mobile App   ──┼──►  Ingestion &  ──────┼── S3 / MinIO
+  Online Portal──┤     Storage            ├── External API
+  Other vendors──┘                        └── Custom FTP
 ```
 
 ### Source Plugins (Data In)
