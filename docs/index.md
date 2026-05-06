@@ -43,6 +43,7 @@ plugins_list
 environmental_variables
 ssl-setup-nginx-proxy-manager
 wis2box-adl-nginx-proxy-manager
+data-flow-and-access-control
 user_guide/index
 developer_guide/index
 ```
