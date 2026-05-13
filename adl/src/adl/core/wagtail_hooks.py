@@ -40,7 +40,8 @@ from .views import (
     get_plugin_list,
     dispatch_channel_station_links,
     trigger_station_collection,
-    trigger_station_dispatch
+    trigger_station_dispatch,
+    bulk_import_oscar_stations
 )
 from .viewsets import (
     admin_viewsets,
@@ -63,6 +64,7 @@ def urlconf_adl():
         path('load-stations-oscar-csv/', load_stations_csv, name='load_stations_oscar_csv'),
         path('load-stations-oscar/', load_stations_oscar, name='load_stations_oscar'),
         path('import-oscar-station/<str:wigos_id>', import_oscar_station, name='import_oscar_station'),
+        path("import-oscar-bulk/", bulk_import_oscar_stations, name="bulk_import_oscar_stations"),
         path('create-predefined-data-parameters/', create_predefined_data_parameters,
              name='create_predefined_data_parameters'),
         path('connections/', connections_list, name="connections_list"),

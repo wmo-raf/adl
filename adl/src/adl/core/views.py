@@ -8,7 +8,10 @@ from django.db import transaction
 from django.shortcuts import render, redirect, get_object_or_404
 from django.urls import reverse_lazy, reverse
 from django.utils.translation import gettext as _
-from django.views.decorators.http import require_http_methods
+from django.views.decorators.http import (
+    require_http_methods,
+    require_POST
+)
 from wagtail.admin import messages
 from wagtail.admin.paginator import WagtailPaginator
 from wagtail.admin.ui.tables import (
@@ -42,7 +45,7 @@ from .models import (
     DataParameter,
     Unit,
     DispatchChannelStationLink,
-    StationLink
+    StationLink, Network
 )
 from .plugin_utils import get_plugin_metadata
 from .registries import (
@@ -63,6 +66,86 @@ from .utils import (
     get_connection_list_more_buttons,
     get_dispatch_channel_more_buttons
 )
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Internal helper — shared between import_oscar_station and bulk import
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _derive_wigos_id_parts(wigos_id: str) -> dict:
+    """
+    Extract wsi_* parts and, for traditional WMO stations (wsi_issuer==20000),
+    auto-derive wmo_block_number and wmo_station_number from wsi_local.
+ 
+    wsi_series / wsi_issuer / wsi_issue_number are PositiveIntegerFields on
+    Station — cast them to int here so Station.objects.create() never receives
+    strings for those columns.
+    wmo_block_number is also a PositiveIntegerField — cast to int.
+    wmo_station_number is a CharField — keep as string.
+    """
+    wigos_id_parts = get_wigos_id_parts(wigos_id)
+    
+    # Cast the three integer WSI components
+    for int_field in ("wsi_series", "wsi_issuer", "wsi_issue_number"):
+        raw = wigos_id_parts.get(int_field)
+        if raw is not None:
+            try:
+                wigos_id_parts[int_field] = int(raw)
+            except (ValueError, TypeError):
+                pass  # leave as-is; DB will raise a clear error
+    
+    wsi_issuer = wigos_id_parts.get("wsi_issuer")
+    
+    if wsi_issuer == 20000:
+        wsi_local = wigos_id_parts.get("wsi_local", "")
+        raw_block = wsi_local[:2]
+        raw_station = wsi_local[2:]
+        
+        def _coerce_block(raw):
+            try:
+                return int(raw)  # wmo_block_number is PositiveIntegerField
+            except (ValueError, TypeError):
+                digits = extract_digits(raw)
+                return int(digits) if digits else None
+        
+        def _coerce_station(raw):
+            try:
+                int(raw)  # validate it is numeric
+                return raw  # wmo_station_number is CharField
+            except (ValueError, TypeError):
+                return extract_digits(raw) or None
+        
+        block = _coerce_block(raw_block)
+        number = _coerce_station(raw_station)
+        
+        if block is not None:
+            wigos_id_parts["wmo_block_number"] = block
+        if number is not None:
+            wigos_id_parts["wmo_station_number"] = number
+    
+    return wigos_id_parts
+
+
+def _get_oscar_stations_dict(use_local_copy: bool, country) -> tuple[dict, str | None]:
+    """
+    Returns (stations_dict_keyed_by_wigos_id, error_string_or_None).
+    Handles both local and live paths with caching.
+    """
+    if use_local_copy:
+        return get_stations_for_country_local(as_dict=True), None
+    
+    iso = country.alpha3
+    cache_key = f"{iso}_oscar_stations_dict"
+    stations = cache.get(cache_key)
+    
+    if not stations:
+        try:
+            stations = get_stations_for_country_live(country, as_dict=True)
+            cache.set(cache_key, stations, timeout=60 * 20)
+        except Exception as e:
+            return {}, str(e)
+    
+    return stations, None
 
 
 def load_stations_csv(request):
@@ -152,8 +235,7 @@ def load_stations_oscar(request):
     template_name = "adl/load_stations_oscar.html"
     context = {}
     
-    use_local_copy = request.GET.get("use_local", '').lower()
-    use_local_copy = use_local_copy in ['1', 'true']
+    use_local_copy = request.GET.get("use_local", '').lower() in ('1', 'true')
     
     from .viewsets import StationViewSet
     stations_url = StationViewSet().menu_url
@@ -168,7 +250,7 @@ def load_stations_oscar(request):
     
     context.update({
         "breadcrumbs_items": breadcrumbs_items,
-        "using_local_copy": use_local_copy
+        "using_local_copy": use_local_copy,
     })
     
     settings = AdlSettings.for_request(request)
@@ -177,28 +259,23 @@ def load_stations_oscar(request):
             "country_set": False,
             "settings_url": reverse(
                 "wagtailsettings:edit",
-                args=[AdlSettings._meta.app_label, AdlSettings._meta.model_name, ],
+                args=[AdlSettings._meta.app_label, AdlSettings._meta.model_name],
             )
         })
-        
         return render(request, template_name=template_name, context=context)
     
     country = settings.country
     iso = country.alpha3
     
-    db_stations = Station.objects.all()
-    db_stations_by_wigos_id = {}
-    for station in db_stations:
-        db_stations_by_wigos_id[station.wigos_id] = station
-    
+    # ── Fetch station list ──────────────────────────────────────────────────
     if use_local_copy:
-        oscar_stations = get_stations_for_country_local()
+        # .values() returns dicts — convert to list so we can mutate entries below
+        oscar_stations = list(get_stations_for_country_local())
     else:
         oscar_stations = cache.get(f"{iso}_oscar_stations")
         if not oscar_stations:
             try:
                 oscar_stations = get_stations_for_country_live(country)
-                # cache for 20 minutes
                 cache.set(f"{iso}_oscar_stations", oscar_stations, timeout=60 * 20)
             except Exception as e:
                 oscar_stations = []
@@ -209,31 +286,63 @@ def load_stations_oscar(request):
     
     context.update({
         "load_live_from_oscar_url": reverse("load_stations_oscar"),
-        "load_from_csv_url": reverse("load_stations_oscar_csv")
+        "load_from_csv_url": reverse("load_stations_oscar_csv"),
     })
     
+    # ── Annotate with DB status ─────────────────────────────────────────────
+    db_stations_by_wigos_id = {s.station_id: s for s in Station.objects.all()}
+    
     for station in oscar_stations:
-        import_url = reverse("import_oscar_station", args=[station.get("wigos_id")])
-        
+        wigos_id = station.get("wigos_id")
+        import_url = reverse("import_oscar_station", args=[wigos_id])
         if use_local_copy:
-            import_url = import_url + "?use_local=1"
+            import_url += "?use_local=1"
+        station["import_url"] = import_url
         
-        station.update({
-            "import_url": import_url
-        })
-        db_station = db_stations_by_wigos_id.get(station.get("wigos_id"))
+        db_station = db_stations_by_wigos_id.get(wigos_id)
         if db_station:
             station.update({
                 "added_to_db": True,
                 "db_station": db_station,
-                "edit_url": reverse(station_edit_url_name, args=[db_station.pk])
+                "edit_url": reverse(station_edit_url_name, args=[db_station.pk]),
             })
     
-    # sort by added_to_db first then alphabetically
-    oscar_stations = sorted(oscar_stations, key=lambda x: (x.get("added_to_db", False)), reverse=True)
+    # Sort: already-added first, then alphabetically by name within each group
+    oscar_stations = sorted(
+        oscar_stations,
+        key=lambda x: (not x.get("added_to_db", False), (x.get("name") or "").lower()),
+    )
     
-    context["oscar_stations"] = oscar_stations
-    context["country"] = country
+    # ── Stats bar ───────────────────────────────────────────────────────────
+    total_oscar = len(oscar_stations)
+    total_imported = sum(1 for s in oscar_stations if s.get("added_to_db"))
+    
+    # Count imported stations grouped by their assigned network name
+    imported_by_network = defaultdict(int)
+    for s in oscar_stations:
+        if s.get("added_to_db"):
+            network_name = s["db_station"].network.name
+            imported_by_network[network_name] += 1
+    # Sort by count descending so the busiest network appears first
+    imported_by_network = sorted(imported_by_network.items(), key=lambda x: x[1], reverse=True)
+    
+    # ── Bulk import context ─────────────────────────────────────────────────
+    # Reuse OSCARStationImportForm field definitions so choices stay in sync.
+    # We only need an unbound form to read field choices from.
+    _import_form = OSCARStationImportForm()
+    networks = _import_form.fields["network"].queryset
+    station_type_choices = _import_form.fields["station_type"].choices
+    
+    context.update({
+        "oscar_stations": oscar_stations,
+        "country": country,
+        "networks": networks,
+        "station_type_choices": station_type_choices,
+        "total_oscar": total_oscar,
+        "total_imported": total_imported,
+        "total_pending": total_oscar - total_imported,
+        "imported_by_network": imported_by_network,
+    })
     
     return render(request, template_name=template_name, context=context)
 
@@ -380,6 +489,151 @@ def import_oscar_station(request, wigos_id):
         })
     
     return render(request, template_name=template_name, context=context)
+
+
+@require_POST
+def bulk_import_oscar_stations(request):
+    """
+    Handles the bulk import POST from the action bar in load_stations_oscar.html.
+ 
+    Expected POST fields:
+        selected_wigos_ids   – repeated field, one value per selected station
+        network              – pk of the NetworkConnection to assign
+        station_type         – station_type value (must match Station.station_type choices)
+ 
+    Add to urls.py:
+        path("oscar/bulk-import/", bulk_import_oscar_stations, name="bulk_import_oscar_stations"),
+    """
+    use_local_copy = request.GET.get("use_local", "").lower() in ("1", "true")
+    redirect_url = reverse("load_stations_oscar")
+    if use_local_copy:
+        redirect_url += "?use_local=1"
+    
+    # ── Validate POST inputs ────────────────────────────────────────────────
+    selected_wigos_ids = request.POST.getlist("selected_wigos_ids")
+    network_pk = request.POST.get("network", "").strip()
+    station_type_raw = request.POST.get("station_type", "").strip()
+    
+    if not selected_wigos_ids:
+        messages.warning(request, _("No stations were selected for import."))
+        return redirect(redirect_url)
+    
+    # station_type "0" is falsy — check for empty string explicitly
+    if not network_pk or station_type_raw == "":
+        messages.warning(request, _("Please select a network and station type before importing."))
+        return redirect(redirect_url)
+    
+    # Coerce to int and validate directly against the form's STATION_TYPE_CHOICES
+    valid_station_type_values = [v for v, _ in OSCARStationImportForm.STATION_TYPE_CHOICES]
+    try:
+        station_type = int(station_type_raw)
+        if station_type not in valid_station_type_values:
+            raise ValueError
+    except (ValueError, TypeError):
+        messages.error(request, _("Invalid station type selected."))
+        return redirect(redirect_url)
+    
+    try:
+        network = Network.objects.get(pk=network_pk)
+    except Network.DoesNotExist:
+        messages.error(request, _("The selected network no longer exists."))
+        return redirect(redirect_url)
+    
+    # ── Resolve country ─────────────────────────────────────────────────────
+    adl_settings = AdlSettings.for_request(request)
+    country = adl_settings.country
+    if not country:
+        messages.warning(request, _("Please set the country in the settings."))
+        return redirect(redirect_url)
+    
+    # ── Fetch OSCAR data dict ───────────────────────────────────────────────
+    oscar_stations_dict, fetch_error = _get_oscar_stations_dict(use_local_copy, country)
+    if fetch_error:
+        messages.error(
+            request,
+            _("Could not fetch OSCAR station data: %(error)s") % {"error": fetch_error},
+        )
+        return redirect(redirect_url)
+    
+    # ── Skip already-imported stations ──────────────────────────────────────
+    already_imported = set(
+        Station.objects.filter(station_id__in=selected_wigos_ids)
+        .values_list("station_id", flat=True)
+    )
+    to_import = [w for w in selected_wigos_ids if w not in already_imported]
+    
+    if not to_import:
+        messages.info(request, _("All selected stations are already in the database."))
+        return redirect(redirect_url)
+    
+    # ── Import inside a single transaction ─────────────────────────────────
+    imported_names = []
+    not_found = []
+    
+    try:
+        with transaction.atomic():
+            for wigos_id in to_import:
+                station_data = oscar_stations_dict.get(wigos_id)
+                
+                if not station_data:
+                    not_found.append(wigos_id)
+                    continue
+                
+                longitude = station_data.get("longitude")
+                latitude = station_data.get("latitude")
+                
+                if longitude is None or latitude is None:
+                    not_found.append(wigos_id)
+                    continue
+                
+                location = Point(x=longitude, y=latitude)
+                wigos_id_parts = _derive_wigos_id_parts(wigos_id)
+                
+                new_station_data = {
+                    "station_id": wigos_id,
+                    "name": station_data.get("name"),
+                    "network": network,
+                    "station_type": station_type,
+                    "location": location,
+                    **wigos_id_parts,
+                }
+                
+                elevation = station_data.get("elevation")
+                if elevation is not None:
+                    new_station_data["station_height_above_msl"] = elevation
+                
+                Station.objects.create(**new_station_data)
+                imported_names.append(station_data.get("name") or wigos_id)
+    
+    except Exception as e:
+        messages.error(
+            request,
+            _("Import failed: %(error)s") % {"error": str(e)},
+        )
+        return redirect(redirect_url)
+    
+    # ── User feedback ───────────────────────────────────────────────────────
+    if imported_names:
+        messages.success(
+            request,
+            _("Successfully imported %(count)d station(s).") % {"count": len(imported_names)},
+        )
+    
+    if already_imported:
+        messages.info(
+            request,
+            _("%(count)d station(s) skipped — already in the database.")
+            % {"count": len(already_imported)},
+        )
+    
+    if not_found:
+        messages.warning(
+            request,
+            _("%(count)d station(s) could not be found in OSCAR data and were skipped: %(ids)s")
+            % {"count": len(not_found), "ids": ", ".join(not_found)},
+        )
+    
+    return redirect(redirect_url)
 
 
 def connections_list(request):
