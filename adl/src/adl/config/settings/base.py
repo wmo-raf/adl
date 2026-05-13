@@ -96,6 +96,7 @@ INSTALLED_APPS = [
     "adl.api",
     "adl.monitoring",
     "adl.viewer",
+    "adl.wis2box",
 ]
 
 AUTHENTICATION_BACKENDS = [
