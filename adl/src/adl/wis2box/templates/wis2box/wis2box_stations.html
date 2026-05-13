@@ -1,0 +1,476 @@
+{% extends "wagtailadmin/generic/base.html" %}
+{% load i18n wagtailadmin_tags static %}
+
+{% block extra_css %}
+    {{ block.super }}
+    <style>
+        /* ── Page wrapper ─────────────────────────────────────────────────── */
+        .wis2box-page-wrapper {
+            margin-top: 40px;
+        }
+
+        /* ── Toolbar ──────────────────────────────────────────────────────── */
+        .wis2box-toolbar {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            flex-wrap: wrap;
+            margin-bottom: 24px;
+        }
+
+        .wis2box-url-link {
+            font-size: 13px;
+            color: var(--color-text-meta, #666);
+            word-break: break-all;
+        }
+
+        .wis2box-toolbar-actions {
+            margin-left: auto;
+            display: flex;
+            gap: 8px;
+            align-items: center;
+        }
+
+        /* ── Stats bar ────────────────────────────────────────────────────── */
+        #wis2box-stats-bar {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: stretch;
+            gap: 2px;
+            margin-bottom: 24px;
+            border: 1px solid var(--color-border, #e0e0e0);
+            border-radius: 6px;
+            overflow: hidden;
+        }
+
+        .wis2box-stat-card {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 12px 20px;
+            min-width: 90px;
+            background: var(--color-surface-menus, #f8f8f8);
+            gap: 2px;
+        }
+
+        .wis2box-stat-value {
+            font-size: 22px;
+            font-weight: 700;
+            line-height: 1;
+            color: var(--color-text-label, #333);
+        }
+
+        .wis2box-stat-label {
+            font-size: 11px;
+            font-weight: 500;
+            letter-spacing: 0.04em;
+            text-transform: uppercase;
+            color: var(--color-text-meta, #888);
+            white-space: nowrap;
+        }
+
+        .wis2box-stat-matched .wis2box-stat-value {
+            color: var(--color-positive, #1a7a4a);
+        }
+
+        .wis2box-stat-adl-only .wis2box-stat-value {
+            color: var(--color-warning, #b45309);
+        }
+
+        .wis2box-stat-wis2-only .wis2box-stat-value {
+            color: var(--color-info, #1d4ed8);
+        }
+
+        .wis2box-stat-divider {
+            width: 1px;
+            background: var(--color-border, #e0e0e0);
+            align-self: stretch;
+            margin: 8px 4px;
+        }
+
+        .wis2box-stat-network {
+            background: #fff;
+        }
+
+        .wis2box-stat-network .wis2box-stat-value {
+            color: var(--color-teal, #007d7e);
+        }
+
+        /* ── Jump bar ────────────────────────────────────────────────────── */
+        #wis2box-jump-bar {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-bottom: 24px;
+        }
+
+        .wis2box-jump-link {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 6px 14px 6px 8px;
+            border-radius: 4px;
+            font-size: 13px;
+            font-weight: 500;
+            text-decoration: none;
+            border: 1px solid transparent;
+            transition: opacity 0.15s;
+        }
+
+        .wis2box-jump-link:hover {
+            opacity: 0.8;
+            text-decoration: none;
+        }
+
+        .wis2box-jump-matched {
+            background: #f0fdf4;
+            border-color: #bbf7d0;
+            color: #166534;
+        }
+
+        .wis2box-jump-adl-only {
+            background: #fffbeb;
+            border-color: #fde68a;
+            color: #92400e;
+        }
+
+        .wis2box-jump-wis2-only {
+            background: #eff6ff;
+            border-color: #bfdbfe;
+            color: #1e40af;
+        }
+
+        /* ── Section headings ─────────────────────────────────────────────── */
+        .wis2box-section-heading {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin: 28px 0 8px;
+            font-size: 13px;
+            font-weight: 600;
+            letter-spacing: 0.05em;
+            text-transform: uppercase;
+            color: var(--color-text-meta, #666);
+            background: #f5f5f5;
+            padding: 20px;
+        }
+
+        .wis2box-section-badge {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            min-width: 22px;
+            height: 22px;
+            padding: 0 6px;
+            border-radius: 11px;
+            font-size: 11px;
+            font-weight: 700;
+            color: #fff;
+        }
+
+        .badge-matched {
+            background: var(--color-positive, #1a7a4a);
+        }
+
+        .badge-adl-only {
+            background: var(--color-warning, #b45309);
+        }
+
+        .badge-wis2-only {
+            background: var(--color-info, #1d4ed8);
+        }
+
+        /* ── Table row states ─────────────────────────────────────────────── */
+        .row-matched {
+        }
+
+        .row-adl-only td:first-child {
+            border-left: 3px solid var(--color-warning, #b45309);
+        }
+
+        .row-wis2-only td:first-child {
+            border-left: 3px solid var(--color-info, #1d4ed8);
+        }
+
+        /* ── Check / cross indicators ────────────────────────────────────── */
+        .col-indicator {
+            width: 80px;
+            text-align: center;
+        }
+
+        .indicator-yes,
+        .indicator-no {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 28px;
+            height: 28px;
+            border-radius: 50%;
+        }
+
+        .indicator-yes {
+            background: #dcfce7;
+            color: #166534;
+        }
+
+        .indicator-no {
+            background: #fee2e2;
+            color: #991b1b;
+        }
+
+        .indicator-yes svg,
+        .indicator-no svg {
+            width: 14px;
+            height: 14px;
+        }
+    </style>
+{% endblock %}
+
+{% block main_content %}
+    <div class="wis2box-page-wrapper">
+        {% if fetch_error %}
+            <div class="help-block help-critical">
+                <svg class="icon icon-warning icon" aria-hidden="true">
+                    <use href="#icon-warning"></use>
+                </svg>
+                {{ fetch_error }}
+            </div>
+        {% else %}
+            {% if wis2box_url_not_set %}
+                <div class="help-block help-info">
+                    <svg class="icon icon-help icon" aria-hidden="true">
+                        <use href="#icon-help"></use>
+                    </svg>
+                    {% translate "Wis2Box URL is not configured. Please set it in the Wis2Box Settings." %}
+                </div>
+                <div style="margin-top: 16px;">
+                    <a href="{{ settings_url }}" class="button bicolor button--icon">
+                    <span class="icon-wrapper">
+                        <svg class="icon icon-cog icon" aria-hidden="true"><use href="#icon-cog"></use></svg>
+                    </span>
+                        {% translate "Configure Wis2Box Settings" %}
+                    </a>
+                </div>
+
+            {% else %}
+
+                {# ── Toolbar ── #}
+                <div class="wis2box-toolbar">
+                    <a href="{{ wis2box_url }}" target="_blank" rel="noreferrer noopener"
+                       class="wis2box-url-link">
+                        <svg class="icon icon-link-external" aria-hidden="true"
+                             style="width:14px;height:14px;vertical-align:middle;margin-right:4px;">
+                            <use href="#icon-link-external"></use>
+                        </svg>
+                        {{ wis2box_url }}
+                    </a>
+                    <div class="wis2box-toolbar-actions">
+                        <a href="{{ refresh_url }}" class="button button-secondary button--icon button-small">
+                        <span class="icon-wrapper">
+                            <svg class="icon icon-rotate" aria-hidden="true"><use href="#icon-rotate"></use></svg>
+                        </span>
+                            {% translate "Refresh from Wis2Box" %}
+                        </a>
+                    </div>
+                </div>
+
+                {# ── Stats bar ── #}
+                <div id="wis2box-stats-bar">
+                    <div class="wis2box-stat-card wis2box-stat-total">
+                        <span class="wis2box-stat-value">{{ total_wis2box }}</span>
+                        <span class="wis2box-stat-label">{% translate "Total in Wis2Box" %}</span>
+                    </div>
+                    <div class="wis2box-stat-divider"></div>
+                    <div class="wis2box-stat-card wis2box-stat-matched">
+                        <span class="wis2box-stat-value">{{ total_matched }}</span>
+                        <span class="wis2box-stat-label">{% translate "Matched" %}</span>
+                    </div>
+                    <div class="wis2box-stat-card wis2box-stat-adl-only">
+                        <span class="wis2box-stat-value">{{ total_adl_only }}</span>
+                        <span class="wis2box-stat-label">{% translate "ADL only" %}</span>
+                    </div>
+                    <div class="wis2box-stat-card wis2box-stat-wis2-only">
+                        <span class="wis2box-stat-value">{{ total_wis2box_only }}</span>
+                        <span class="wis2box-stat-label">{% translate "Wis2Box only" %}</span>
+                    </div>
+
+                    {% if imported_by_network %}
+                        <div class="wis2box-stat-divider"></div>
+                        {% for network_name, count in imported_by_network %}
+                            <div class="wis2box-stat-card wis2box-stat-network">
+                                <span class="wis2box-stat-value">{{ count }}</span>
+                                <span class="wis2box-stat-label">{{ network_name }}</span>
+                            </div>
+                        {% endfor %}
+                    {% endif %}
+                </div>
+
+                {# ── Quick jump links ── #}
+                {% if matched or adl_only or wis2box_only %}
+                    <div id="wis2box-jump-bar">
+                        {% if matched %}
+                            <a href="#section-matched" class="wis2box-jump-link wis2box-jump-matched">
+                                <span class="wis2box-section-badge badge-matched">{{ total_matched }}</span>
+                                {% translate "Matched" %}
+                            </a>
+                        {% endif %}
+                        {% if adl_only %}
+                            <a href="#section-adl-only" class="wis2box-jump-link wis2box-jump-adl-only">
+                                <span class="wis2box-section-badge badge-adl-only">{{ total_adl_only }}</span>
+                                {% translate "ADL only" %}
+                            </a>
+                        {% endif %}
+                        {% if wis2box_only %}
+                            <a href="#section-wis2-only" class="wis2box-jump-link wis2box-jump-wis2-only">
+                                <span class="wis2box-section-badge badge-wis2-only">{{ total_wis2box_only }}</span>
+                                {% translate "Wis2Box only" %}
+                            </a>
+                        {% endif %}
+                    </div>
+                {% endif %}
+
+                {# ── Matched ── #}
+                {% if matched %}
+                    <div class="wis2box-section-heading" id="section-matched">
+                        <span class="wis2box-section-badge badge-matched">{{ total_matched }}</span>
+                        {% translate "On Wis2Box and in ADL" %}
+                    </div>
+                    <table class="listing">
+                        <thead>
+                        <tr>
+                            <th>{% translate "WIGOS ID" %}</th>
+                            <th>{% translate "Name" %}</th>
+                            <th>{% translate "Network" %}</th>
+                            <th class="col-indicator">{% translate "On ADL" %}</th>
+                            <th class="col-indicator">{% translate "On Wis2Box" %}</th>
+                        </tr>
+                        </thead>
+                        <tbody>
+                        {% for row in matched %}
+                            <tr class="row-matched">
+                                <td>{{ row.wigos_id }}</td>
+                                <td>{{ row.adl.name }}</td>
+                                <td>{{ row.adl.network.name }}</td>
+                                <td class="col-indicator">
+                                    <span class="indicator-yes" title="{% translate 'In ADL' %}">
+                                        <svg class="icon icon-check" aria-hidden="true"><use
+                                                href="#icon-check"></use></svg>
+                                    </span>
+                                </td>
+                                <td class="col-indicator">
+                                    <span class="indicator-yes" title="{% translate 'On Wis2Box' %}">
+                                        <svg class="icon icon-check" aria-hidden="true"><use
+                                                href="#icon-check"></use></svg>
+                                    </span>
+                                </td>
+                            </tr>
+                        {% endfor %}
+                        </tbody>
+                    </table>
+                {% endif %}
+
+                {# ── ADL only ── #}
+                {% if adl_only %}
+                    <div class="wis2box-section-heading" id="section-adl-only">
+                        <span class="wis2box-section-badge badge-adl-only">{{ total_adl_only }}</span>
+                        {% translate "In ADL but not on Wis2Box" %}
+                    </div>
+                    <table class="listing">
+                        <thead>
+                        <tr>
+                            <th>{% translate "WIGOS ID" %}</th>
+                            <th>{% translate "Name" %}</th>
+                            <th>{% translate "Network" %}</th>
+                            <th class="col-indicator">{% translate "On ADL" %}</th>
+                            <th class="col-indicator">{% translate "On Wis2Box" %}</th>
+                        </tr>
+                        </thead>
+                        <tbody>
+                        {% for row in adl_only %}
+                            <tr class="row-adl-only">
+                                <td>{{ row.wigos_id }}</td>
+                                <td>{{ row.adl.name }}</td>
+                                <td>{{ row.adl.network.name }}</td>
+                                <td class="col-indicator">
+                                    <span class="indicator-yes" title="{% translate 'In ADL' %}">
+                                        <svg class="icon icon-check" aria-hidden="true"><use
+                                                href="#icon-check"></use></svg>
+                                    </span>
+                                </td>
+                                <td class="col-indicator">
+                                    <span class="indicator-no" title="{% translate 'Not on Wis2Box' %}">
+                                        <svg class="icon icon-cross" aria-hidden="true"><use
+                                                href="#icon-cross"></use></svg>
+                                    </span>
+                                </td>
+                            </tr>
+                        {% endfor %}
+                        </tbody>
+                    </table>
+                {% endif %}
+
+                {# ── Wis2Box only ── #}
+                {% if wis2box_only %}
+                    <div class="wis2box-section-heading" id="section-wis2-only">
+                        <span class="wis2box-section-badge badge-wis2-only">{{ total_wis2box_only }}</span>
+                        {% translate "On Wis2Box but not in ADL" %}
+                    </div>
+                    <table class="listing">
+                        <thead>
+                        <tr>
+                            <th>{% translate "WIGOS ID" %}</th>
+                            <th>{% translate "Name" %}</th>
+                            <th>{% translate "Network" %}</th>
+                            <th class="col-indicator">{% translate "On ADL" %}</th>
+                            <th class="col-indicator">{% translate "On Wis2Box" %}</th>
+                            <th></th>
+                        </tr>
+                        </thead>
+                        <tbody>
+                        {% for row in wis2box_only %}
+                            <tr class="row-wis2-only">
+                                <td>{{ row.wigos_id }}</td>
+                                <td>{{ row.wis2box.name|default:"-" }}</td>
+                                <td>-</td>
+                                <td class="col-indicator">
+                                    <span class="indicator-no" title="{% translate 'Not in ADL' %}">
+                                        <svg class="icon icon-cross" aria-hidden="true"><use
+                                                href="#icon-cross"></use></svg>
+                                    </span>
+                                </td>
+                                <td class="col-indicator">
+                                    <span class="indicator-yes" title="{% translate 'On Wis2Box' %}">
+                                        <svg class="icon icon-check" aria-hidden="true"><use
+                                                href="#icon-check"></use></svg>
+                                    </span>
+                                </td>
+                                <td>
+                                    <a href="{{ row.import_url }}" class="button button-small button--icon">
+                                        <span class="icon-wrapper">
+                                            <svg class="icon icon-plus icon" aria-hidden="true">
+                                                <use href="#icon-plus"></use>
+                                            </svg>
+                                        </span>
+                                        {% translate "Import to ADL" %}
+                                    </a>
+                                </td>
+                            </tr>
+                        {% endfor %}
+                        </tbody>
+                    </table>
+                {% endif %}
+
+                {% if not matched and not adl_only and not wis2box_only %}
+                    <div class="help-block help-info" style="margin-top: 20px;">
+                        <svg class="icon icon-info-circle icon" aria-hidden="true">
+                            <use href="#icon-info-circle"></use>
+                        </svg>
+                        {% translate "No stations found. Try refreshing from Wis2Box." %}
+                    </div>
+                {% endif %}
+
+            {% endif %}
+            </div>
+        {% endif %}
+{% endblock %}

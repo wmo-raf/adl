@@ -1,0 +1,73 @@
+{% extends "wagtailadmin/generic/base.html" %}
+{% load i18n wagtailadmin_tags static %}
+
+{% block main_content %}
+    <div style="margin-top: 40px;">
+
+        {% if wis2box_error %}
+            <div class="help-block help-warning">
+                <svg class="icon icon-warning icon" aria-hidden="true"><use href="#icon-warning"></use></svg>
+                <span>{{ wis2box_error }}</span>
+            </div>
+
+        {% else %}
+            {# ── Station data preview ── #}
+            <div style="margin-bottom: 32px;">
+                <h2>{% translate "Station Data from Wis2Box" %}</h2>
+                <table class="listing">
+                    <thead>
+                        <tr>
+                            <th>{% translate "WIGOS ID" %}</th>
+                            <th>{% translate "Name" %}</th>
+                            <th>{% translate "Longitude" %}</th>
+                            <th>{% translate "Latitude" %}</th>
+                            <th>{% translate "Elevation" %}</th>
+                            <th>{% translate "Territory" %}</th>
+                            <th>{% translate "Status" %}</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>{{ station.wigos_id }}</td>
+                            <td>{{ station.name|default:"-" }}</td>
+                            <td>{{ station.longitude|default:"-" }}</td>
+                            <td>{{ station.latitude|default:"-" }}</td>
+                            <td>{{ station.elevation|default:"-" }}</td>
+                            <td>{{ station.territory|default:"-" }}</td>
+                            <td>{{ station.status|default:"-" }}</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            {# ── Import form ── #}
+            <form method="POST" id="import-form">
+                {% if form.non_field_errors %}
+                    <div style="margin-bottom: 20px;">
+                        {% include "wagtailadmin/shared/non_field_errors.html" with form=form %}
+                    </div>
+                {% endif %}
+                <ul class="fields">
+                    {% csrf_token %}
+                    {% for field in form %}
+                        {% if field.is_hidden %}
+                            {{ field }}
+                        {% else %}
+                            {% include "wagtailadmin/shared/field.html" %}
+                        {% endif %}
+                    {% endfor %}
+                    <li>
+                        <button type="submit" class="button bicolor button--icon">
+                            <span class="icon-wrapper">
+                                <svg class="icon icon-download icon" aria-hidden="true">
+                                    <use href="#icon-download"></use>
+                                </svg>
+                            </span>
+                            {% translate "Import Station" %}
+                        </button>
+                    </li>
+                </ul>
+            </form>
+        {% endif %}
+    </div>
+{% endblock %}
