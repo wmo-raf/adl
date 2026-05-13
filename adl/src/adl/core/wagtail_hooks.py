@@ -109,6 +109,7 @@ def get_connection_viewsets():
             station_link_model = get_model_by_string_label(model_cls.station_link_model_string_label)
             if station_link_model:
                 station_link_viewset_kwargs = {
+                    "list_display": ["__str__", "wigos_id"],
                     "list_filter": ["network_connection"],
                     "add_view_class": StationLinkAddView,
                     "edit_view_class": StationLinkEditView,

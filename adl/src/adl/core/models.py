@@ -644,6 +644,11 @@ class StationLink(PolymorphicModel, ClusterableModel):
     def plugin(self):
         return self.network_connection.get_plugin()
     
+    @property
+    def wigos_id(self):
+        return self.station.wigos_id
+    
+    @property
     def get_dispatch_channels(self):
         """
         A channel includes this station iff:
