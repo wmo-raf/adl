@@ -30,7 +30,9 @@ urlpatterns = [
     path("api/docs/redoc/", SpectacularRedocView.as_view(url_name="schema"), name="redoc"),
     
     path("accounts/", include("allauth.urls")),
-    
+
+    path("display/", include("adl.viewer.display_urls")),
+
     path("", include(wagtailadmin_urls)),
 ]
 

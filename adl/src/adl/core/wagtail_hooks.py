@@ -202,6 +202,22 @@ def register_icons(icons):
         'wagtailfontawesomesvg/solid/puzzle-piece.svg',
         'wagtailfontawesomesvg/solid/up-down.svg',
         'wagtailfontawesomesvg/solid/plus-minus.svg',
+        # Weather / observation parameter icons
+        'wagtailfontawesomesvg/solid/temperature-half.svg',
+        'wagtailfontawesomesvg/solid/droplet.svg',
+        'wagtailfontawesomesvg/solid/wind.svg',
+        'wagtailfontawesomesvg/solid/compass.svg',
+        'wagtailfontawesomesvg/solid/cloud-rain.svg',
+        'wagtailfontawesomesvg/solid/gauge-high.svg',
+        'wagtailfontawesomesvg/solid/eye.svg',
+        'wagtailfontawesomesvg/solid/sun.svg',
+        'wagtailfontawesomesvg/solid/smog.svg',
+        'wagtailfontawesomesvg/solid/cloud.svg',
+        'wagtailfontawesomesvg/solid/battery-half.svg',
+        'wagtailfontawesomesvg/solid/signal.svg',
+        'wagtailfontawesomesvg/solid/snowflake.svg',
+        'wagtailfontawesomesvg/solid/bolt.svg',
+        'wagtailfontawesomesvg/solid/water.svg',
     ]
 
 

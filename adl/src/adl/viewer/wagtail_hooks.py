@@ -3,7 +3,10 @@ from django.utils.translation import gettext_lazy as _
 from rest_framework.reverse import reverse_lazy
 from wagtail import hooks
 from wagtail.admin.menu import Menu, MenuItem, SubmenuMenuItem
+from wagtail.admin.ui.tables import Column
 
+from adl.core.viewsets import AdletViewSet
+from .models import WidgetDisplay
 from .views import pg_tileserver_settings
 
 
@@ -12,6 +15,7 @@ def register_icons(icons):
     return icons + [
         'wagtailfontawesomesvg/solid/chart-line.svg',
         'wagtailfontawesomesvg/solid/clipboard-check.svg',
+        'wagtailfontawesomesvg/solid/desktop.svg',
     ]
 
 
@@ -21,6 +25,25 @@ def urlconf_adl_viewer():
         path('viewer/', include('adl.viewer.urls')),
         path('pg-tileserv-settings/', pg_tileserver_settings, name='pg_tileserver_settings'),
     ]
+
+
+class WidgetDisplayViewSet(AdletViewSet):
+    model = WidgetDisplay
+    icon = "desktop"
+    menu_label = "Display Widgets"
+    add_to_admin_menu = False
+    list_display = [
+        "name",
+        "default_view",
+        "rotation_interval",
+        "poll_interval",
+        Column("display_url", label="Display URL", accessor="display_url"),
+    ]
+
+
+@hooks.register("register_admin_viewset")
+def register_viewer_viewsets():
+    return WidgetDisplayViewSet("widget_display_viewset")
 
 
 @hooks.register('register_admin_menu_item')
@@ -34,6 +57,7 @@ def register_viewer_menu_item():
         MenuItem(_('Chart'), reverse_lazy('viewer_chart'), icon_name='chart-line'),
         MenuItem(_('Map'), reverse_lazy("viewer_map"), icon_name='site'),
         MenuItem(_('Quality Control'), reverse_lazy("qc_view"), icon_name='clipboard-check'),
+        MenuItem(_('Display Widgets'), reverse_lazy("widget_display_viewset:index"), icon_name='desktop'),
         SubmenuMenuItem(_('Settings'), settings_submenu, icon_name='cog'),
     ])
     

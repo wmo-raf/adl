@@ -1,5 +1,9 @@
+import uuid as uuid_lib
+
+from django import forms
 from django.db import models
-from modelcluster.fields import ParentalKey
+from django.urls import reverse
+from modelcluster.fields import ParentalKey, ParentalManyToManyField
 from modelcluster.models import ClusterableModel
 from wagtail.admin.panels import InlinePanel, FieldPanel, TabbedInterface, ObjectList
 from wagtail.contrib.settings.models import BaseSiteSetting, register_setting
@@ -89,3 +93,56 @@ class DataParameterStyle(ClusterableModel):
             }
             for stop in self.color_scale
         ]
+
+
+class WidgetDisplay(ClusterableModel):
+    uuid = models.UUIDField(default=uuid_lib.uuid4, editable=False, unique=True)
+    name = models.CharField(max_length=255)
+    rotation_interval = models.PositiveIntegerField(
+        default=10,
+        help_text="Seconds to display each station before rotating"
+    )
+    poll_interval = models.PositiveIntegerField(
+        default=5,
+        help_text="Minutes between data refresh requests"
+    )
+    default_view = models.CharField(
+        max_length=20,
+        choices=[("rotating", "Rotating Cards + Mini Map"), ("map", "Full Map Overlay")],
+        default="rotating"
+    )
+    stations = ParentalManyToManyField(
+        "core.StationLink",
+        blank=True,
+        related_name="widget_displays"
+    )
+    parameters = ParentalManyToManyField(
+        DataParameter,
+        blank=True,
+        related_name="widget_displays"
+    )
+
+    panels = [
+        FieldPanel("name"),
+        FieldPanel("default_view"),
+        FieldPanel("rotation_interval"),
+        FieldPanel("poll_interval"),
+        FieldPanel("stations", widget=forms.CheckboxSelectMultiple),
+        FieldPanel("parameters", widget=forms.CheckboxSelectMultiple),
+    ]
+
+    class Meta:
+        verbose_name = "Widget Display"
+        verbose_name_plural = "Widget Displays"
+
+    def __str__(self):
+        return self.name
+
+    def get_display_url(self):
+        return reverse("widget_display", kwargs={"widget_uuid": self.uuid})
+
+    @property
+    def display_url(self):
+        if not self.pk:
+            return "(save first to get the display URL)"
+        return self.get_display_url()

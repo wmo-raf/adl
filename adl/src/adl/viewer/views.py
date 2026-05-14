@@ -1,10 +1,14 @@
 import calendar
 import json
+import re
 from datetime import datetime, timezone
 
+import requests as http_client
+from django.contrib.auth.decorators import login_required
+from django.core.cache import cache
 from django.db.models import Count, Case, When, IntegerField, Max
 from django.http import JsonResponse
-from django.shortcuts import render
+from django.shortcuts import render, get_object_or_404
 from django.urls import reverse
 from django.utils import timezone as dj_timezone
 from rest_framework.decorators import api_view, permission_classes
@@ -14,9 +18,9 @@ from wagtail.admin import messages
 from wagtail.api.v2.utils import get_full_url
 
 from adl.api.auth import HasAPIKeyOrIsAuthenticated
-from adl.core.models import AdlSettings
-from adl.core.models import ObservationRecord, QCStatus
+from adl.core.models import AdlSettings, ObservationRecord, QCStatus
 from adl.core.models import QCMessage, QCBits
+from adl.viewer.models import WidgetDisplay
 from adl.viewer.utils import _fetch_pg_tileserv_mvt_tile, reload_pg_tileserv_index
 
 
@@ -331,3 +335,63 @@ def qc_inspect_view(request, station_id):
     })
     
     return render(request, 'viewer/quality_control_inspect.html', context)
+
+
+_GADM_URL = "https://geodata.ucdavis.edu/gadm/gadm4.1/json/gadm41_{iso3}_0.json"
+_BOUNDARY_CACHE_TTL = 60 * 60 * 24 * 7  # 7 days — boundaries don't change
+
+
+@login_required
+def country_boundary_proxy(request, iso3):
+    if not re.match(r'^[A-Z]{3}$', iso3):
+        return JsonResponse({"error": "Invalid ISO3 code"}, status=400)
+    
+    cache_key = f"country_boundary_{iso3}"
+    cached = cache.get(cache_key)
+    if cached is not None:
+        return JsonResponse(cached, safe=False)
+    
+    try:
+        resp = http_client.get(_GADM_URL.format(iso3=iso3), timeout=30)
+        resp.raise_for_status()
+        geojson = resp.json()
+    except Exception:
+        return JsonResponse({"error": "Failed to fetch boundary"}, status=502)
+    
+    cache.set(cache_key, geojson, _BOUNDARY_CACHE_TTL)
+    return JsonResponse(geojson, safe=False)
+
+
+@login_required
+def widget_display_view(request, widget_uuid):
+    widget = get_object_or_404(WidgetDisplay, uuid=widget_uuid)
+    
+    stations_data = [
+        {
+            "id": sl.id,
+            "name": sl.station.name,
+            "lon": sl.station.location.x if sl.station.location else None,
+            "lat": sl.station.location.y if sl.station.location else None,
+        }
+        for sl in widget.stations.select_related("station").all()
+    ]
+    
+    parameters_data = [
+        {"id": p.id, "name": p.name, "unit": p.unit.symbol, "icon": p.icon}
+        for p in widget.parameters.all()
+    ]
+    
+    adl_settings = AdlSettings.for_request(request)
+    country = adl_settings.country
+    country_iso3 = country.alpha3 if country else ""
+    country_bounds = json.dumps(list(country.geo_extent)) if country else ""
+    
+    context = {
+        "widget": widget,
+        "api_url": get_full_url(request, "/api"),
+        "stations_json": json.dumps(stations_data),
+        "parameters_json": json.dumps(parameters_data),
+        "country_iso3": country_iso3,
+        "country_bounds": country_bounds,
+    }
+    return render(request, "viewer/widget_display.html", context)
