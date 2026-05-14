@@ -25,8 +25,8 @@ different receiving systems.
 | 14  | 🇲🇿 [Mozambique](https://inam.gov.mz)            | ADL FTP Plugin ( Campbell + NESA)                                         | [INAM wis2box](https://wis2.inam.gov.mz)                    | ✅ Operational |
 | 15  | 🇲🇿 [Congo](https://dirmet.cg/)                  | ADL PusloWeb Plugin                                                       | [DIRMET wis2box](https://wis.dirmet.cg/)                    | ✅ Operational |
 | 16  | 🇨🇮 [Côte d’Ivoire](https://sodexam.com)         | ADL PulsoWeb Plugin, ADL FTP Plugin (Campbell Scientific)                 | [Côte d’Ivoire](https://wis2.sodexam.ci)                    | ✅ Operational |
-| 17  | 🇳🇪 [Niger](https://www.niger-meteo.ne)          | ADL PulsoWeb Plugin                                                       | Niger Wis2box                                               | ⏳ In Progress |
-| 18  | 🇬🇳 [Guinea](https://anmeteo.gov.gn)             | Siap + Micros, ADCON                                                      | Guinea Wis2box                                              | ⏳ In Progress |
+| 17  | 🇬🇳 [Guinea](https://anmeteo.gov.gn)             | Siap + Micros                                                             | [Guinea Wis2box](https://wis2.anmeteo.gov.gn)               | ✅ Operational |
+| 18  | 🇳🇪 [Niger](https://www.niger-meteo.ne)          | ADL PulsoWeb Plugin                                                       | Niger Wis2box                                               | ⏳ In Progress |
 | 19  | 🇪🇹 [Ethiopia](https://www.ethiomet.gov.et)      | ADL ADCON DB Plugin                                                       | Ethiomet Wis2box                                            | ⏳ In Progress |
 | 20  | 🇸🇳 [Senegal](https://anacim.sn)                 | ADCON, ADL PulsoWeb Plugin                                                | Senegal Wis2box                                             | ⏳ In Progress |
 | 21  | 🇸🇩 [Sudan](https://meteosudan.sd)               | ADL CIMAWebDrops Plugin                                                   | —                                                           | ⏳ In Progress |
@@ -41,20 +41,21 @@ different receiving systems.
 Below is a list of currently available plugins for the Automated Data Loader (ADL). Each plugin is designed to collect
 data from specific data sources or systems.
 
-| No. | Plugin Name              | Description                                              | Link                                                                                |
-|-----|--------------------------|----------------------------------------------------------|-------------------------------------------------------------------------------------|
-| 1   | ADL FTP Plugin           | Collecting data from FTP storages                        | [adl-ftp-plugin](https://github.com/wmo-raf/adl-ftp-plugin)                         |
-| 2   | ADL ADCON DB Plugin      | Collecting data from ADCON Postgres database             | [adl-adcon-db-plugin](https://github.com/wmo-raf/adl-adcon-db-plugin)               |
-| 3   | ADL TAHMO Plugin         | Collecting data from TAHMO API                           | [adl-tahmo-plugin](https://github.com/wmo-raf/adl-tahmo-plugin)                     |
-| 4   | ADL PulsoWeb Plugin      | Collecting data from Pulsonic's Pulsoweb API             | [adl-pulsoweb-plugin](https://github.com/wmo-raf/adl-pulsoweb-plugin)               |
-| 5   | ADL WeatherLink Plugin   | Collecting data from Davis Instruments's WeatherLink API | [adl-weatherlink-plugin](https://github.com/wmo-raf/adl-weatherlink-plugin)         |
-| 6   | ADL CIMAWebDrops Plugin  | Collecting data from CIMA's WebDrops API                 | [adl-cimawebdrops-plugin](https://github.com/wmo-raf/adl-cimawebdrops-plugin)       |
-| 7   | ADL EarthNetworks Plugin | Collecting data from EarthNetworks                       | [adl-earthnetworks-plugin](    https://github.com/wmo-raf/adl-earthnetworks-plugin) |
+| No. | Plugin Name                          | Description                                              | Link                                                                                            |
+|-----|--------------------------------------|----------------------------------------------------------|-------------------------------------------------------------------------------------------------|
+| 1   | ADL FTP Plugin                       | Collecting data from FTP storages                        | [adl-ftp-plugin](https://github.com/wmo-raf/adl-ftp-plugin)                                     |
+| 2   | ADL ADCON DB Plugin                  | Collecting data from ADCON Postgres database             | [adl-adcon-db-plugin](https://github.com/wmo-raf/adl-adcon-db-plugin)                           |
+| 3   | ADL TAHMO Plugin                     | Collecting data from TAHMO API                           | [adl-tahmo-plugin](https://github.com/wmo-raf/adl-tahmo-plugin)                                 |
+| 4   | ADL PulsoWeb Plugin                  | Collecting data from Pulsonic's Pulsoweb API             | [adl-pulsoweb-plugin](https://github.com/wmo-raf/adl-pulsoweb-plugin)                           |
+| 5   | ADL WeatherLink Plugin               | Collecting data from Davis Instruments's WeatherLink API | [adl-weatherlink-plugin](https://github.com/wmo-raf/adl-weatherlink-plugin)                     |
+| 6   | ADL CIMAWebDrops Plugin              | Collecting data from CIMA's WebDrops API                 | [adl-cimawebdrops-plugin](https://github.com/wmo-raf/adl-cimawebdrops-plugin)                   |
+| 7   | ADL EarthNetworks Plugin             | Collecting data from EarthNetworks                       | [adl-earthnetworks-plugin](    https://github.com/wmo-raf/adl-earthnetworks-plugin)             |
+| 8   | ADL SIAP + Micros Polaris Web Plugin | Collecting data from SIAP + Micros Polaris Web           | [adl-siapmicros-polarisweb-plugin](https://github.com/wmo-raf/adl-siapmicros-polarisweb-plugin) |
 
 ### Country Specific FTP Decoders
 
 | No. | Plugin Name                | Description                                        | Link                                                                                       |
-|:----|----------------------------|----------------------------------------------------|--------------------------------------------------------------------------------------------|
+|-----|----------------------------|----------------------------------------------------|--------------------------------------------------------------------------------------------|
 | 1   | ADL ADCON BF Decoder       | FTP Decoder for Burkina Faso ADCON                 | [adl-ftp-adcon-bf-plugin](https://github.com/anam-bf/adl-ftp-adcon-bf-plugin)              |
 | 2   | ADL Vaisala SC FTP Decoder | FTP Decoder  for the Seychelles Vaisala Avimet AWS | [adl-vaisala-sc-ftp-decoder](https://github.com/seychelles-met/adl-vaisala-sc-ftp-decoder) |
 | 3   | ADL ADCON SOM Decoder      | FTP Decoder for Somalia ADCON                      | [adl-ftp-adcon-som-plugin](https://github.com/wmo-raf/adl-ftp-adcon-som-plugin)            |
