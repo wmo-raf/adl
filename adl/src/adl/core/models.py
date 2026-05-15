@@ -399,13 +399,32 @@ class DataParameter(ClusterableModel):
 @register_setting
 class AdlSettings(ClusterableModel, BaseSiteSetting):
     country = CountryField(blank_label=_("Select Country"), verbose_name=_("Country"))
-    
+
     daily_aggregation_time = models.TimeField(default="00:00", verbose_name=_("Daily Aggregation Time"))
-    
+
+    organisation_name = models.CharField(
+        max_length=255,
+        blank=True,
+        default='',
+        verbose_name=_("Organisation Name"),
+        help_text=_("Displayed in the footer of widget display pages"),
+    )
+    logo = models.ForeignKey(
+        'wagtailimages.Image',
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name='+',
+        verbose_name=_("Logo"),
+        help_text=_("Displayed in the footer of widget display pages"),
+    )
+
     panels = [
         FieldPanel("country", widget=CountrySelectWidget()),
+        FieldPanel("organisation_name"),
+        FieldPanel("logo"),
     ]
-    
+
     class Meta:
         verbose_name = _("ADL Settings")
         verbose_name_plural = _("ADL Settings")

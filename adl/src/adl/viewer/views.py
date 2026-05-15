@@ -386,6 +386,15 @@ def widget_display_view(request, widget_uuid):
     country_iso3 = country.alpha3 if country else ""
     country_bounds = json.dumps(list(country.geo_extent)) if country else ""
     
+    logo_url = ""
+    if adl_settings.logo:
+        try:
+            logo_url = adl_settings.logo.get_rendition("max-300x120").url
+        except Exception:
+            logo_url = adl_settings.logo.file.url
+    
+    logo_url = get_full_url(request, logo_url)
+    
     context = {
         "widget": widget,
         "api_url": get_full_url(request, "/api"),
@@ -393,5 +402,7 @@ def widget_display_view(request, widget_uuid):
         "parameters_json": json.dumps(parameters_data),
         "country_iso3": country_iso3,
         "country_bounds": country_bounds,
+        "organisation_name": adl_settings.organisation_name,
+        "logo_url": logo_url,
     }
     return render(request, "viewer/widget_display.html", context)

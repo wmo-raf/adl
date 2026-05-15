@@ -3,8 +3,8 @@ from django.utils.translation import gettext_lazy as _
 from rest_framework.reverse import reverse_lazy
 from wagtail import hooks
 from wagtail.admin.menu import Menu, MenuItem, SubmenuMenuItem
-from wagtail.admin.ui.tables import Column
 
+from adl.core.table import LinkColumn
 from adl.core.viewsets import AdletViewSet
 from .models import WidgetDisplay
 from .views import pg_tileserver_settings
@@ -27,6 +27,10 @@ def urlconf_adl_viewer():
     ]
 
 
+def get_widget_display_url(widget):
+    return widget.display_url
+
+
 class WidgetDisplayViewSet(AdletViewSet):
     model = WidgetDisplay
     icon = "desktop"
@@ -37,7 +41,8 @@ class WidgetDisplayViewSet(AdletViewSet):
         "default_view",
         "rotation_interval",
         "poll_interval",
-        Column("display_url", label="Display URL", accessor="display_url"),
+        LinkColumn("display_url", label=_("Display URL"), get_url=get_widget_display_url,
+                   link_attrs={"target": "_blank"}),
     ]
 
 

@@ -1,0 +1,11 @@
+{% load wagtailadmin_tags %}
+
+<td {% if column.classname %}class="{{ column.classname }}"{% endif %}>
+    {% if link_url %}
+        <a{% include "wagtailadmin/shared/attrs.html" with attrs=link_attrs %}>{{ column.label }}</a>
+    {% elif label_id %}
+        <label for="{{ label_id }}">{{ title }}</label>
+    {% else %}
+        {{ label }}
+    {% endif %}
+</td>
