@@ -1,5 +1,5 @@
 <script setup>
-import {computed, onMounted, onUnmounted} from "vue"
+import {computed, onUnmounted, watch} from "vue"
 import {useWidgetStore} from "@/stores/widget.js"
 import StationMiniMap from "@/components/widget/StationMiniMap.vue"
 import {renderParamIcon} from "@/utils/paramIcons.js"
@@ -49,12 +49,15 @@ const lastUpdated = computed(() => {
   })
 })
 
-function startRotation() {
-  if (store.stationCount <= 1) return
-  rotationTimer = setInterval(() => store.nextStation(), props.rotationInterval * 1000)
-}
+let rotationStarted = false
 
-onMounted(() => startRotation())
+watch(() => store.stationCount, (count) => {
+  if (count > 1 && !rotationStarted) {
+    rotationStarted = true
+    rotationTimer = setInterval(() => store.nextStation(), props.rotationInterval * 1000)
+  }
+}, {immediate: true})
+
 onUnmounted(() => { if (rotationTimer) clearInterval(rotationTimer) })
 </script>
 
