@@ -139,7 +139,7 @@ class WidgetDisplay(ClusterableModel):
         return self.name
 
     def get_display_url(self):
-        return reverse("widget_display", kwargs={"widget_uuid": self.uuid})
+        return reverse("widget_display", kwargs={"pk": self.pk})
 
     @property
     def display_url(self):
