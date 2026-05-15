@@ -393,7 +393,8 @@ def widget_display_view(request, widget_uuid):
         except Exception:
             logo_url = adl_settings.logo.file.url
     
-    logo_url = get_full_url(request, logo_url)
+    if logo_url:
+        logo_url = get_full_url(request, logo_url)
     
     context = {
         "widget": widget,
