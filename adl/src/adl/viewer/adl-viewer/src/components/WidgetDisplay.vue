@@ -1,5 +1,5 @@
 <script setup>
-import {computed, onMounted} from "vue"
+import {computed, onMounted, onUnmounted, ref} from "vue"
 import {useWidgetStore} from "@/stores/widget.js"
 import StationRotatingCards from "@/components/widget/StationRotatingCards.vue"
 import StationMapOverlay from "@/components/widget/StationMapOverlay.vue"
@@ -22,9 +22,22 @@ const store = useWidgetStore()
 
 const isRotating = computed(() => store.activeView === 'rotating')
 const hasFooter = computed(() => !!(props.organisationName || props.logoUrl))
+const isFullscreen = ref(false)
 
 function toggleView() {
   store.setView(isRotating.value ? 'map' : 'rotating')
+}
+
+function toggleFullscreen() {
+  if (!document.fullscreenElement) {
+    document.documentElement.requestFullscreen()
+  } else {
+    document.exitFullscreen()
+  }
+}
+
+function onFullscreenChange() {
+  isFullscreen.value = !!document.fullscreenElement
 }
 
 onMounted(() => {
@@ -32,14 +45,24 @@ onMounted(() => {
   const parameters = JSON.parse(props.parameters)
   store.init(stations, parameters, props.defaultView)
   store.startPolling(Number(props.pollInterval))
+  document.addEventListener('fullscreenchange', onFullscreenChange)
+})
+
+onUnmounted(() => {
+  document.removeEventListener('fullscreenchange', onFullscreenChange)
 })
 </script>
 
 <template>
   <div class="widget-root" :class="{ 'has-footer': hasFooter }">
-    <button class="view-toggle" @click="toggleView" :title="isRotating ? 'Switch to Map View' : 'Switch to Card View'">
-      {{ isRotating ? 'Map' : 'Cards' }}
-    </button>
+    <div class="top-controls">
+      <button class="ctrl-btn" @click="toggleFullscreen" :title="isFullscreen ? 'Exit Fullscreen' : 'Enter Fullscreen'">
+        <i :class="isFullscreen ? 'fa-solid fa-compress' : 'fa-solid fa-expand'"></i>
+      </button>
+      <button class="ctrl-btn" @click="toggleView" :title="isRotating ? 'Switch to Map View' : 'Switch to Card View'">
+        <i :class="isRotating ? 'fa-solid fa-map' : 'fa-solid fa-table-cells'"></i>
+      </button>
+    </div>
 
     <div class="widget-body">
       <StationRotatingCards
@@ -81,22 +104,31 @@ onMounted(() => {
   position: relative;
 }
 
-.view-toggle {
+.top-controls {
   position: absolute;
   top: 1rem;
   right: 1rem;
   z-index: 100;
+  display: flex;
+  gap: 0.5rem;
+}
+
+.ctrl-btn {
   background: rgba(255, 255, 255, 0.12);
   color: #f1f5f9;
   border: 1px solid rgba(255, 255, 255, 0.2);
   border-radius: 6px;
-  padding: 0.4rem 0.9rem;
-  font-size: 0.85rem;
+  width: 2.2rem;
+  height: 2.2rem;
+  font-size: 0.9rem;
   cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   transition: background 0.2s;
 }
 
-.view-toggle:hover {
+.ctrl-btn:hover {
   background: rgba(255, 255, 255, 0.22);
 }
 
