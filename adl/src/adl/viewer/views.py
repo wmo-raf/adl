@@ -363,8 +363,8 @@ def country_boundary_proxy(request, iso3):
 
 
 @login_required
-def widget_display_view(request, widget_uuid):
-    widget = get_object_or_404(WidgetDisplay, uuid=widget_uuid)
+def widget_display_view(request, pk):
+    widget = get_object_or_404(WidgetDisplay, pk=pk)
     
     stations_data = [
         {
