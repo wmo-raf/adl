@@ -16,6 +16,7 @@ from polymorphic.models import PolymorphicModel
 from timescale.db.models.models import TimescaleModel
 from timezone_field import TimeZoneField
 from wagtail.admin.panels import FieldPanel, TabbedInterface, ObjectList, InlinePanel
+from wagtailiconchooser.widgets import IconChooserWidget
 from wagtail.admin.panels import MultiFieldPanel
 from wagtail.contrib.settings.models import BaseSiteSetting
 from wagtail.contrib.settings.registry import register_setting
@@ -294,6 +295,13 @@ class DataParameter(ClusterableModel):
                              help_text=_("Unit of the variable"))
     description = models.TextField(verbose_name=_("Description"), blank=True, null=True,
                                    help_text=_("Description of the variable"))
+    icon = models.CharField(
+        max_length=100,
+        blank=True,
+        default='',
+        verbose_name=_("Icon"),
+        help_text=_("Icon displayed alongside this parameter in dashboards and widgets"),
+    )
     category = models.CharField(max_length=50, choices=CATEGORY_CHOICES, default="meteorological",
                                 verbose_name=_("Category"), help_text=_("Type of parameter"))
     custom_unit_context = models.CharField(max_length=255, blank=True, null=True,
@@ -322,6 +330,7 @@ class DataParameter(ClusterableModel):
         FieldPanel("name"),
         FieldPanel("unit"),
         FieldPanel("description"),
+        FieldPanel("icon", widget=IconChooserWidget),
         FieldPanel("category"),
         FieldPanel("custom_unit_context"),
         FieldPanel("aggregation_method"),
@@ -390,13 +399,32 @@ class DataParameter(ClusterableModel):
 @register_setting
 class AdlSettings(ClusterableModel, BaseSiteSetting):
     country = CountryField(blank_label=_("Select Country"), verbose_name=_("Country"))
-    
+
     daily_aggregation_time = models.TimeField(default="00:00", verbose_name=_("Daily Aggregation Time"))
-    
+
+    organisation_name = models.CharField(
+        max_length=255,
+        blank=True,
+        default='',
+        verbose_name=_("Organisation Name"),
+        help_text=_("Displayed in the footer of widget display pages"),
+    )
+    logo = models.ForeignKey(
+        'wagtailimages.Image',
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name='+',
+        verbose_name=_("Logo"),
+        help_text=_("Displayed in the footer of widget display pages"),
+    )
+
     panels = [
         FieldPanel("country", widget=CountrySelectWidget()),
+        FieldPanel("organisation_name"),
+        FieldPanel("logo"),
     ]
-    
+
     class Meta:
         verbose_name = _("ADL Settings")
         verbose_name_plural = _("ADL Settings")
