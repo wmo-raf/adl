@@ -20,8 +20,6 @@ class LinkColumnWithIcon(TitleColumn):
             "icon_name": self.icon_name,
         })
         
-        print(context)
-        
         return context
 
 
