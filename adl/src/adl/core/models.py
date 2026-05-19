@@ -16,7 +16,6 @@ from polymorphic.models import PolymorphicModel
 from timescale.db.models.models import TimescaleModel
 from timezone_field import TimeZoneField
 from wagtail.admin.panels import FieldPanel, TabbedInterface, ObjectList, InlinePanel
-from wagtailiconchooser.widgets import IconChooserWidget
 from wagtail.admin.panels import MultiFieldPanel
 from wagtail.contrib.settings.models import BaseSiteSetting
 from wagtail.contrib.settings.registry import register_setting
@@ -24,6 +23,7 @@ from wagtail.fields import StreamField
 from wagtail.models import Orderable
 from wagtail.snippets.models import register_snippet
 from wagtailgeowidget.panels import LeafletPanel
+from wagtailiconchooser.widgets import IconChooserWidget
 
 from adl.core.registries import plugin_registry
 from .blocks import QCChecksStreamBlock
@@ -399,9 +399,9 @@ class DataParameter(ClusterableModel):
 @register_setting
 class AdlSettings(ClusterableModel, BaseSiteSetting):
     country = CountryField(blank_label=_("Select Country"), verbose_name=_("Country"))
-
+    
     daily_aggregation_time = models.TimeField(default="00:00", verbose_name=_("Daily Aggregation Time"))
-
+    
     organisation_name = models.CharField(
         max_length=255,
         blank=True,
@@ -418,13 +418,13 @@ class AdlSettings(ClusterableModel, BaseSiteSetting):
         verbose_name=_("Logo"),
         help_text=_("Displayed in the footer of widget display pages"),
     )
-
+    
     panels = [
         FieldPanel("country", widget=CountrySelectWidget()),
         FieldPanel("organisation_name"),
         FieldPanel("logo"),
     ]
-
+    
     class Meta:
         verbose_name = _("ADL Settings")
         verbose_name_plural = _("ADL Settings")
@@ -676,7 +676,6 @@ class StationLink(PolymorphicModel, ClusterableModel):
     def wigos_id(self):
         return self.station.wigos_id
     
-    @property
     def get_dispatch_channels(self):
         """
         A channel includes this station iff:
