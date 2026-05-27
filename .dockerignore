@@ -12,6 +12,7 @@ __pycache__
 /.vagrant/
 /Vagrantfile.local
 node_modules/
+**/node_modules/
 /npm-debug.log
 /.idea/
 .vscode
@@ -38,6 +39,7 @@ wheels/
 *.egg
 wis2boxadl-plugins
 .env
+.venv
 .env.sample
 docker/
 docs
@@ -48,5 +50,6 @@ docker-compose.override.yml
 
 adl/src/adl/static
 adl/src/adl/media
+adl/src/adl/backup
 
 backup/
