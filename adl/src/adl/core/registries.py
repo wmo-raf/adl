@@ -601,7 +601,12 @@ class Plugin(Instance):
         
         if saved_records and all_qc_results:
             self._create_qc_messages(saved_records, all_qc_results)
-        
+
+        try:
+            self.after_save_records(station_link, chunk_records, list(saved_records))
+        except Exception:
+            log.exception("after_save_records raised for station %s", station_link.station)
+
         return len(saved_records), chunk_earliest, chunk_latest
     
     def save_records(
