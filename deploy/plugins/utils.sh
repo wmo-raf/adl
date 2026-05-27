@@ -48,6 +48,25 @@ error(){
 }
 
 
+install_plugins_from_manifest(){
+  local manifest_file="${ADL_PLUGIN_LIST_FILE:-/adl/plugins.toml}"
+
+  if [[ ! -f "$manifest_file" ]]; then
+    simple_log "No plugins manifest found at $manifest_file, skipping."
+    return 0
+  fi
+
+  simple_log "Reading plugins manifest from $manifest_file"
+
+  while IFS= read -r args_line || [[ -n "$args_line" ]]; do
+    [[ -z "$args_line" ]] && continue
+    # Split line into an array and forward args to installer
+    read -ra args <<< "$args_line"
+    log "Installing: ${args[*]}"
+    /adl/plugins/install_plugin.sh --runtime "${args[@]}"
+  done < <(/adl/venv/bin/python3 /adl/plugins/parse_plugins_toml.py "$manifest_file")
+}
+
 startup_plugin_setup(){
   if [[ -z "${ADL_PLUGIN_SETUP_ALREADY_RUN:-}" ]]; then
     if [[ -z "${ADL_DISABLE_PLUGIN_INSTALL_ON_STARTUP:-}" ]]; then
@@ -72,6 +91,8 @@ startup_plugin_setup(){
         log "Downloading and installing the plugin found at $repo"
         /adl/plugins/install_plugin.sh --runtime --git "$repo"
       done
+
+      install_plugins_from_manifest
 
       # Ensure we don't run this function multiple times in the same shell.
       export ADL_PLUGIN_SETUP_ALREADY_RUN="yes"
