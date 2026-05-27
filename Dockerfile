@@ -89,7 +89,7 @@ RUN --mount=type=cache,mode=777,target=$PIP_CACHE_DIR,uid=$UID,gid=$GID \
 # =============================================================================
 # Runtime base — shared between prod and dev
 # =============================================================================
-FROM erickotenyo/adl-base:latest AS runtime-base
+FROM erickotenyo/adl-base:3.12.0 AS runtime-base
 
 ARG UID
 ARG GID
