@@ -7,7 +7,6 @@ from celery.schedules import crontab
 from celery.signals import worker_ready
 from celery_singleton import Singleton, clear_locks
 from django.core.cache import cache
-from django.core.management import call_command
 from django_celery_beat.models import IntervalSchedule, PeriodicTask
 from more_itertools import chunked
 
@@ -21,13 +20,15 @@ logger = logging.getLogger(__name__)
 
 @app.task(base=Singleton, bind=True)
 def run_backup(self):
-    # Run the `dbbackup` command
-    logger.info("[BACKUP] Running backup")
-    call_command('dbbackup', '--clean', '--noinput')
-    
-    # Run the `mediabackup` command
-    logger.info("[BACKUP] Running mediabackup")
-    call_command('mediabackup', '--clean', '--noinput')
+    # TODO: defer until we find a fix with timescale db backup
+    pass
+    # # Run the `dbbackup` command
+    # logger.info("[BACKUP] Running backup")
+    # call_command('dbbackup', '--clean', '--noinput')
+    #
+    # # Run the `mediabackup` command
+    # logger.info("[BACKUP] Running mediabackup")
+    # call_command('mediabackup', '--clean', '--noinput')
 
 
 @app.on_after_finalize.connect
