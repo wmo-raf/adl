@@ -164,40 +164,61 @@ Installing the wrong plugin wastes time and does nothing harmful, but it won't c
 
 ### Build-time installation (recommended for production)
 
-The cleanest approach is to bake plugins into the image at build time. Set
-`ADL_PLUGIN_GIT_REPOS` in your `.env` before building:
+The cleanest approach is to bake plugins into the image at build time using a
+`plugins.toml` manifest file. The manifest lists one plugin per section —
+easy to read, comment, and version-control alongside your `docker-compose.yml`.
+
+**Step 1 — Create your manifest:**
 
 ```bash
-# Single plugin — replace with the URL for your plugin
-ADL_PLUGIN_GIT_REPOS=https://github.com/wmo-raf/adl-ftp-plugin.git
+cp plugins.toml.sample plugins.toml
 ```
 
-For multiple plugins, separate URLs with commas:
+**Step 2 — Edit `plugins.toml` and uncomment the plugins you need:**
 
-```bash
-ADL_PLUGIN_GIT_REPOS=https://github.com/wmo-raf/adl-ftp-plugin.git,https://github.com/wmo-raf/adl-tahmo-plugin.git
+```toml
+# ADL Plugins Manifest
+
+[[plugins]]
+name = "FTP Plugin"
+git = "https://github.com/wmo-raf/adl-ftp-plugin.git"
+tag = "0.8.9"
+
+[[plugins]]
+name = "TAHMO Plugin"
+git = "https://github.com/wmo-raf/adl-tahmo-plugin.git"
+tag = "0.1.0"
+
+[[plugins]]
+name = "PulsoWeb Plugin"
+git = "https://github.com/wmo-raf/adl-pulsoweb-plugin"
+tag = "0.1.0"
+enabled = false   # set to false to skip without removing the entry
 ```
 
-**Pinning to a release tag (recommended)**
+Release tags are listed on each plugin's GitHub Releases page. Always pin
+to a tag in production — omitting `tag` installs the latest default branch,
+which may include breaking changes.
 
-By default, the latest commit on the default branch is installed. For
-production it is better to pin to a specific release tag so that rebuilds
-are reproducible. Append `#TAG` to the URL:
-
-```bash
-ADL_PLUGIN_GIT_REPOS=https://github.com/wmo-raf/adl-ftp-plugin.git#v1.2.0
-```
-
-Release tags are listed on each plugin's GitHub Releases page. Using a tag
-means a future breaking change in the plugin will not affect your deployment
-until you explicitly upgrade.
-
-Then rebuild and restart:
+**Step 3 — Build and start:**
 
 ```bash
 make build
 make up
 ```
+
+The `plugins.toml` file is copied into the image during build. Each enabled
+`[[plugins]]` section is installed in order.
+
+**Quick alternative for a single plugin**
+
+If you only need one plugin, you can set `ADL_PLUGIN_GIT_REPOS` in `.env` instead of creating a manifest file:
+
+```bash
+ADL_PLUGIN_GIT_REPOS=https://github.com/wmo-raf/adl-ftp-plugin.git#0.8.9
+```
+
+For two or more plugins, prefer `plugins.toml` — the comma-separated ENV var becomes hard to read and maintain.
 
 ### Runtime installation
 
@@ -218,6 +239,26 @@ From a tarball URL:
 ```bash
 docker compose exec adl install-plugin --url https://example.com/my-plugin.tar.gz
 ```
+
+**Runtime install via manifest file**
+
+If you want to mount `plugins.toml` at runtime without rebuilding the image,
+add a `docker-compose.override.yml` alongside your compose file:
+
+```yaml
+services:
+  adl:
+    volumes:
+      - ./plugins.toml:/adl/plugins.toml:ro
+  adl_celery_worker:
+    volumes:
+      - ./plugins.toml:/adl/plugins.toml:ro
+  adl_celery_beat:
+    volumes:
+      - ./plugins.toml:/adl/plugins.toml:ro
+```
+
+Then `docker compose up` will install the manifest plugins at container start.
 
 ```{note}
 Runtime-installed plugins are stored in the `ADL_PLUGIN_DIR` volume
@@ -292,16 +333,27 @@ make build
 make up
 ```
 
-Migrations run automatically on startup. If you have plugins installed via
-`ADL_PLUGIN_GIT_REPOS`, they are re-installed during the build and their
-migrations also run on startup.
+Migrations run automatically on startup. Plugins are re-installed during the
+build and their migrations also run on startup.
 
-To upgrade a plugin to a newer release tag, update the tag in `.env` and
-rebuild:
+To upgrade a plugin to a newer release tag, update the `tag` field in
+`plugins.toml` and rebuild:
+
+```toml
+[[plugins]]
+name = "FTP Plugin"
+git = "https://github.com/wmo-raf/adl-ftp-plugin.git"
+tag = "v1.3.0"   # updated from v1.2.0
+```
 
 ```bash
-# Before: ADL_PLUGIN_GIT_REPOS=https://github.com/wmo-raf/adl-ftp-plugin.git#v1.2.0
-# After:
+make build
+make up
+```
+
+If you use `ADL_PLUGIN_GIT_REPOS`, update the tag there instead:
+
+```bash
 ADL_PLUGIN_GIT_REPOS=https://github.com/wmo-raf/adl-ftp-plugin.git#v1.3.0
 make build
 make up

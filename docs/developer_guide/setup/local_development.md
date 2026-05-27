@@ -334,3 +334,13 @@ make dev-up
 
 Another process is using port 8000. Find and stop it, or change the exposed
 port in `docker-compose.dev.yml`.
+
+---
+
+## Developing plugins
+
+This guide covers developing the ADL **core**. If you want to develop a
+**plugin** (a data source adapter), see
+[Plugin Development Setup](../plugins/plugin_dev_setup.md) — plugins have
+their own isolated docker-compose environment and a separate workflow for
+integration testing against the full ADL stack.
