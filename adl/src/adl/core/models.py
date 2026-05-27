@@ -290,7 +290,7 @@ class DataParameter(ClusterableModel):
         ("circular", _("Circular Mean (for angular data like wind direction)")),
     ]
     
-    name = models.CharField(max_length=255, verbose_name=_("Name"), help_text=_("Name of the variable"))
+    name = models.CharField(max_length=255, verbose_name=_("Name"), help_text=_("Name of the variable"), unique=True)
     unit = models.ForeignKey(Unit, on_delete=models.CASCADE, verbose_name=_("Unit"),
                              help_text=_("Unit of the variable"))
     description = models.TextField(verbose_name=_("Description"), blank=True, null=True,
@@ -316,6 +316,27 @@ class DataParameter(ClusterableModel):
         help_text=_(
             "How to aggregate this parameter in hourly/daily summaries. Use 'Circular Mean' for angular measurements like wind direction.")
     )
+    is_coded = models.BooleanField(
+        default=False,
+        verbose_name=_("Is Coded Value"),
+        help_text=_(
+            "Check if values are WMO integer lookup-table codes rather than physical measurements "
+            "(e.g. cloud cover in oktas, cloud type, present weather code). "
+            "Pint unit conversion is skipped for coded parameters. "
+            "The manual entry form renders a dropdown instead of a number input."
+        ),
+    )
+    wmo_code_table = models.CharField(
+        max_length=10,
+        blank=True,
+        default='',
+        verbose_name=_("WMO Code Table"),
+        help_text=_(
+            "WMO code table identifier used to render dropdown choices in the entry form "
+            "(e.g. '2700' for cloud cover in oktas, '0513' for low cloud type CL). "
+            "Leave blank for physical-quantity parameters."
+        ),
+    )
     
     modified_at = models.DateTimeField(auto_now=True)
     qc_checks = StreamField(
@@ -334,6 +355,8 @@ class DataParameter(ClusterableModel):
         FieldPanel("category"),
         FieldPanel("custom_unit_context"),
         FieldPanel("aggregation_method"),
+        FieldPanel("is_coded"),
+        FieldPanel("wmo_code_table"),
         FieldPanel("qc_checks"),
     ]
     
