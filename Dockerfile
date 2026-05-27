@@ -6,7 +6,7 @@ ARG GID=9999
 # =============================================================================
 # Builder — install dependencies and compile everything
 # =============================================================================
-FROM erickotenyo/adl-base:latest AS builder
+FROM erickotenyo/adl-base:3.12.0 AS builder
 
 ARG UID
 ARG GID
@@ -46,10 +46,14 @@ RUN --mount=type=cache,mode=777,target=$PIP_CACHE_DIR,uid=$UID,gid=$GID \
 COPY --chown=$UID:$GID ./adl /adl/app
 RUN /adl/venv/bin/pip install --no-cache-dir /adl/app/
 
-# Copy plugin scripts
+# Copy plugin scripts and TOML manifest parser
 COPY --chown=$UID:$GID ./deploy/plugins/*.sh /adl/plugins/
+COPY --chown=$UID:$GID ./deploy/plugins/parse_plugins_toml.py /adl/plugins/
 
-# Install any plugins specified at build time
+# Optionally bake in a plugins.toml manifest (glob trick: no-op if file absent in build context)
+COPY --chown=$UID:$GID plugins.tom[l] /adl/
+
+# Install any plugins specified at build time via ADL_PLUGIN_GIT_REPOS (legacy)
 ARG ADL_PLUGIN_GIT_REPOS=""
 RUN --mount=type=cache,mode=777,target=$PIP_CACHE_DIR,uid=$UID,gid=$GID \
     if [ -n "$ADL_PLUGIN_GIT_REPOS" ]; then \
@@ -60,7 +64,25 @@ RUN --mount=type=cache,mode=777,target=$PIP_CACHE_DIR,uid=$UID,gid=$GID \
             /bin/bash /adl/plugins/install_plugin.sh --git "$repo" || exit 1; \
         done \
     else \
-        echo "No plugins specified for build."; \
+        echo "No plugins specified via ADL_PLUGIN_GIT_REPOS."; \
+    fi
+
+# Install any plugins declared in plugins.toml (if present in the build context)
+ARG ADL_PLUGIN_LIST_FILE=""
+RUN --mount=type=cache,mode=777,target=$PIP_CACHE_DIR,uid=$UID,gid=$GID \
+    manifest="${ADL_PLUGIN_LIST_FILE:-/adl/plugins.toml}"; \
+    if [ -f "$manifest" ]; then \
+        echo "Installing plugins from manifest: $manifest"; \
+        tmpfile=$(mktemp); \
+        /adl/venv/bin/python3 /adl/plugins/parse_plugins_toml.py "$manifest" > "$tmpfile" || { rm -f "$tmpfile"; exit 1; }; \
+        while IFS= read -r args_line; do \
+            [ -z "$args_line" ] && continue; \
+            echo "Processing: $args_line"; \
+            /bin/bash -c "/adl/plugins/install_plugin.sh $args_line" || { rm -f "$tmpfile"; exit 1; }; \
+        done < "$tmpfile"; \
+        rm -f "$tmpfile"; \
+    else \
+        echo "No plugins manifest found at $manifest, skipping."; \
     fi
 
 
