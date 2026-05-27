@@ -10,7 +10,7 @@
 # docker build -f Dockerfile-base -t erickotenyo/adl-base:latest .
 # docker push erickotenyo/adl-base:latest
 
-FROM ghcr.io/osgeo/gdal:ubuntu-small-3.7.0 as base
+FROM ghcr.io/osgeo/gdal:ubuntu-small-3.12.0 as base
 
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
