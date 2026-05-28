@@ -1,0 +1,61 @@
+# ADL Plugins Manifest
+# ─────────────────────────────────────────────────────────────────────────────
+# Copy this file to plugins.toml and uncomment the plugins you want to install.
+# Then run `docker compose build` to bake them into the image.
+#
+# Each plugin is declared with a [[plugins]] header followed by its fields.
+# No indentation is required. Comments start with #.
+#
+# Fields (use exactly one of git / url / folder per section):
+#   git     = "..."   GitHub or git repository URL       (tag appended as #tag when set)
+#   url     = "..."   Direct .tar.gz download URL
+#   folder  = "..."   Absolute path INSIDE the container to a local plugin directory
+#   tag     = "..."   Git release tag, e.g. "1.2.0"    (git only; omit for latest branch)
+#   hash    = "..."   Optional SHA-1 hash for integrity verification (git and url)
+#   name    = "..."   Optional display label shown in installation logs
+#   enabled = false   Set to false to skip without deleting the entry (default: true)
+#   dev     = true    Editable install (pip install -e) — folder only; use for local dev hot-reload
+#
+# ─────────────────────────────────────────────────────────────────────────────
+# Check https://github.com/wmo-raf for the list of available ADL plugins and
+# their latest release tags before editing.
+# ─────────────────────────────────────────────────────────────────────────────
+
+# [[plugins]]
+# name = "FTP Plugin"
+# git  = "https://github.com/wmo-raf/adl-ftp-plugin.git"
+# tag  = "2.1.0"
+
+# [[plugins]]
+# name = "TAHMO Plugin"
+# git  = "https://github.com/wmo-raf/adl-tahmo-plugin.git"
+# tag  = "1.2.0"
+
+# [[plugins]]
+# name = "Polaris Web Plugin"
+# git  = "https://github.com/wmo-raf/adl-siapmicros-polarisweb-plugin.git"
+# tag  = "0.3.0"
+# enabled = false   # uncomment 'enabled' line to temporarily skip this plugin
+
+# ─────────────────────────────────────────────────────────────────────────────
+# LOCAL DEVELOPMENT (Flow B) — test a plugin from source against this ADL stack
+# ─────────────────────────────────────────────────────────────────────────────
+# 1. In docker-compose.override.yml, bind-mount your plugin source into the container:
+#
+#      services:
+#        adl:
+#          volumes:
+#            - ../adl-my-plugin/plugins/adl_my_plugin:/adl/dev-plugins/adl_my_plugin
+#        adl_celery_worker:
+#          volumes:
+#            - ../adl-my-plugin/plugins/adl_my_plugin:/adl/dev-plugins/adl_my_plugin
+#        adl_celery_beat:
+#          volumes:
+#            - ../adl-my-plugin/plugins/adl_my_plugin:/adl/dev-plugins/adl_my_plugin
+#
+# 2. Uncomment and edit the section below — folder must be the container-side path:
+#
+# [[plugins]]
+# name    = "My Plugin (dev)"
+# folder  = "/adl/dev-plugins/adl_my_plugin"
+# dev     = true     # pip install -e so edits to source are reflected immediately

@@ -181,3 +181,4 @@ adl/src/adl/media
 
 backup/
 .vscode
+plugins.toml

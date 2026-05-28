@@ -249,28 +249,28 @@ def station_link_monitoring(request, link_id):
     else:
         dispatch_channel_id = None
     
-    today_start = dj_timezone.localtime().replace(hour=0, minute=0, second=0, microsecond=0)
-    
-    filters = {
+    base_filters = {
         "station_link": link,
         "direction": direction,
-        "time__gte": today_start,
     }
-    
     if dispatch_channel_id:
-        filters["dispatch_channel_id"] = dispatch_channel_id
+        base_filters["dispatch_channel_id"] = dispatch_channel_id
     
-    activity = StationLinkActivityLog.objects.filter(**filters).select_related("dispatch_channel").order_by("-time")
+    qs = StationLinkActivityLog.objects.filter(**base_filters).select_related("dispatch_channel").order_by("-time")
+    
+    today_start = dj_timezone.localtime().replace(hour=0, minute=0, second=0, microsecond=0)
+    today_qs = qs.filter(time__gte=today_start)
+    
+    activity = today_qs if today_qs.exists() else qs[:20]
     
     label = f"Monitoring for {link}"
-    
     breadcrumbs_items = [
         {"url": reverse_lazy("wagtailadmin_home"), "label": _("Home")},
         {"url": "", "label": label},
     ]
     
     page_number = request.GET.get("p", 1)
-    paginator = WagtailPaginator(activity, 20)  # 50 rows per page
+    paginator = WagtailPaginator(activity, 20)
     page_obj = paginator.get_page(page_number)
     elided_page_range = paginator.get_elided_page_range(page_number)
     
@@ -280,7 +280,7 @@ def station_link_monitoring(request, link_id):
         "paginator": paginator,
         "elided_page_range": elided_page_range,
         "direction": direction,
-        "station_link": link,
+        "station_link": link
     }
     return render(request, "monitoring/station_link_monitoring.html", context)
 

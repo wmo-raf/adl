@@ -30,6 +30,7 @@ x-backend-variables: &backend-variables
   ADL_PLUGIN_DIR: ${ADL_PLUGIN_DIR:-/adl/plugins}
   ADL_PLUGIN_URLS: ${ADL_PLUGIN_URLS:-}
   ADL_PLUGIN_GIT_REPOS: ${ADL_PLUGIN_GIT_REPOS:-}
+  ADL_PLUGIN_LIST_FILE: ${ADL_PLUGIN_LIST_FILE:-/adl/plugins.toml}
   ADL_PLUGIN_SETUP_ALREADY_RUN: ${ADL_PLUGIN_SETUP_ALREADY_RUN:-}
   ADL_DISABLE_PLUGIN_INSTALL_ON_STARTUP: ${ADL_DISABLE_PLUGIN_INSTALL_ON_STARTUP:-}
   SMARTMET_PARAMETER_NAMES: ${SMARTMET_PARAMETER_NAMES:-}
@@ -41,7 +42,7 @@ services:
   adl_db:
     container_name: adl_db
     image: timescale/timescaledb-ha:pg15
-    restart: always
+    restart: unless-stopped
     command: postgres -c max_connections=${POSTGRES_MAX_CONNECTIONS:-300} -c shared_buffers=${POSTGRES_SHARED_BUFFERS:-2GB}
     environment:
       - POSTGRES_USER=${ADL_DB_USER:-?}
@@ -55,7 +56,7 @@ services:
   adl_redis:
     image: redis:alpine
     container_name: adl_redis
-    restart: always
+    restart: unless-stopped
 
   adl:
     container_name: adl
@@ -69,7 +70,7 @@ services:
         - GID=${GID}
         - DOCKER_COMPOSE_WAIT_PLATFORM_SUFFIX=${DOCKER_COMPOSE_WAIT_PLATFORM_SUFFIX:-}
         - ADL_PLUGIN_GIT_REPOS=${ADL_PLUGIN_GIT_REPOS}
-    restart: always
+    restart: unless-stopped
     command: gunicorn-wsgi
     environment:
       <<: *backend-variables
@@ -99,7 +100,7 @@ services:
         - GID=${GID}
         - DOCKER_COMPOSE_WAIT_PLATFORM_SUFFIX=${DOCKER_COMPOSE_WAIT_PLATFORM_SUFFIX:-}
         - ADL_PLUGIN_GIT_REPOS=${ADL_PLUGIN_GIT_REPOS}
-    restart: always
+    restart: unless-stopped
     init: true
     command: celery-worker
     environment:
@@ -127,7 +128,7 @@ services:
         - GID=${GID}
         - DOCKER_COMPOSE_WAIT_PLATFORM_SUFFIX=${DOCKER_COMPOSE_WAIT_PLATFORM_SUFFIX:-}
         - ADL_PLUGIN_GIT_REPOS=${ADL_PLUGIN_GIT_REPOS}
-    restart: always
+    restart: unless-stopped
     init: true
     command: celery-beat
     environment:
@@ -145,7 +146,7 @@ services:
   adl_web_proxy:
     container_name: adl_web_proxy
     image: nginx:1.20.2-alpine
-    restart: always
+    restart: unless-stopped
     volumes:
       - ${ADL_STATIC_VOLUME:-./docker/static}:/wagtail_static
       - ${ADL_MEDIA_VOLUME:-./docker/media}:/wagtail_media
@@ -156,7 +157,7 @@ services:
   adl_pg_tileserv:
     image: pramsey/pg_tileserv:latest
     container_name: adl_pg_tileserv
-    restart: always
+    restart: unless-stopped
     environment:
       - DATABASE_URL=${ADL_PG_TILESERV_DATABASE_URL:-postgresql://${ADL_DB_USER}:${ADL_DB_PASSWORD}@adl_db:5432/${ADL_DB_NAME}}
 
