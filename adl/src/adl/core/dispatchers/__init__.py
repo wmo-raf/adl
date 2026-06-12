@@ -63,6 +63,60 @@ def get_station_channel_records(dispatch_channel, station_id, connection_id):
     return obs_records.order_by(time_field)
 
 
+def get_station_dispatch_records(dispatch_channel, station_link):
+    """Fetch and format dispatch records for a single station link."""
+    parameter_mappings = dispatch_channel.get_parameter_mappings()
+    if not parameter_mappings:
+        return []
+
+    parameter_mappings_ids = set(parameter_mappings.values_list("parameter_id", flat=True))
+    send_agg_data = dispatch_channel.send_aggregated_data
+
+    parameter_channel_mapping = {
+        pm.parameter_id: {
+            "channel_parameter": pm.channel_parameter,
+            "adl_parameter": pm.parameter,
+            "value_field": "value" if not send_agg_data else pm.aggregation_measure,
+            "channel_unit": pm.channel_unit,
+        }
+        for pm in parameter_mappings
+    }
+
+    station_channel_records = get_station_channel_records(
+        dispatch_channel,
+        station_link.station_id,
+        station_link.network_connection_id,
+    )
+
+    by_time = {}
+    for obs in station_channel_records:
+        if obs.parameter_id not in parameter_mappings_ids:
+            continue
+        if obs.time not in by_time:
+            by_time[obs.time] = {"wigos_id": station_link.station.wigos_id, "observations": []}
+        by_time[obs.time]["observations"].append(obs)
+
+    records = []
+    for t, station_record in by_time.items():
+        data_values = {}
+        for obs in station_record["observations"]:
+            mapping = parameter_channel_mapping[obs.parameter_id]
+            data_value = getattr(obs, mapping["value_field"])
+            channel_unit = mapping["channel_unit"]
+            if channel_unit != obs.parameter.unit:
+                data_value = mapping["adl_parameter"].convert_value_to_units(data_value, channel_unit)
+            data_values[mapping["channel_parameter"]] = data_value
+
+        records.append({
+            "station_id": station_link.station_id,
+            "wigos_id": station_record["wigos_id"],
+            "timestamp": t,
+            "values": data_values,
+        })
+
+    return records
+
+
 def get_dispatch_channel_data(dispatch_channel, station_link_ids=None):
     channel_name = dispatch_channel.name
     logger.info(f"[DISPATCH] Getting dispatch data for channel '{channel_name}'")
