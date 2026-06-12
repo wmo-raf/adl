@@ -751,6 +751,7 @@ class QCBits(IntFlag):
 
 @register_snippet
 class ObservationRecord(TimescaleModel, ClusterableModel):
+    wagtail_reference_index_ignore = True
     """
     The atomic unit of stored observation data in ADL.
     
