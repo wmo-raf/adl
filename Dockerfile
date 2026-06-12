@@ -53,6 +53,9 @@ COPY --chown=$UID:$GID ./deploy/plugins/parse_plugins_toml.py /adl/plugins/
 # Optionally bake in a plugins.toml manifest (glob trick: no-op if file absent in build context)
 COPY --chown=$UID:$GID plugins.tom[l] /adl/
 
+# Drop back to root so install_plugin.sh can chown + gosu
+USER root
+
 # Install any plugins specified at build time via ADL_PLUGIN_GIT_REPOS (legacy)
 ARG ADL_PLUGIN_GIT_REPOS=""
 RUN --mount=type=cache,mode=777,target=$PIP_CACHE_DIR,uid=$UID,gid=$GID \
@@ -67,7 +70,7 @@ RUN --mount=type=cache,mode=777,target=$PIP_CACHE_DIR,uid=$UID,gid=$GID \
         echo "No plugins specified via ADL_PLUGIN_GIT_REPOS."; \
     fi
 
-# Install any plugins declared in plugins.toml (if present in the build context)
+# Install any plugins declared in plugins.toml
 ARG ADL_PLUGIN_LIST_FILE=""
 RUN --mount=type=cache,mode=777,target=$PIP_CACHE_DIR,uid=$UID,gid=$GID \
     manifest="${ADL_PLUGIN_LIST_FILE:-/adl/plugins.toml}"; \
@@ -85,6 +88,8 @@ RUN --mount=type=cache,mode=777,target=$PIP_CACHE_DIR,uid=$UID,gid=$GID \
         echo "No plugins manifest found at $manifest, skipping."; \
     fi
 
+# Restore non-root user for the remainder of the builder stage
+USER $UID:$GID
 
 # =============================================================================
 # Runtime base — shared between prod and dev
