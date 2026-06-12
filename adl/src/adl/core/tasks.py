@@ -10,8 +10,11 @@ from django.core.cache import cache
 from django_celery_beat.models import IntervalSchedule, PeriodicTask
 from more_itertools import chunked
 
+from django.utils import timezone as dj_timezone
+
 from adl.config.celery import app
-from .dispatchers import run_dispatch_channel
+from adl.monitoring.models import StationLinkActivityLog
+from .dispatchers import get_station_dispatch_records
 from .logging import TaskLogger
 from .utils import get_object_or_none
 
@@ -246,22 +249,100 @@ def update_network_plugin_periodic_task(sender, instance, **kwargs):
     create_or_update_network_plugin_periodic_tasks(instance)
 
 
-@app.task(
-    base=Singleton,
-    bind=True
-)
+@app.task(base=Singleton, bind=True)
 def perform_channel_dispatch(self, channel_id, station_link_ids=None):
     from .models import DispatchChannel
     channel = get_object_or_none(DispatchChannel, id=channel_id)
-    
+
     if not channel:
         message = f"Dispatch channel with id {channel_id} does not exist"
         logger.error(message)
         raise ValueError(message)
-    
-    num_of_sent_records = run_dispatch_channel(channel.id, station_link_ids=station_link_ids)
-    
-    return {"records_count": num_of_sent_records}
+
+    eligible = channel.stations_allowed_to_send()
+    if station_link_ids:
+        eligible = eligible.filter(id__in=station_link_ids)
+
+    ids = list(eligible.values_list("id", flat=True))
+
+    for station_link_id in ids:
+        dispatch_station.apply_async(args=[channel_id, station_link_id], queue="adl")
+
+    logger.info("[DISPATCH] Channel %s: spawned %d station dispatch tasks", channel.name, len(ids))
+    return {"stations_dispatched": len(ids)}
+
+
+@shared_task(bind=True, name="adl.core.tasks.dispatch_station")
+def dispatch_station(self, channel_id, station_link_id):
+    from .models import DispatchChannel, StationChannelDispatchStatus, StationLink
+
+    channel = get_object_or_none(DispatchChannel, id=channel_id)
+    station_link = get_object_or_none(StationLink, id=station_link_id)
+
+    if not channel or not station_link:
+        logger.error("[DISPATCH] dispatch_station: channel %s or station_link %s not found",
+                     channel_id, station_link_id)
+        return
+
+    start = time.monotonic()
+    log = StationLinkActivityLog.objects.create(
+        time=dj_timezone.now(),
+        station_link=station_link,
+        direction="push",
+        dispatch_channel=channel,
+    )
+
+    try:
+        data_records = get_station_dispatch_records(channel, station_link)
+
+        if not data_records:
+            log.success = True
+            log.records_count = 0
+            log.message = "No data records to send"
+            log.status = StationLinkActivityLog.ActivityStatus.COMPLETED
+            return {"records_sent": 0}
+
+        num_sent, last_sent_obs_time = channel.send_station_data(station_link, data_records)
+
+        previous_sent_obs_time = None
+        if num_sent > 0 and last_sent_obs_time:
+            status = get_object_or_none(
+                StationChannelDispatchStatus,
+                channel_id=channel_id,
+                station_id=station_link.station_id,
+            )
+            if status:
+                previous_sent_obs_time = status.last_sent_obs_time
+                status.last_sent_obs_time = last_sent_obs_time
+                status.save()
+            else:
+                StationChannelDispatchStatus.objects.create(
+                    channel_id=channel_id,
+                    station_id=station_link.station_id,
+                    last_sent_obs_time=last_sent_obs_time,
+                )
+
+        log.success = True
+        log.records_count = num_sent
+        if previous_sent_obs_time:
+            log.obs_start_time = previous_sent_obs_time
+        if last_sent_obs_time:
+            log.obs_end_time = last_sent_obs_time
+        log.status = StationLinkActivityLog.ActivityStatus.COMPLETED
+        log.message = f"Sent {num_sent} records successfully."
+        return {"records_sent": num_sent}
+
+    except Exception as e:
+        log.success = False
+        log.message = str(e)
+        log.status = StationLinkActivityLog.ActivityStatus.FAILED
+        logger.error("[DISPATCH] Error dispatching station %s on channel %s: %s",
+                     station_link, channel.name, e)
+        raise
+
+    finally:
+        log.duration_ms = (time.monotonic() - start) * 1000
+        log.save()
 
 
 def create_or_update_dispatch_channel_periodic_tasks(dispatch_channel):
