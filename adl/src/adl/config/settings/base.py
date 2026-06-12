@@ -301,6 +301,12 @@ CELERY_SINGLETON_BACKEND_CLASS = (
 CELERY_RESULT_BACKEND = 'django-db'
 CELERY_RESULT_EXTENDED = True
 
+CELERY_TASK_ROUTES = {
+    'adl.core.tasks.run_network_plugin': {'queue': 'adl'},
+    'adl.core.tasks.process_station_link_batch': {'queue': 'adl'},
+    'adl.core.tasks.perform_channel_dispatch': {'queue': 'adl'},
+}
+
 CACHES = {
     "default": {
         "BACKEND": "django_redis.cache.RedisCache",

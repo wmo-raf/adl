@@ -12,10 +12,19 @@ services:
     ports:
       - "8000:8000"
 
-  adl_celery_worker:
+  adl_celery_worker_default:
     build:
       target: dev
     command: celery-worker-dev
+    environment:
+      DEBUG: "True"
+    volumes:
+      - ./adl:/adl/app
+
+  adl_celery_worker_adl:
+    build:
+      target: dev
+    command: celery-worker-adl
     environment:
       DEBUG: "True"
     volumes:

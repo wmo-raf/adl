@@ -88,8 +88,8 @@ services:
       - ${ADL_MEDIA_VOLUME:-./docker/media}:/adl/app/src/adl/media
       - ${ADL_BACKUP_VOLUME:-./docker/backup}:/adl/app/src/adl/backup
 
-  adl_celery_worker:
-    container_name: adl_celery_worker
+  adl_celery_worker_default:
+    container_name: adl_celery_worker_default
     image: adl
     build:
       context: .
@@ -102,12 +102,40 @@ services:
         - ADL_PLUGIN_GIT_REPOS=${ADL_PLUGIN_GIT_REPOS}
     restart: unless-stopped
     init: true
-    command: celery-worker
+    command: celery-worker-default
     environment:
       <<: *backend-variables
       WAIT_HOSTS: adl_db:5432,adl_redis:6379,adl:8000
       ADL_DISABLE_PLUGIN_INSTALL_ON_STARTUP: "true"
       ADL_CELERY_WORKER_CONCURRENCY: ${ADL_CELERY_WORKER_CONCURRENCY:-1}
+    depends_on:
+      - adl_db
+      - adl_redis
+    volumes:
+      - ${ADL_STATIC_VOLUME:-./docker/static}:/adl/app/src/adl/static
+      - ${ADL_MEDIA_VOLUME:-./docker/media}:/adl/app/src/adl/media
+      - ${ADL_BACKUP_VOLUME:-./docker/backup}:/adl/app/src/adl/backup
+
+  adl_celery_worker_adl:
+    container_name: adl_celery_worker_adl
+    image: adl
+    build:
+      context: .
+      dockerfile: ${ADL_DOCKERFILE:-Dockerfile}
+      target: prod
+      args:
+        - UID=${UID}
+        - GID=${GID}
+        - DOCKER_COMPOSE_WAIT_PLATFORM_SUFFIX=${DOCKER_COMPOSE_WAIT_PLATFORM_SUFFIX:-}
+        - ADL_PLUGIN_GIT_REPOS=${ADL_PLUGIN_GIT_REPOS}
+    restart: unless-stopped
+    init: true
+    command: celery-worker-adl
+    environment:
+      <<: *backend-variables
+      WAIT_HOSTS: adl_db:5432,adl_redis:6379,adl:8000
+      ADL_DISABLE_PLUGIN_INSTALL_ON_STARTUP: "true"
+      ADL_CELERY_WORKER_CONCURRENCY: ${ADL_CELERY_WORKER_ADL_CONCURRENCY:-2}
     depends_on:
       - adl_db
       - adl_redis
