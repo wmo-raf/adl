@@ -84,7 +84,7 @@ def run_network_plugin(self, network_id):
         log.info("Spawning batch %d with %d station links: %s",
                  batch_count, len(batch_list), batch_list)
         
-        task = process_station_link_batch.delay(network_id, batch_list)
+        task = process_station_link_batch.apply_async(args=[network_id, batch_list], queue='adl')
         
         spawned_tasks.append(task.id)
     
@@ -237,6 +237,7 @@ def create_or_update_network_plugin_periodic_tasks(network_connection):
             'task': sig.name,
             'args': json.dumps([network_connection.id]),
             'enabled': enabled,
+            'queue': 'adl',
         }
     )
 
@@ -283,6 +284,7 @@ def create_or_update_dispatch_channel_periodic_tasks(dispatch_channel):
             'task': sig.name,
             'args': json.dumps([dispatch_channel.id]),
             'enabled': enabled,
+            'queue': 'adl',
         }
     )
 
