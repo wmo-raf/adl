@@ -28,4 +28,5 @@ manage_data_parameters
 manage_connections
 manage_plugins
 manage_dispatch_channels
+dispatch_troubleshooting
 ```
