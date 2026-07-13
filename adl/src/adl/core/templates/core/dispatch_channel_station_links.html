@@ -14,6 +14,18 @@
             </p>
         </div>
 
+        <div style="display:flex; gap:10px; margin:15px 0;">
+            <form method="post" action="{% url 'dispatch_channel_dispatch_now' channel.id %}">
+                {% csrf_token %}
+                <button type="submit" class="button">{% trans "Dispatch now" %}</button>
+            </form>
+            <form method="post" action="{% url 'dispatch_channel_reset' channel.id %}"
+                  onsubmit="return confirm('{% trans 'Clear stale station dispatch locks for this channel and trigger a fresh dispatch?' %}')">
+                {% csrf_token %}
+                <button type="submit" class="button no">{% trans "Reset dispatch" %}</button>
+            </form>
+        </div>
+
         <form method="post" action="?page={{ page_obj.number }}">
             {% csrf_token %}
             {{ form.non_field_errors }}
