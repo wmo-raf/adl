@@ -16,6 +16,7 @@ class StationLinkActivityLog(TimescaleModel):
         IN_PROGRESS = "IN_PROGRESS"
         COMPLETED = "COMPLETED"
         FAILED = "FAILED"
+        SKIPPED = "SKIPPED"
     
     # time field is inherited from TimescaleModel. We use it to store the start time of the activity
     station_link = models.ForeignKey('core.StationLink', on_delete=models.CASCADE)
