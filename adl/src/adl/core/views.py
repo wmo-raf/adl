@@ -1139,6 +1139,8 @@ def dispatch_channel_station_links(request, channel_id):
         "page_title": _("Dispatch Channel Station Links"),
         "stations_by_connection": stations_by_connection,
         "network_connections": network_connections,
+        "heartbeat": getattr(channel, "heartbeat", None),
+        "dispatch_overdue": channel.is_dispatch_overdue(),
     }
     return render(request, "core/dispatch_channel_station_links.html", context=context)
 

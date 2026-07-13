@@ -253,6 +253,8 @@ class DispatchChannelMonitoringView(APIView):
                 "data_viewer_url": "#",
             })
         
+        heartbeat = getattr(channel, "heartbeat", None)
+
         return Response({
             "channel": {
                 "id": channel.id,
@@ -262,6 +264,10 @@ class DispatchChannelMonitoringView(APIView):
                 "plugin": "Dispatch",
                 "stations_count": stations_count,
                 "public_url": channel.public_url,
+                "last_run_at": heartbeat.last_run_at if heartbeat else None,
+                "last_run_human": naturaltime(heartbeat.last_run_at) if heartbeat else None,
+                "stations_spawned": heartbeat.stations_spawned if heartbeat else None,
+                "overdue": channel.is_dispatch_overdue(now=now),
             },
             "summary": summary,
             "stations": stations_output,
