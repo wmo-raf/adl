@@ -164,10 +164,11 @@ USER $UID:$GID
 COPY --from=builder --chown=$UID:$GID /adl/venv /adl/venv
 COPY --from=builder --chown=$UID:$GID /adl/plugins /adl/plugins
 
-# Install watchfiles for Celery auto-reload in dev
+# Install watchfiles for Celery auto-reload plus dev/test requirements
 ENV PIP_CACHE_DIR=/tmp/adl_pip_cache
+COPY --chown=$UID:$GID ./adl/dev.txt /adl/dev.txt
 RUN --mount=type=cache,mode=777,target=$PIP_CACHE_DIR,uid=$UID,gid=$GID \
-    /adl/venv/bin/pip install --no-cache-dir watchfiles
+    /adl/venv/bin/pip install --no-cache-dir watchfiles -r /adl/dev.txt
 
 # Source is bind-mounted — add it to PYTHONPATH directly
 ENV PYTHONPATH="/adl/app/src:$PYTHONPATH"

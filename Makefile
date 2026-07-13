@@ -83,7 +83,7 @@ createsuperuser:
 # ======================
 
 dev-up:
-	$(DEV_DC) up -d
+	$(DEV_DC) up
 
 dev-down:
 	$(DEV_DC) down
@@ -132,3 +132,15 @@ dev-makemigrations:
 
 dev-createsuperuser:
 	$(DEV_DC) exec $(APP) adl createsuperuser
+
+# Run the Django test suite inside the app container.
+# -t pins the discovery top level so tests import as adl.*, regardless of workdir.
+# Pass TEST_ARGS to narrow the run, e.g. TEST_ARGS=adl.core.tests.test_dates
+TEST_ARGS ?= adl
+
+dev-test:
+	@export $$(grep -v '^[[:space:]]*#' .env | grep -v '^[[:space:]]*$$' | grep -v '^UID=' | xargs) && \
+	$(DEV_DC) exec \
+	  -e "DATABASE_URL=timescalegis://$$ADL_DB_USER:$$ADL_DB_PASSWORD@adl_db:5432/$$ADL_DB_NAME" \
+	  $(APP) adl test --keepdb -t /adl/app/src $(TEST_ARGS)
+

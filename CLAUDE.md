@@ -76,15 +76,16 @@ adl shell
 adl test
 ```
 
-**Tests:**
+**Tests** (Django test runner, run against the dev stack):
 
 ```bash
-# Inside container or with local venv
-pytest
+make dev-test                                        # full suite
+make dev-test TEST_ARGS=adl.core.tests.test_dates    # narrow to a module/class
 ```
 
-Config: `adl/pytest.ini`, coverage: `adl/.coveragerc`, tests under `adl/src/adl/core/tests/` and
-`adl/src/adl/api/tests/`.
+Tests are Django `TestCase` classes under `adl/src/adl/core/tests/` (factories via
+`factory_boy` in `factories.py`, shared stubs in `helpers.py`). Inside the container the
+equivalent is `adl test --keepdb -t /adl/app/src adl`.
 
 ## Additional Documentation
 
