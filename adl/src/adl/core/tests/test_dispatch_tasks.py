@@ -1,12 +1,17 @@
-from datetime import datetime, timezone as py_tz
+from datetime import datetime, timedelta, timezone as py_tz
 from unittest.mock import patch
 
 from celery.exceptions import SoftTimeLimitExceeded
 from django.core.cache import cache
 from django.test import TestCase
+from django.utils import timezone as dj_tz
 
 from adl.core.models import StationChannelDispatchStatus, Wis2BoxUpload
-from adl.core.tasks import dispatch_station, perform_channel_dispatch
+from adl.core.tasks import (
+    dispatch_station,
+    perform_channel_dispatch,
+    sweep_stale_dispatch_logs,
+)
 from adl.monitoring.models import StationLinkActivityLog
 from .factories import StationLinkFactory, Wis2BoxUploadFactory
 
@@ -120,6 +125,70 @@ class DispatchStationLockTests(DispatchTaskTestCase):
             dispatch_station(self.channel.id, self.link.id)
 
         mock_add.assert_called_once_with(self.lock_key, "locked", timeout=390)
+
+
+class SweepStaleDispatchLogsTests(DispatchTaskTestCase):
+    def _make_push_log(self, age_seconds, status=StationLinkActivityLog.ActivityStatus.STARTED,
+                       channel=None):
+        return StationLinkActivityLog.objects.create(
+            time=dj_tz.now() - timedelta(seconds=age_seconds),
+            station_link=self.link,
+            direction="push",
+            dispatch_channel=channel or self.channel,
+            status=status,
+        )
+
+    def test_stale_started_row_swept_to_failed(self):
+        # default channel timeout 300s + 30s grace + 60s margin = 390s threshold
+        log = self._make_push_log(age_seconds=500)
+
+        swept = sweep_stale_dispatch_logs()
+
+        self.assertEqual(swept, 1)
+        log.refresh_from_db()
+        self.assertEqual(log.status, StationLinkActivityLog.ActivityStatus.FAILED)
+        self.assertFalse(log.success)
+        self.assertIn("worker died", log.message)
+
+    def test_fresh_started_row_untouched(self):
+        # under the 390s threshold: may legitimately still be running
+        log = self._make_push_log(age_seconds=100)
+
+        swept = sweep_stale_dispatch_logs()
+
+        self.assertEqual(swept, 0)
+        log.refresh_from_db()
+        self.assertEqual(log.status, StationLinkActivityLog.ActivityStatus.STARTED)
+
+    def test_finished_rows_untouched_regardless_of_age(self):
+        completed = self._make_push_log(
+            age_seconds=10_000, status=StationLinkActivityLog.ActivityStatus.COMPLETED)
+        failed = self._make_push_log(
+            age_seconds=10_000, status=StationLinkActivityLog.ActivityStatus.FAILED)
+
+        swept = sweep_stale_dispatch_logs()
+
+        self.assertEqual(swept, 0)
+        completed.refresh_from_db()
+        failed.refresh_from_db()
+        self.assertEqual(completed.status, StationLinkActivityLog.ActivityStatus.COMPLETED)
+        self.assertEqual(failed.status, StationLinkActivityLog.ActivityStatus.FAILED)
+
+    def test_threshold_is_per_channel_timeout(self):
+        # same age, different channel timeouts: stale for the 30s channel
+        # (threshold 120s), still fresh for the 600s channel (threshold 690s)
+        short_channel = Wis2BoxUploadFactory(dispatch_timeout_seconds=30)
+        long_channel = Wis2BoxUploadFactory(dispatch_timeout_seconds=600)
+        stale_for_short = self._make_push_log(age_seconds=300, channel=short_channel)
+        fresh_for_long = self._make_push_log(age_seconds=300, channel=long_channel)
+
+        swept = sweep_stale_dispatch_logs()
+
+        self.assertEqual(swept, 1)
+        stale_for_short.refresh_from_db()
+        fresh_for_long.refresh_from_db()
+        self.assertEqual(stale_for_short.status, StationLinkActivityLog.ActivityStatus.FAILED)
+        self.assertEqual(fresh_for_long.status, StationLinkActivityLog.ActivityStatus.STARTED)
 
 
 class CoordinatorTaskContractTests(TestCase):

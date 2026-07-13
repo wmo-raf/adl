@@ -306,6 +306,7 @@ CELERY_TASK_ROUTES = {
     'adl.core.tasks.process_station_link_batch': {'queue': 'adl'},
     'adl.core.tasks.perform_channel_dispatch': {'queue': 'adl'},
     'adl.core.tasks.dispatch_station': {'queue': 'adl'},
+    'adl.core.tasks.sweep_stale_dispatch_logs': {'queue': 'adl'},
 }
 
 CACHES = {
