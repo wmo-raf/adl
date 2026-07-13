@@ -1,4 +1,4 @@
-from datetime import timezone
+from datetime import timedelta, timezone
 from enum import IntFlag, auto
 
 from django import forms
@@ -1032,7 +1032,29 @@ class DispatchChannel(PolymorphicModel, ClusterableModel):
     
     def clean_parameter_mapping(self, *args, **kwargs):
         pass
-    
+
+    def is_dispatch_overdue(self, now=None):
+        """
+        True when this enabled channel has not run within twice its
+        ``data_check_interval`` — the signal that dispatch is silently
+        stalled (dead beat scheduler, wedged queue, or downed worker).
+
+        Disabled channels are never overdue. An enabled channel that has
+        never run (no heartbeat yet) is overdue.
+        """
+        if not self.enabled:
+            return False
+
+        if now is None:
+            now = dj_timezone.now()
+
+        heartbeat = getattr(self, "heartbeat", None)
+        if heartbeat is None or heartbeat.last_run_at is None:
+            return True
+
+        threshold = timedelta(minutes=2 * self.data_check_interval)
+        return now - heartbeat.last_run_at > threshold
+
     @property
     def edit_url(self):
         from adl.core.utils import get_url_for_dispatch_channel
@@ -1199,6 +1221,26 @@ class StationChannelDispatchStatus(models.Model):
     
     def __str__(self):
         return f"{self.station.name} - {self.channel.name} - {self.last_sent_obs_time}"
+
+
+class DispatchChannelHeartbeat(models.Model):
+    """
+    Records each :class:`DispatchChannel` coordinator run — one row per
+    channel, stamped on every run.
+
+    Its purpose is detecting the *absence* of dispatch: if ``last_run_at``
+    falls behind the channel's schedule (see
+    :meth:`DispatchChannel.is_dispatch_overdue`), the channel is flagged
+    OVERDUE in monitoring regardless of why it stopped running (dead beat
+    scheduler, wedged queue, downed worker).
+    """
+    channel = models.OneToOneField(DispatchChannel, on_delete=models.CASCADE,
+                                   related_name="heartbeat", verbose_name=_("Channel"))
+    last_run_at = models.DateTimeField(verbose_name=_("Last Run At"))
+    stations_spawned = models.PositiveIntegerField(default=0, verbose_name=_("Stations Spawned"))
+
+    def __str__(self):
+        return f"{self.channel.name} - {self.last_run_at}"
 
 
 def status_from_bits(bits: QCBits) -> int:

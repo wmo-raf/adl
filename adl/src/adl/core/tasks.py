@@ -273,7 +273,7 @@ def update_network_plugin_periodic_task(sender, instance, **kwargs):
 # cache lock inside dispatch_station instead.
 @shared_task(bind=True, name="adl.core.tasks.perform_channel_dispatch")
 def perform_channel_dispatch(self, channel_id, station_link_ids=None):
-    from .models import DispatchChannel
+    from .models import DispatchChannel, DispatchChannelHeartbeat
     channel = get_object_or_none(DispatchChannel, id=channel_id)
 
     if not channel:
@@ -295,6 +295,11 @@ def perform_channel_dispatch(self, channel_id, station_link_ids=None):
             soft_time_limit=soft_time_limit,
             time_limit=soft_time_limit + DISPATCH_TIME_LIMIT_GRACE_SECONDS,
         )
+
+    DispatchChannelHeartbeat.objects.update_or_create(
+        channel=channel,
+        defaults={"last_run_at": dj_timezone.now(), "stations_spawned": len(ids)},
+    )
 
     logger.info("[DISPATCH] Channel %s: spawned %d station dispatch tasks", channel.name, len(ids))
     return {"stations_dispatched": len(ids)}

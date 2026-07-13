@@ -5,6 +5,21 @@
     <div style="margin-top: 40px">
         <h1 class="w-text-h2">{% trans "Dispatch Channel Station Links" %} — {{ channel.name }}</h1>
 
+        <p style="color:#666; margin:8px 0;">
+            {% trans "Last dispatch run:" %}
+            {% if heartbeat %}
+                {{ heartbeat.last_run_at|timesince }} {% trans "ago" %}
+                ({% blocktrans count counter=heartbeat.stations_spawned %}{{ counter }} station{% plural %}{{ counter }} stations{% endblocktrans %})
+            {% else %}
+                {% trans "Never run" %}
+            {% endif %}
+            {% if dispatch_overdue %}
+                <span style="background:#d9303e; color:#fff; padding:2px 8px; border-radius:3px; font-weight:bold; margin-left:6px;">
+                    {% trans "OVERDUE" %}
+                </span>
+            {% endif %}
+        </p>
+
         <div class="help-block help-info">
             <svg class="icon icon-help icon" aria-hidden="true">
                 <use href="#icon-help"></use>
