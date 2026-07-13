@@ -304,9 +304,9 @@ CELERY_RESULT_EXTENDED = True
 CELERY_TASK_ROUTES = {
     'adl.core.tasks.run_network_plugin': {'queue': 'adl'},
     'adl.core.tasks.process_station_link_batch': {'queue': 'adl'},
-    'adl.core.tasks.perform_channel_dispatch': {'queue': 'adl'},
-    'adl.core.tasks.dispatch_station': {'queue': 'adl'},
-    'adl.core.tasks.sweep_stale_dispatch_logs': {'queue': 'adl'},
+    'adl.core.tasks.perform_channel_dispatch': {'queue': 'dispatch'},
+    'adl.core.tasks.dispatch_station': {'queue': 'dispatch'},
+    'adl.core.tasks.sweep_stale_dispatch_logs': {'queue': 'dispatch'},
 }
 
 CACHES = {

@@ -30,6 +30,15 @@ services:
     volumes:
       - ./adl:/adl/app
 
+  adl_celery_worker_dispatch:
+    build:
+      target: dev
+    command: celery-worker-dispatch
+    environment:
+      DEBUG: "True"
+    volumes:
+      - ./adl:/adl/app
+
   adl_celery_beat:
     build:
       target: dev
