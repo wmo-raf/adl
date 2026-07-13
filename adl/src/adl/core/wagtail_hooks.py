@@ -44,6 +44,7 @@ from .views import (
     trigger_channel_dispatch,
     reset_channel_dispatch,
     test_dispatch_channel_connection,
+    dispatch_channel_locks,
     bulk_import_oscar_stations
 )
 from .viewsets import (
@@ -101,6 +102,11 @@ def urlconf_adl():
             'dispatch-channel/<int:channel_id>/test-connection/',
             test_dispatch_channel_connection,
             name='dispatch_channel_test_connection'
+        ),
+        path(
+            'dispatch-channel/<int:channel_id>/locks/',
+            dispatch_channel_locks,
+            name='dispatch_channel_locks'
         ),
     ]
 

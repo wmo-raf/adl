@@ -54,7 +54,12 @@ from .registries import (
     plugin_registry
 )
 from .table import LinkColumnWithIcon
-from .tasks import process_station_link_batch, perform_channel_dispatch, dispatch_station_lock_key
+from .tasks import (
+    process_station_link_batch,
+    perform_channel_dispatch,
+    dispatch_station_lock_key,
+    get_active_dispatch_tasks,
+)
 from .utils import (
     get_stations_for_country_live,
     get_stations_for_country_local,
@@ -1196,10 +1201,90 @@ def trigger_channel_dispatch(request, channel_id):
     return redirect('wagtailadmin_home')
 
 
+def _channel_lock_rows(dispatch_channel):
+    """Held dispatch locks for a channel, correlated with running tasks.
+
+    Returns (rows, worker_responsive, stale_count). Row status is RUNNING
+    when a matching dispatch_station task is executing, STALE when the lock
+    is held with no task behind it, UNKNOWN when no worker answered inspect.
+    """
+    import time as time_mod
+
+    station_links = StationLink.objects.filter(
+        network_connection__in=dispatch_channel.network_connections.all()
+    ).select_related("station")
+
+    active_tasks = get_active_dispatch_tasks()
+    worker_responsive = active_tasks is not None
+
+    rows = []
+    stale_count = 0
+    for station_link in station_links:
+        lock_key = dispatch_station_lock_key(dispatch_channel.id, station_link.id)
+        if cache.get(lock_key) is None:
+            continue
+
+        ttl = cache.ttl(lock_key)
+        if not worker_responsive:
+            status = "UNKNOWN"
+            running_seconds = None
+        elif (dispatch_channel.id, station_link.id) in active_tasks:
+            status = "RUNNING"
+            time_start = active_tasks[(dispatch_channel.id, station_link.id)]
+            running_seconds = int(time_mod.time() - time_start) if time_start else None
+        else:
+            status = "STALE"
+            running_seconds = None
+            stale_count += 1
+
+        rows.append({
+            "station_link": station_link,
+            "lock_key": lock_key,
+            "status": status,
+            "ttl_seconds": ttl,
+            "running_seconds": running_seconds,
+        })
+
+    return rows, worker_responsive, stale_count
+
+
+def dispatch_channel_locks(request, channel_id):
+    """Show the channel's held per-station dispatch locks and their status."""
+    channel = get_object_or_404(DispatchChannel, pk=channel_id)
+
+    rows, worker_responsive, stale_count = _channel_lock_rows(channel)
+
+    breadcrumbs_items = [
+        {"url": reverse_lazy("wagtailadmin_home"), "label": _("Home")},
+        {"url": reverse_lazy("dispatch_channels_list"), "label": _("Dispatch Channels")},
+        {"url": reverse("dispatch_channel_station_links", args=[channel.id]), "label": channel.name},
+        {"url": "", "label": _("Active Locks")},
+    ]
+
+    context = {
+        "breadcrumbs_items": breadcrumbs_items,
+        "page_title": _("Dispatch Locks"),
+        "channel": channel,
+        "lock_rows": rows,
+        "worker_responsive": worker_responsive,
+        "stale_count": stale_count,
+    }
+    return render(request, "core/dispatch_channel_locks.html", context=context)
+
+
 def reset_channel_dispatch(request, channel_id):
-    """Clear the channel's per-station dispatch locks and trigger a fresh dispatch"""
+    """Clear the channel's per-station dispatch locks and trigger a fresh dispatch.
+
+    POST param ``scope``:
+    - ``all`` (default): clear every lock, including RUNNING ones.
+    - ``stale``: clear only locks with no dispatch task behind them, verified
+      against a fresh worker inspect at POST time. Refuses to clear anything
+      if the worker does not respond — without evidence nothing is provably
+      stale, and clearing a live lock invites duplicate sends.
+    """
     if request.method == 'POST':
         dispatch_channel = get_object_or_404(DispatchChannel, id=channel_id)
+        scope = request.POST.get('scope', 'all')
 
         try:
             # All station links on the channel's connections, including ones
@@ -1210,8 +1295,26 @@ def reset_channel_dispatch(request, channel_id):
                 ).values_list("id", flat=True)
             )
 
-            lock_keys = [dispatch_station_lock_key(dispatch_channel.id, sl_id)
-                         for sl_id in station_link_ids]
+            if scope == 'stale':
+                active_tasks = get_active_dispatch_tasks()
+                if active_tasks is None:
+                    messages.error(
+                        request,
+                        _('The dispatch worker did not respond, so no lock can be '
+                          'proven stale. Nothing was cleared. Use "Clear ALL locks" '
+                          'or restart the dispatch worker.')
+                    )
+                    return redirect(request.META.get('HTTP_REFERER', 'wagtailadmin_home'))
+
+                lock_keys = [
+                    dispatch_station_lock_key(dispatch_channel.id, sl_id)
+                    for sl_id in station_link_ids
+                    if (dispatch_channel.id, sl_id) not in active_tasks
+                ]
+            else:
+                lock_keys = [dispatch_station_lock_key(dispatch_channel.id, sl_id)
+                             for sl_id in station_link_ids]
+
             if lock_keys:
                 cache.delete_many(lock_keys)
 
@@ -1219,9 +1322,10 @@ def reset_channel_dispatch(request, channel_id):
 
             messages.success(
                 request,
-                _('Dispatch reset for %(channel)s: cleared station locks and '
+                _('Dispatch reset for %(channel)s: cleared %(scope)s station locks and '
                   'triggered a fresh dispatch.') % {
-                    'channel': dispatch_channel.name
+                    'channel': dispatch_channel.name,
+                    'scope': _('stale') if scope == 'stale' else _('all'),
                 }
             )
         except Exception as e:

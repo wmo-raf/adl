@@ -95,7 +95,9 @@ class ChannelPageButtonsTests(DispatchAdminActionTestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Dispatch now")
-        self.assertContains(response, "Reset dispatch")
+        self.assertContains(response, "Show active locks")
         self.assertContains(response, "Test connection")
         self.assertContains(response, reverse("dispatch_channel_dispatch_now", args=[self.channel.id]))
-        self.assertContains(response, reverse("dispatch_channel_reset", args=[self.channel.id]))
+        self.assertContains(response, reverse("dispatch_channel_locks", args=[self.channel.id]))
+        # Reset is no longer directly on this page — it lives on the locks page
+        self.assertNotContains(response, reverse("dispatch_channel_reset", args=[self.channel.id]))

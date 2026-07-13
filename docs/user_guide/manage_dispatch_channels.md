@@ -273,7 +273,9 @@ with a red **OVERDUE** badge if it has not run on schedule, and provides three a
   scheduled check
 - **Test connection**: Synchronously probe the destination (reachability, credentials,
   and for WIS2BOX the incoming bucket) and show the result with latency
-- **Reset dispatch**: Clear the channel's per-station locks and trigger a fresh run
+- **Show active locks**: Open a page listing the channel's held per-station dispatch
+  locks with their status (RUNNING / STALE / UNKNOWN), from which stale locks — or,
+  with a warning, all locks — can be cleared and a fresh run triggered
 
 See [Dispatch Troubleshooting](dispatch_troubleshooting.md) for when and how to use
 each of these.
