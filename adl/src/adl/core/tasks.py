@@ -22,6 +22,10 @@ from .utils import get_object_or_none
 
 logger = logging.getLogger(__name__)
 
+# Dispatch tasks run on their own queue/worker so they can be restarted or
+# starved independently of ingestion
+DISPATCH_QUEUE_NAME = "dispatch"
+
 # Extra time allowed beyond the soft limit before the worker hard-kills a
 # station dispatch task
 DISPATCH_TIME_LIMIT_GRACE_SECONDS = 30
@@ -291,7 +295,7 @@ def perform_channel_dispatch(self, channel_id, station_link_ids=None):
     for station_link_id in ids:
         dispatch_station.apply_async(
             args=[channel_id, station_link_id],
-            queue="adl",
+            queue=DISPATCH_QUEUE_NAME,
             soft_time_limit=soft_time_limit,
             time_limit=soft_time_limit + DISPATCH_TIME_LIMIT_GRACE_SECONDS,
         )
@@ -466,7 +470,7 @@ def create_or_update_dispatch_channel_periodic_tasks(dispatch_channel):
             'task': sig.name,
             'args': json.dumps([dispatch_channel.id]),
             'enabled': enabled,
-            'queue': 'adl',
+            'queue': DISPATCH_QUEUE_NAME,
         }
     )
 

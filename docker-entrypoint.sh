@@ -31,7 +31,8 @@ gunicorn-wsgi       : Start ADL using a prod ready gunicorn server:
                          * Automatically migrates the database on startup.
                          * Binds to 0.0.0.0
 celery-worker-default: Start the Celery worker (default queue)
-celery-worker-adl   : Start the Celery worker for the ADL ingestion/dispatch queue
+celery-worker-adl   : Start the Celery worker for the ADL ingestion queue
+celery-worker-dispatch : Start the Celery worker for the outbound dispatch queue
 celery-worker-dev   : Start the Celery worker with auto-reload on code changes
                       (requires the dev build target)
 celery-beat         : Start the Celery beat scheduler
@@ -144,6 +145,9 @@ celery-worker-default)
     ;;
 celery-worker-adl)
     start_celery_worker -Q adl -n adl-worker@%h "${@:2}"
+    ;;
+celery-worker-dispatch)
+    start_celery_worker -Q dispatch -n dispatch-worker@%h "${@:2}"
     ;;
 celery-worker-dev)
     startup_plugin_setup
