@@ -3,6 +3,7 @@ import logging
 import time
 
 from celery import shared_task
+from celery.exceptions import SoftTimeLimitExceeded
 from celery.schedules import crontab
 from celery.signals import worker_ready
 from celery_singleton import Singleton, clear_locks
@@ -19,6 +20,10 @@ from .logging import TaskLogger
 from .utils import get_object_or_none
 
 logger = logging.getLogger(__name__)
+
+# Extra time allowed beyond the soft limit before the worker hard-kills a
+# station dispatch task
+DISPATCH_TIME_LIMIT_GRACE_SECONDS = 30
 
 
 @app.task(base=Singleton, bind=True)
@@ -265,8 +270,14 @@ def perform_channel_dispatch(self, channel_id, station_link_ids=None):
 
     ids = list(eligible.values_list("id", flat=True))
 
+    soft_time_limit = channel.dispatch_timeout_seconds
     for station_link_id in ids:
-        dispatch_station.apply_async(args=[channel_id, station_link_id], queue="adl")
+        dispatch_station.apply_async(
+            args=[channel_id, station_link_id],
+            queue="adl",
+            soft_time_limit=soft_time_limit,
+            time_limit=soft_time_limit + DISPATCH_TIME_LIMIT_GRACE_SECONDS,
+        )
 
     logger.info("[DISPATCH] Channel %s: spawned %d station dispatch tasks", channel.name, len(ids))
     return {"stations_dispatched": len(ids)}
@@ -331,6 +342,15 @@ def dispatch_station(self, channel_id, station_link_id):
         log.status = StationLinkActivityLog.ActivityStatus.COMPLETED
         log.message = f"Sent {num_sent} records successfully."
         return {"records_sent": num_sent}
+
+    except SoftTimeLimitExceeded:
+        timeout = channel.dispatch_timeout_seconds
+        log.success = False
+        log.message = f"Dispatch timed out after {timeout} seconds"
+        log.status = StationLinkActivityLog.ActivityStatus.FAILED
+        logger.error("[DISPATCH] Dispatch for station %s on channel %s timed out after %s seconds",
+                     station_link, channel.name, timeout)
+        return {"records_sent": 0, "timed_out": True}
 
     except Exception as e:
         log.success = False
