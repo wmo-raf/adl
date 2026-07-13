@@ -67,9 +67,21 @@ class NetworkConnectionFactory(factory.django.DjangoModelFactory):
 class StationLinkFactory(factory.django.DjangoModelFactory):
     class Meta:
         model = models.StationLink
-    
+
     network_connection = factory.SubFactory(NetworkConnectionFactory)
     station = factory.SubFactory(StationFactory)
     enabled = True
     use_connection_timezone = True
     timezone_info = "UTC"
+
+
+class Wis2BoxUploadFactory(factory.django.DjangoModelFactory):
+    class Meta:
+        model = models.Wis2BoxUpload
+
+    name = factory.Sequence(lambda n: f"Wis2Box-{n}")
+    storage_endpoint = "minio:9000"
+    storage_username = "minio"
+    storage_password = "minio123"
+    secure = False
+    dataset_id = "urn:wmo:md:test:dataset"

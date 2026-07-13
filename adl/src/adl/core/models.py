@@ -926,6 +926,15 @@ class DispatchChannel(PolymorphicModel, ClusterableModel):
                                                           MaxValueValidator(30),
                                                           MinValueValidator(1)
                                                       ])
+    dispatch_timeout_seconds = models.PositiveIntegerField(default=300,
+                                                           verbose_name=_("Dispatch Timeout in Seconds"),
+                                                           help_text=_(
+                                                               "Maximum time a single station dispatch may run "
+                                                               "before it is terminated"),
+                                                           validators=[
+                                                               MinValueValidator(30),
+                                                               MaxValueValidator(1800)
+                                                           ])
     start_date = models.DateTimeField(blank=True, null=True, verbose_name=_("Starting date for the data to dispatch"),
                                       help_text=_("Leave blank to use the whole data period"))
     
@@ -943,6 +952,7 @@ class DispatchChannel(PolymorphicModel, ClusterableModel):
             FieldPanel("network_connections", widget=forms.CheckboxSelectMultiple),
             FieldPanel("enabled"),
             FieldPanel("data_check_interval"),
+            FieldPanel("dispatch_timeout_seconds"),
             FieldPanel("send_aggregated_data"),
             FieldPanel("aggregation_period"),
             FieldPanel("start_date"),
