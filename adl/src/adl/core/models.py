@@ -935,6 +935,16 @@ class DispatchChannel(PolymorphicModel, ClusterableModel):
                                                                MinValueValidator(30),
                                                                MaxValueValidator(1800)
                                                            ])
+    max_records_per_dispatch = models.PositiveIntegerField(default=500,
+                                                           verbose_name=_("Maximum Records per Dispatch"),
+                                                           help_text=_(
+                                                               "Maximum number of records (observation times) sent "
+                                                               "per station in a single dispatch run. A backlog is "
+                                                               "drained incrementally across runs"),
+                                                           validators=[
+                                                               MinValueValidator(1),
+                                                               MaxValueValidator(10000)
+                                                           ])
     start_date = models.DateTimeField(blank=True, null=True, verbose_name=_("Starting date for the data to dispatch"),
                                       help_text=_("Leave blank to use the whole data period"))
     
@@ -953,6 +963,7 @@ class DispatchChannel(PolymorphicModel, ClusterableModel):
             FieldPanel("enabled"),
             FieldPanel("data_check_interval"),
             FieldPanel("dispatch_timeout_seconds"),
+            FieldPanel("max_records_per_dispatch"),
             FieldPanel("send_aggregated_data"),
             FieldPanel("aggregation_period"),
             FieldPanel("start_date"),

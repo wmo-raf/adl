@@ -56,11 +56,25 @@ def get_station_channel_records(dispatch_channel, station_id, connection_id):
     if last_sent_obs_time:
         logger.debug(f"[DISPATCH] Getting dispatch records for station {station_id} after {last_sent_obs_time}")
         obs_records = obs_records.filter(**{f"{time_field}__gt": last_sent_obs_time})
-    
+
     else:
         logger.debug(f"[DISPATCH] Getting all dispatch records for station {station_id}")
-    
-    return obs_records.order_by(time_field)
+
+    obs_records = obs_records.order_by(time_field)
+
+    # Cap to the channel's max records per run, counting distinct observation
+    # times (one dispatch record per time) rather than rows, so all parameter
+    # values for an included time always travel together. The boundary-time
+    # filter keeps the queryset bounded even for a large backlog.
+    max_records = dispatch_channel.max_records_per_dispatch
+    if max_records:
+        capped_times = list(
+            obs_records.values_list(time_field, flat=True).distinct()[:max_records]
+        )
+        if capped_times:
+            obs_records = obs_records.filter(**{f"{time_field}__lte": capped_times[-1]})
+
+    return obs_records
 
 
 def get_station_dispatch_records(dispatch_channel, station_link):
