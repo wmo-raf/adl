@@ -19,6 +19,10 @@
                 {% csrf_token %}
                 <button type="submit" class="button">{% trans "Dispatch now" %}</button>
             </form>
+            <form method="post" action="{% url 'dispatch_channel_test_connection' channel.id %}">
+                {% csrf_token %}
+                <button type="submit" class="button button-secondary">{% trans "Test connection" %}</button>
+            </form>
             <form method="post" action="{% url 'dispatch_channel_reset' channel.id %}"
                   onsubmit="return confirm('{% trans 'Clear stale station dispatch locks for this channel and trigger a fresh dispatch?' %}')">
                 {% csrf_token %}

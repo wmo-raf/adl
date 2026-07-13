@@ -1,5 +1,6 @@
 import csv
 import logging
+import time
 from datetime import timedelta
 from io import StringIO, BytesIO
 
@@ -13,6 +14,12 @@ from adl.core.utils import get_object_or_none
 logger = logging.getLogger(__name__)
 
 WIS2BOX_STORAGE_REQUEST_TIMEOUT = 60
+
+# Interactive connection tests must stay snappy: separate, much shorter
+# timeout than the upload pool
+WIS2BOX_TEST_CONNECTION_TIMEOUT = 10
+
+WIS2BOX_INCOMING_BUCKET = "wis2box-incoming"
 
 MINIO_PATH = "incoming/"
 
@@ -69,6 +76,53 @@ WIS2BOX_CSV_HEADER = [
 
 def get_minio_client(endpoint, access_key, secret_key, secure=False):
     return Minio(endpoint, access_key=access_key, secret_key=secret_key, http_client=http_client, secure=secure)
+
+
+def test_wis2box_connection(channel):
+    """
+    Probe the channel's MinIO storage: reachability, authentication, and
+    presence of the wis2box incoming bucket. Never raises; always returns
+    within the test-connection timeout.
+    """
+    start = time.monotonic()
+
+    def latency_ms():
+        return int((time.monotonic() - start) * 1000)
+
+    try:
+        http = PoolManager(timeout=WIS2BOX_TEST_CONNECTION_TIMEOUT, retries=False)
+        client = Minio(
+            channel.storage_endpoint,
+            access_key=channel.storage_username,
+            secret_key=channel.storage_password,
+            http_client=http,
+            secure=channel.secure,
+        )
+        bucket_found = client.bucket_exists(WIS2BOX_INCOMING_BUCKET)
+    except Exception as e:
+        return {
+            "ok": False,
+            "supported": True,
+            "message": f"Connection failed: {e}",
+            "latency_ms": latency_ms(),
+        }
+
+    if not bucket_found:
+        return {
+            "ok": False,
+            "supported": True,
+            "message": f"Connected to {channel.storage_endpoint}, "
+                       f"but bucket '{WIS2BOX_INCOMING_BUCKET}' was not found",
+            "latency_ms": latency_ms(),
+        }
+
+    return {
+        "ok": True,
+        "supported": True,
+        "message": f"Connected to {channel.storage_endpoint}; "
+                   f"bucket '{WIS2BOX_INCOMING_BUCKET}' is accessible",
+        "latency_ms": latency_ms(),
+    }
 
 
 def get_wis2box_csv_station_metadata(station):
