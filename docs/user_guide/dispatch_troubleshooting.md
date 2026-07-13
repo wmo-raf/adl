@@ -76,16 +76,35 @@ immediately, including latency.
   missing bucket, or a network/firewall problem between ADL and the
   destination.
 
-## Step 3: Force a run — Dispatch now / Reset
+## Step 3: Force a run — Dispatch now / Show active locks
 
 - **Dispatch now** enqueues an immediate dispatch run for the channel,
   without waiting for the next scheduled tick. Watch the activity logs for
   the outcome.
-- **Reset dispatch** clears the channel's per-station locks first, then
-  triggers a fresh run. Use this if stations show repeated SKIPPED entries
-  that never clear on their own.
+- **Show active locks** opens a page listing every per-station dispatch lock
+  the channel currently holds, with its true status. Use it when stations
+  show repeated SKIPPED entries that never clear on their own. Each lock is
+  shown as:
+  - **RUNNING** — a dispatch task is actively executing for this station
+    (the elapsed time is shown). This is healthy; do not clear it.
+  - **STALE** — the lock is held but no task is behind it (a worker died
+    while dispatching). It will expire on its own when its TTL runs out,
+    or you can clear it immediately.
+  - **UNKNOWN** — the dispatch worker did not respond to the status query;
+    it may be down, restarting, or overloaded. This is itself a strong
+    signal — go to step 4.
 
-Both actions affect only the selected channel.
+  At the bottom of the page:
+  - **Clear stale locks & dispatch** removes only the provably-stale locks
+    and triggers a fresh run. This is the safe default. It is disabled when
+    the worker is unresponsive (nothing can be proven stale) or when there
+    is nothing stale to clear.
+  - **Clear ALL locks & dispatch** removes every lock, including RUNNING
+    ones. A running dispatch keeps executing, and a duplicate task may
+    start for the same station — which can send the same records twice.
+    Use only when you accept that risk.
+
+All actions affect only the selected channel.
 
 ## Step 4: Restart the dispatch worker
 

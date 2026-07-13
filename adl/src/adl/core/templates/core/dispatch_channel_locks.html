@@ -1,0 +1,92 @@
+{% extends "wagtailadmin/generic/base.html" %}
+{% load i18n wagtailadmin_tags static %}
+
+{% block main_content %}
+    <div style="margin-top: 40px">
+        <h1 class="w-text-h2">{% trans "Dispatch Locks" %} — {{ channel.name }}</h1>
+
+        <div class="help-block help-info">
+            <svg class="icon icon-help icon" aria-hidden="true">
+                <use href="#icon-help"></use>
+            </svg>
+            <p style="color:#666;">
+                {% trans "Each running station dispatch holds a lock. RUNNING = a dispatch task is actively executing. STALE = the lock is held but no task is behind it (a worker died); it will expire on its own when the TTL runs out, or you can clear it below." %}
+            </p>
+        </div>
+
+        {% if not worker_responsive %}
+            <div class="help-block help-warning">
+                <svg class="icon icon-warning icon" aria-hidden="true">
+                    <use href="#icon-warning"></use>
+                </svg>
+                <p>
+                    {% trans "The dispatch worker did not respond — it may be down, restarting, or overloaded. Lock statuses are UNKNOWN and cannot be safely cleared as stale. Consider restarting the dispatch worker." %}
+                </p>
+            </div>
+        {% endif %}
+
+        {% if lock_rows %}
+            <table class="listing">
+                <thead>
+                <tr>
+                    <th>{% trans "Station" %}</th>
+                    <th>{% trans "Status" %}</th>
+                    <th>{% trans "Running for" %}</th>
+                    <th>{% trans "Lock expires in" %}</th>
+                </tr>
+                </thead>
+                <tbody>
+                {% for row in lock_rows %}
+                    <tr>
+                        <td>{{ row.station_link.station.name }}</td>
+                        <td>
+                            {% if row.status == "RUNNING" %}
+                                <span style="background:#1f7d51; color:#fff; padding:2px 8px; border-radius:3px; font-weight:bold;">RUNNING</span>
+                            {% elif row.status == "STALE" %}
+                                <span style="background:#d9303e; color:#fff; padding:2px 8px; border-radius:3px; font-weight:bold;">STALE</span>
+                            {% else %}
+                                <span style="background:#666; color:#fff; padding:2px 8px; border-radius:3px; font-weight:bold;">UNKNOWN</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if row.running_seconds is not None %}
+                                {{ row.running_seconds }} {% trans "seconds" %}
+                            {% else %}
+                                —
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if row.ttl_seconds %}
+                                {{ row.ttl_seconds }} {% trans "seconds" %}
+                            {% else %}
+                                —
+                            {% endif %}
+                        </td>
+                    </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        {% else %}
+            <p style="margin:20px 0; color:#666;">
+                {% trans "No dispatch locks currently held for this channel." %}
+            </p>
+        {% endif %}
+
+        <div style="display:flex; gap:10px; margin:20px 0;">
+            <form method="post" action="{% url 'dispatch_channel_reset' channel.id %}">
+                {% csrf_token %}
+                <input type="hidden" name="scope" value="stale">
+                <button type="submit" class="button"
+                        {% if not worker_responsive or stale_count == 0 %}disabled{% endif %}>
+                    {% blocktrans count counter=stale_count %}Clear {{ counter }} stale lock &amp; dispatch{% plural %}Clear {{ counter }} stale locks &amp; dispatch{% endblocktrans %}
+                </button>
+            </form>
+            <form method="post" action="{% url 'dispatch_channel_reset' channel.id %}"
+                  onsubmit="return confirm('{% trans 'Clear ALL locks, including RUNNING ones? A running dispatch keeps executing and a duplicate may start for the same station, which can send the same records twice.' %}')">
+                {% csrf_token %}
+                <input type="hidden" name="scope" value="all">
+                <button type="submit" class="button no">{% trans "Clear ALL locks & dispatch" %}</button>
+            </form>
+        </div>
+    </div>
+{% endblock %}

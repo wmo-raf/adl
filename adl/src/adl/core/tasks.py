@@ -39,6 +39,36 @@ def dispatch_station_lock_key(channel_id, station_link_id):
     return f"lock:dispatch:{channel_id}:{station_link_id}"
 
 
+def get_active_dispatch_tasks(timeout=2.0):
+    """
+    Map of currently executing station dispatches, keyed by
+    ``(channel_id, station_link_id)`` with the task's start timestamp as value.
+
+    Returns ``None`` (rather than ``{}``) when no worker replied to the
+    inspect broadcast — callers must treat that as "unknown", not "idle":
+    the dispatch worker may be down, restarting, or too slow to answer
+    within ``timeout``. Never raises.
+    """
+    try:
+        active = app.control.inspect(timeout=timeout).active()
+    except Exception as e:
+        logger.warning("[DISPATCH] Could not inspect active dispatch tasks: %s", e)
+        return None
+
+    if not active:
+        return None
+
+    running = {}
+    for worker_tasks in active.values():
+        for task in worker_tasks:
+            if task.get("name") != "adl.core.tasks.dispatch_station":
+                continue
+            args = task.get("args") or []
+            if len(args) >= 2:
+                running[(args[0], args[1])] = task.get("time_start")
+    return running
+
+
 @app.task(base=Singleton, bind=True)
 def run_backup(self):
     # TODO: defer until we find a fix with timescale db backup
