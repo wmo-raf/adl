@@ -1,6 +1,7 @@
 import json
 import logging
 import time
+from datetime import timedelta
 
 from celery import shared_task
 from celery.exceptions import SoftTimeLimitExceeded
@@ -49,6 +50,11 @@ def setup_periodic_tasks(sender, **kwargs):
         crontab(hour=0, minute=0),
         run_backup.s(),
         name="run-backup-daily-at-midnight",
+    )
+    sender.add_periodic_task(
+        300.0,
+        sweep_stale_dispatch_logs.s(),
+        name="sweep-stale-dispatch-logs-every-5-minutes",
     )
 
 
@@ -390,6 +396,45 @@ def dispatch_station(self, channel_id, station_link_id):
         cache.delete(lock_key)
         log.duration_ms = (time.monotonic() - start) * 1000
         log.save()
+
+
+@shared_task(name="adl.core.tasks.sweep_stale_dispatch_logs")
+def sweep_stale_dispatch_logs():
+    """
+    Mark push activity logs stranded in STARTED as failed.
+
+    A dispatch that dies with the worker (hard time limit, OOM, container
+    kill) never reaches the code that finalizes its activity log, leaving the
+    row in STARTED forever. Rows older than their channel's dispatch timeout
+    plus the same grace + margin used for the station lock TTL cannot still
+    be running, so they are swept to FAILED.
+    """
+    from .models import DispatchChannel  # noqa: F401  (FK target must be loaded)
+
+    now = dj_timezone.now()
+    swept = 0
+
+    candidates = StationLinkActivityLog.objects.filter(
+        direction="push",
+        status=StationLinkActivityLog.ActivityStatus.STARTED,
+        dispatch_channel__isnull=False,
+    )
+
+    for log in candidates:
+        threshold_seconds = (log.dispatch_channel.dispatch_timeout_seconds
+                             + DISPATCH_TIME_LIMIT_GRACE_SECONDS
+                             + DISPATCH_LOCK_TTL_MARGIN_SECONDS)
+        if log.time < now - timedelta(seconds=threshold_seconds):
+            log.status = StationLinkActivityLog.ActivityStatus.FAILED
+            log.success = False
+            log.message = "Dispatch worker died mid-dispatch (no completion recorded)"
+            log.save(update_fields=["status", "success", "message"])
+            swept += 1
+
+    if swept:
+        logger.warning("[DISPATCH] Swept %d stale dispatch activity log(s) to FAILED", swept)
+
+    return swept
 
 
 def create_or_update_dispatch_channel_periodic_tasks(dispatch_channel):
