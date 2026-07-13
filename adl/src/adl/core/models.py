@@ -28,7 +28,7 @@ from wagtailiconchooser.widgets import IconChooserWidget
 from adl.core.registries import plugin_registry
 from .blocks import QCChecksStreamBlock
 from .dispatchers import get_dispatch_channel_data
-from .dispatchers.wis2box import upload_to_wis2box
+from .dispatchers.wis2box import upload_to_wis2box, test_wis2box_connection
 from .units import units, validate_unit, TEMPERATURE_UNITS
 from .utils import (
     validate_as_integer,
@@ -991,6 +991,24 @@ class DispatchChannel(PolymorphicModel, ClusterableModel):
     
     def send_station_data(self, station_link, station_data_records):
         raise NotImplementedError("Method send_station_data must be implemented in the subclass")
+
+    def test_connection(self):
+        """
+        Probe whether the channel's destination is reachable and responsive.
+
+        Subclasses override this with a short, bounded check against their
+        destination (reachability + authentication). Implementations must
+        never raise and must never block for more than ~10 seconds.
+
+        :return: dict with keys ``ok`` (bool), ``supported`` (bool),
+            ``message`` (str) and ``latency_ms`` (int or None).
+        """
+        return {
+            "ok": False,
+            "supported": False,
+            "message": _("Connection test not supported for this channel type"),
+            "latency_ms": None,
+        }
     
     def get_data_records_by_station(self):
         data_records_by_station = get_dispatch_channel_data(self)
@@ -1138,6 +1156,9 @@ class Wis2BoxUpload(DispatchChannel):
     
     def send_station_data(self, station_link, data_records):
         return upload_to_wis2box(self, data_records)
+
+    def test_connection(self):
+        return test_wis2box_connection(self)
     
     def connection_details(self):
         return {

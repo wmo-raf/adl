@@ -1233,6 +1233,42 @@ def reset_channel_dispatch(request, channel_id):
     return redirect('wagtailadmin_home')
 
 
+def test_dispatch_channel_connection(request, channel_id):
+    """Synchronously probe a dispatch channel's destination.
+
+    Runs in the web process on purpose: a wedged dispatch queue must not be
+    able to mask a destination health check.
+    """
+    if request.method == 'POST':
+        dispatch_channel = get_object_or_404(DispatchChannel, id=channel_id)
+
+        result = dispatch_channel.test_connection()
+
+        if not result["supported"]:
+            messages.warning(request, result["message"])
+        elif result["ok"]:
+            messages.success(
+                request,
+                _('%(channel)s: %(message)s (%(latency)s ms)') % {
+                    'channel': dispatch_channel.name,
+                    'message': result["message"],
+                    'latency': result["latency_ms"],
+                }
+            )
+        else:
+            messages.error(
+                request,
+                _('%(channel)s: %(message)s') % {
+                    'channel': dispatch_channel.name,
+                    'message': result["message"],
+                }
+            )
+
+        return redirect(request.META.get('HTTP_REFERER', 'wagtailadmin_home'))
+
+    return redirect('wagtailadmin_home')
+
+
 def trigger_station_dispatch(request, station_link_id, channel_id):
     """Manually trigger data dispatch for a station link to a specific channel"""
     if request.method == 'POST':

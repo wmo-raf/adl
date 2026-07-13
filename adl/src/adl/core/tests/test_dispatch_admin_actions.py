@@ -96,5 +96,6 @@ class ChannelPageButtonsTests(DispatchAdminActionTestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Dispatch now")
         self.assertContains(response, "Reset dispatch")
+        self.assertContains(response, "Test connection")
         self.assertContains(response, reverse("dispatch_channel_dispatch_now", args=[self.channel.id]))
         self.assertContains(response, reverse("dispatch_channel_reset", args=[self.channel.id]))
