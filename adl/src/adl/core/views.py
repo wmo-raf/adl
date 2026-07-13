@@ -54,7 +54,7 @@ from .registries import (
     plugin_registry
 )
 from .table import LinkColumnWithIcon
-from .tasks import process_station_link_batch, perform_channel_dispatch
+from .tasks import process_station_link_batch, perform_channel_dispatch, dispatch_station_lock_key
 from .utils import (
     get_stations_for_country_live,
     get_stations_for_country_local,
@@ -1166,6 +1166,70 @@ def trigger_station_collection(request, station_link_id):
         # Redirect back to the station link detail page
         return redirect(request.META.get('HTTP_REFERER', 'wagtailadmin_home'))
     
+    return redirect('wagtailadmin_home')
+
+
+def trigger_channel_dispatch(request, channel_id):
+    """Manually trigger a dispatch run for all eligible stations on a channel"""
+    if request.method == 'POST':
+        dispatch_channel = get_object_or_404(DispatchChannel, id=channel_id)
+
+        try:
+            perform_channel_dispatch.delay(dispatch_channel.id)
+
+            messages.success(
+                request,
+                _('Dispatch triggered successfully for %(channel)s.') % {
+                    'channel': dispatch_channel.name
+                }
+            )
+        except Exception as e:
+            messages.error(
+                request,
+                _('Failed to trigger dispatch: %(error)s') % {'error': str(e)}
+            )
+
+        return redirect(request.META.get('HTTP_REFERER', 'wagtailadmin_home'))
+
+    return redirect('wagtailadmin_home')
+
+
+def reset_channel_dispatch(request, channel_id):
+    """Clear the channel's per-station dispatch locks and trigger a fresh dispatch"""
+    if request.method == 'POST':
+        dispatch_channel = get_object_or_404(DispatchChannel, id=channel_id)
+
+        try:
+            # All station links on the channel's connections, including ones
+            # currently excluded from dispatch — they may hold stale locks too
+            station_link_ids = list(
+                StationLink.objects.filter(
+                    network_connection__in=dispatch_channel.network_connections.all()
+                ).values_list("id", flat=True)
+            )
+
+            lock_keys = [dispatch_station_lock_key(dispatch_channel.id, sl_id)
+                         for sl_id in station_link_ids]
+            if lock_keys:
+                cache.delete_many(lock_keys)
+
+            perform_channel_dispatch.delay(dispatch_channel.id)
+
+            messages.success(
+                request,
+                _('Dispatch reset for %(channel)s: cleared station locks and '
+                  'triggered a fresh dispatch.') % {
+                    'channel': dispatch_channel.name
+                }
+            )
+        except Exception as e:
+            messages.error(
+                request,
+                _('Failed to reset dispatch: %(error)s') % {'error': str(e)}
+            )
+
+        return redirect(request.META.get('HTTP_REFERER', 'wagtailadmin_home'))
+
     return redirect('wagtailadmin_home')
 
 

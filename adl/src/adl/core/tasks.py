@@ -31,6 +31,10 @@ DISPATCH_TIME_LIMIT_GRACE_SECONDS = 30
 DISPATCH_LOCK_TTL_MARGIN_SECONDS = 60
 
 
+def dispatch_station_lock_key(channel_id, station_link_id):
+    return f"lock:dispatch:{channel_id}:{station_link_id}"
+
+
 @app.task(base=Singleton, bind=True)
 def run_backup(self):
     # TODO: defer until we find a fix with timescale db backup
@@ -308,7 +312,7 @@ def dispatch_station(self, channel_id, station_link_id):
                      channel_id, station_link_id)
         return
 
-    lock_key = f"lock:dispatch:{channel_id}:{station_link_id}"
+    lock_key = dispatch_station_lock_key(channel_id, station_link_id)
     lock_ttl = (channel.dispatch_timeout_seconds
                 + DISPATCH_TIME_LIMIT_GRACE_SECONDS
                 + DISPATCH_LOCK_TTL_MARGIN_SECONDS)

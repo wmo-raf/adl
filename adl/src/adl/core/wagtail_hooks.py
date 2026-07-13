@@ -41,6 +41,8 @@ from .views import (
     dispatch_channel_station_links,
     trigger_station_collection,
     trigger_station_dispatch,
+    trigger_channel_dispatch,
+    reset_channel_dispatch,
     bulk_import_oscar_stations
 )
 from .viewsets import (
@@ -83,6 +85,16 @@ def urlconf_adl():
             'station-link/<int:station_link_id>/trigger-dispatch/<int:channel_id>/',
             trigger_station_dispatch,
             name='trigger_station_dispatch'
+        ),
+        path(
+            'dispatch-channel/<int:channel_id>/dispatch-now/',
+            trigger_channel_dispatch,
+            name='dispatch_channel_dispatch_now'
+        ),
+        path(
+            'dispatch-channel/<int:channel_id>/reset/',
+            reset_channel_dispatch,
+            name='dispatch_channel_reset'
         ),
     ]
 
