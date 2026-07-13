@@ -25,6 +25,10 @@ logger = logging.getLogger(__name__)
 # station dispatch task
 DISPATCH_TIME_LIMIT_GRACE_SECONDS = 30
 
+# The per-station dispatch lock always outlives the hard time limit by this
+# margin, so a killed worker can never leave a station permanently locked
+DISPATCH_LOCK_TTL_MARGIN_SECONDS = 60
+
 
 @app.task(base=Singleton, bind=True)
 def run_backup(self):
@@ -254,7 +258,10 @@ def update_network_plugin_periodic_task(sender, instance, **kwargs):
     create_or_update_network_plugin_periodic_tasks(instance)
 
 
-@app.task(base=Singleton, bind=True)
+# Deliberately NOT a Singleton task: a stale singleton lock silently discards
+# every subsequent beat tick. Overlap protection lives in the per-station
+# cache lock inside dispatch_station instead.
+@shared_task(bind=True, name="adl.core.tasks.perform_channel_dispatch")
 def perform_channel_dispatch(self, channel_id, station_link_ids=None):
     from .models import DispatchChannel
     channel = get_object_or_none(DispatchChannel, id=channel_id)
@@ -294,6 +301,25 @@ def dispatch_station(self, channel_id, station_link_id):
         logger.error("[DISPATCH] dispatch_station: channel %s or station_link %s not found",
                      channel_id, station_link_id)
         return
+
+    lock_key = f"lock:dispatch:{channel_id}:{station_link_id}"
+    lock_ttl = (channel.dispatch_timeout_seconds
+                + DISPATCH_TIME_LIMIT_GRACE_SECONDS
+                + DISPATCH_LOCK_TTL_MARGIN_SECONDS)
+
+    if not cache.add(lock_key, "locked", timeout=lock_ttl):
+        logger.warning("[DISPATCH] Station %s on channel %s still dispatching. Skipping...",
+                       station_link, channel.name)
+        StationLinkActivityLog.objects.create(
+            time=dj_timezone.now(),
+            station_link=station_link,
+            direction="push",
+            dispatch_channel=channel,
+            success=True,
+            status=StationLinkActivityLog.ActivityStatus.SKIPPED,
+            message="Skipped — previous dispatch still running",
+        )
+        return {"records_sent": 0, "skipped": True}
 
     start = time.monotonic()
     log = StationLinkActivityLog.objects.create(
@@ -361,6 +387,7 @@ def dispatch_station(self, channel_id, station_link_id):
         raise
 
     finally:
+        cache.delete(lock_key)
         log.duration_ms = (time.monotonic() - start) * 1000
         log.save()
 
