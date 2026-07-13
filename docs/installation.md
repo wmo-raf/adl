@@ -128,8 +128,15 @@ Check that all containers are running:
 make ps
 ```
 
-You should see `adl`, `adl_db`, `adl_redis`, `adl_celery_worker`,
-`adl_celery_beat`, `adl_web_proxy`, and `adl_pg_tileserv` all running.
+You should see `adl`, `adl_db`, `adl_redis`, `adl_celery_worker_default`,
+`adl_celery_worker_adl`, `adl_celery_worker_dispatch`, `adl_celery_beat`,
+`adl_web_proxy`, and `adl_pg_tileserv` all running.
+
+`adl_celery_worker_adl` handles data collection (ingestion) and
+`adl_celery_worker_dispatch` handles outbound dispatch. They are separate so
+that a stuck dispatch worker can be restarted without interrupting data
+collection — see the
+[Dispatch Troubleshooting](user_guide/dispatch_troubleshooting.md) runbook.
 
 On first startup, ADL automatically runs database migrations and collects
 static files. Watch the logs until the startup completes:
@@ -335,6 +342,14 @@ make up
 
 Migrations run automatically on startup. Plugins are re-installed during the
 build and their migrations also run on startup.
+
+```{note}
+The image rebuild (`make build`) is required, not optional. Some upgrades add
+new services or entrypoint commands — for example the dedicated dispatch
+worker (`adl_celery_worker_dispatch`) — that only exist in the rebuilt image.
+Scheduled dispatch tasks are migrated to the dedicated dispatch queue
+automatically on startup.
+```
 
 To upgrade a plugin to a newer release tag, update the `tag` field in
 `plugins.toml` and rebuild:

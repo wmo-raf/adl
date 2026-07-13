@@ -49,6 +49,10 @@ This section appears for all dispatch channel types:
       see [Linking Stations](#linking-stations-to-dispatch-channels))
 - **Enabled**: Toggle to activate/deactivate the channel
 - **Data Check Interval in Minutes**: How often the channel should check for new data to dispatch
+- **Dispatch Timeout in Seconds**: Maximum time a single station dispatch may run before it is terminated
+  (default 300). See [Dispatch Troubleshooting](dispatch_troubleshooting.md) for tuning guidance
+- **Maximum Records per Dispatch**: Maximum number of records sent per station in a single run, oldest
+  first (default 500). A backlog drains incrementally across runs
 - **Send Aggregated Data**: Option to send aggregated data instead of raw observations
 - **Aggregation Period**: If sending aggregated data, select the aggregation period (Hourly, Daily, etc.)
 - **Starting date for data to dispatch**: Leave blank to dispatch all available data, or specify a start date
@@ -259,3 +263,17 @@ From the Dispatch Channels index page, you can:
 - **Edit**: Click the menu (•••) to edit channel configuration
 - **View Station Links**: Click the **Stations Link** to manage which stations use this channel
 - **Delete**: Remove channels that are no longer needed
+
+## Channel Actions
+
+The channel's **Station Links** page header shows when the channel last dispatched,
+with a red **OVERDUE** badge if it has not run on schedule, and provides three actions:
+
+- **Dispatch now**: Trigger an immediate dispatch run instead of waiting for the next
+  scheduled check
+- **Test connection**: Synchronously probe the destination (reachability, credentials,
+  and for WIS2BOX the incoming bucket) and show the result with latency
+- **Reset dispatch**: Clear the channel's per-station locks and trigger a fresh run
+
+See [Dispatch Troubleshooting](dispatch_troubleshooting.md) for when and how to use
+each of these.
