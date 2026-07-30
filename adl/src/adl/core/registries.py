@@ -31,6 +31,20 @@ from .registry import Registry, Instance
 from .validators import StationRecordModel
 
 
+def _sanitize_sources_count(value):
+    """
+    Coerce a plugin-reported ``adl_sources_count`` into its stored tri-state.
+
+    Only a non-negative ``int`` is accepted. Anything else — missing, negative,
+    float, string, bool — degrades to ``None`` (*did not look*), never to
+    ``0``, because ``0`` (*looked, found nothing*) is the fault value and must
+    never be manufactured from a malformed report.
+    """
+    if isinstance(value, int) and not isinstance(value, bool) and value >= 0:
+        return value
+    return None
+
+
 class Plugin(Instance):
     """
     Base class for all ADL data-source plugins.
@@ -228,6 +242,23 @@ class Plugin(Instance):
             complete list. :meth:`save_records` processes in chunks of
             :attr:`SAVE_CHUNK_SIZE`, so a generator avoids loading the entire
             upstream response into memory — important for large historical backfills.
+
+        .. note::
+            **Optional sources-count handover.** A plugin that can count the
+            candidate source items it resolved (files matched, API result
+            entries, …) may report the number by setting a duck-typed
+            attribute on the station link as it lists::
+
+                station_link.adl_sources_count = len(matched_files)
+
+            :meth:`process_station` initialises the attribute to ``None``
+            before calling this method and stores it on the run's activity
+            log afterwards (``StationLinkActivityLog.sources_count``). The
+            value is deliberately tri-state: ``None`` = did not look, ``0`` =
+            looked and found nothing, ``n`` = found ``n``. Only a
+            non-negative ``int`` is stored; anything else degrades to
+            ``None``. This is an attribute convention rather than an API so
+            plugins can ship the change before the deployment upgrades core.
     
         .. warning::
             Records with a missing or non-:class:`datetime` ``observation_time``,
@@ -788,6 +819,12 @@ class Plugin(Instance):
         earliest_time = None
         latest_time = None
 
+        # Duck-typed handover: the plugin may set this while listing its
+        # source, and the terminal log records it. Re-initialised every run
+        # so a value left by a previous run on a reused instance cannot be
+        # recorded as if this run had reported it.
+        station_link.adl_sources_count = None
+
         try:
             start_date, end_date = self.get_dates_for_station(station_link)
             
@@ -806,9 +843,11 @@ class Plugin(Instance):
             )
             
             if station_records is None:
-                log.info("No new data for %s.", station_link)
-                return 0
-            
+                # Converged with the empty-iterable case: both fall through to
+                # the normal terminal path below, so the activity log always
+                # reaches COMPLETED instead of resting at STARTED.
+                station_records = []
+
             # Use chunked save - handles generators efficiently
             saved_obs_records_count, earliest_time, latest_time = self.save_records(
                 station_link,
@@ -851,6 +890,9 @@ class Plugin(Instance):
         finally:
             activity_log.duration_ms = (time.monotonic() - start) * 1000
             activity_log.records_count = saved_obs_records_count
+            activity_log.sources_count = _sanitize_sources_count(
+                getattr(station_link, "adl_sources_count", None)
+            )
             activity_log.save()
             if not bypass_lock:
                 cache.delete(lock_key)

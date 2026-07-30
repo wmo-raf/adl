@@ -27,6 +27,9 @@ class StationLinkActivityLog(TimescaleModel):
     duration_ms = models.IntegerField(blank=True, null=True)
     task_id = models.CharField(max_length=255, blank=True, null=True)
     records_count = models.PositiveIntegerField(default=0, null=True, blank=True)
+    # Tri-state: NULL = the plugin did not report how many candidate source
+    # items it resolved; 0 = it looked and found nothing; n = it found n.
+    sources_count = models.PositiveIntegerField(default=None, null=True, blank=True)
     messages_count = models.PositiveIntegerField(default=0)
     obs_start_time = models.DateTimeField(blank=True, null=True, verbose_name="Observation Start Time")
     obs_end_time = models.DateTimeField(blank=True, null=True, verbose_name="Observation End Time")
