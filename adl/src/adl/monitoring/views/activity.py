@@ -1,5 +1,3 @@
-from datetime import timedelta
-
 from django.contrib.humanize.templatetags.humanize import naturaltime
 from django.db.models import OuterRef, Subquery
 from django.shortcuts import get_object_or_404
@@ -15,6 +13,11 @@ from adl.core.models import (
     StationChannelDispatchStatus
 )
 from adl.monitoring.models import StationLinkActivityLog
+from adl.monitoring.status import (
+    compute_station_status,
+    connection_thresholds,
+    dispatch_channel_thresholds,
+)
 
 
 class NetworkConnectionActivityView(APIView):
@@ -48,22 +51,10 @@ class NetworkConnectionActivityView(APIView):
         )
         
         # --- SETUP THRESHOLDS ---
-        
+
         now = dj_timezone.now()
-        
-        # A. Pipeline Tolerance (3x the configured interval)
-        pipeline_tolerance = timedelta(minutes=connection.interval * 3)
-        
-        # B. Data Freshness Thresholds
-        if connection.is_daily_data:
-            # Daily: Active < 26h, Warning < 48h, Error > 48h
-            freshness_warning_limit = timedelta(hours=26)
-            freshness_error_limit = timedelta(hours=48)
-        else:
-            # High Frequency: Active < 4x interval, Warning < 12x interval
-            freshness_warning_limit = timedelta(minutes=connection.interval * 4)
-            freshness_error_limit = timedelta(minutes=connection.interval * 12)
-        
+        thresholds = connection_thresholds(connection)
+
         # --- PROCESS DATA & CALCULATE STATUS ---
         
         stations_count = station_links.count()
@@ -72,37 +63,19 @@ class NetworkConnectionActivityView(APIView):
         data_viewer_url_base = reverse("viewer_table")
         
         for sl in station_links:
-            # 1. Determine PIPELINE Status
-            pipeline_status = "warning"  # Default if never checked
-            if sl.last_check:
-                time_since_check = now - sl.last_check
-                if not sl.last_log_success:
-                    pipeline_status = "error"  # Last run crashed
-                elif time_since_check > pipeline_tolerance:
-                    pipeline_status = "warning"  # Last run ok, but scheduler stopped
-                else:
-                    pipeline_status = "active"  # Healthy
-            
-            # 2. Determine DATA Status
-            data_status = "warning"  # Default if no data
-            if sl.last_collected:
-                data_age = now - sl.last_collected
-                if data_age <= freshness_warning_limit:
-                    data_status = "active"
-                elif data_age <= freshness_error_limit:
-                    data_status = "warning"
-                else:
-                    data_status = "error"  # Data is stale
-            
-            # 3. Update Global Summary (Worst-case logic)
-            if pipeline_status == "error" or data_status == "error":
-                summary["error"] += 1
-            elif pipeline_status == "warning" or data_status == "warning":
-                summary["warning"] += 1
-            else:
-                summary["active"] += 1
-            
-            # 4. Generate URLs
+            # 1. Determine PIPELINE and DATA Status
+            status = compute_station_status(
+                last_check=sl.last_check,
+                last_check_success=sl.last_log_success,
+                last_data_time=sl.last_collected,
+                thresholds=thresholds,
+                now=now,
+            )
+
+            # 2. Update Global Summary (Worst-case logic)
+            summary[status.overall_status] += 1
+
+            # 3. Generate URLs
             monitor_url = reverse("station_link_monitoring", args=(sl.id,)) + "?direction=pull"
             
             # Format outputs
@@ -111,8 +84,8 @@ class NetworkConnectionActivityView(APIView):
                 "name": sl.station.name,
                 
                 # Dual Statuses
-                "pipeline_status": pipeline_status,
-                "data_status": data_status,
+                "pipeline_status": status.pipeline_status,
+                "data_status": status.data_status,
                 
                 # Pipeline Data
                 "last_check": sl.last_check,
@@ -165,38 +138,10 @@ class DispatchChannelMonitoringView(APIView):
         )
         
         # --- 2. SETUP THRESHOLDS ---
-        
+
         now = dj_timezone.now()
-        check_interval = channel.data_check_interval
-        
-        # A. Pipeline Tolerance (Is the job running?)
-        # Standard: 3 missed cycles means the scheduler is stuck
-        pipeline_tolerance = timedelta(minutes=check_interval * 3)
-        
-        # B. Data Freshness (Is the data current?)
-        
-        # Base limits based on check interval
-        base_warning_minutes = check_interval * 4
-        base_error_minutes = check_interval * 12
-        
-        # Calculate Aggregation Offset
-        aggregation_offset = timedelta(0)
-        
-        if channel.send_aggregated_data:
-            # If aggregating, the data is inherently old by the size of the window.
-            # We add this window to the allowed tolerance.
-            if channel.aggregation_period == 'hourly':
-                aggregation_offset = timedelta(hours=2)
-            elif channel.aggregation_period == 'daily':  # Future proofing
-                aggregation_offset = timedelta(days=1)
-            
-            # Note: We add an extra buffer because aggregation usually happens
-            # *after* the period closes + processing time.
-            aggregation_offset += timedelta(minutes=5)
-        
-        freshness_warning_limit = timedelta(minutes=base_warning_minutes) + aggregation_offset
-        freshness_error_limit = timedelta(minutes=base_error_minutes) + aggregation_offset
-        
+        thresholds = dispatch_channel_thresholds(channel)
+
         # --- 3. PROCESS DATA ---
         
         stations_output = []
@@ -204,37 +149,17 @@ class DispatchChannelMonitoringView(APIView):
         stations_count = station_links.count()
         
         for sl in station_links:
-            # --- Pipeline Status ---
-            pipeline_status = "warning"
-            if sl.last_attempt:
-                time_since_attempt = now - sl.last_attempt
-                if not sl.last_attempt_success:
-                    pipeline_status = "error"
-                elif time_since_attempt > pipeline_tolerance:
-                    pipeline_status = "warning"
-                else:
-                    pipeline_status = "active"
-            
-            # --- Data Status (With Aggregation Logic) ---
-            data_status = "warning"
-            if sl.last_sent_obs:
-                data_age = now - sl.last_sent_obs
-                
-                if data_age <= freshness_warning_limit:
-                    data_status = "active"
-                elif data_age <= freshness_error_limit:
-                    data_status = "warning"
-                else:
-                    data_status = "error"
-            
+            status = compute_station_status(
+                last_check=sl.last_attempt,
+                last_check_success=sl.last_attempt_success,
+                last_data_time=sl.last_sent_obs,
+                thresholds=thresholds,
+                now=now,
+            )
+
             # --- Summary ---
-            if pipeline_status == "error" or data_status == "error":
-                summary["error"] += 1
-            elif pipeline_status == "warning" or data_status == "warning":
-                summary["warning"] += 1
-            else:
-                summary["active"] += 1
-            
+            summary[status.overall_status] += 1
+
             monitor_url = reverse("station_link_monitoring", args=(sl.id,)) + f"?direction=push&channel={channel.id}"
             
             stations_output.append({
@@ -243,8 +168,8 @@ class DispatchChannelMonitoringView(APIView):
                 "connection_name": sl.network_connection.name,
                 "connection_id": sl.network_connection.id,
                 
-                "pipeline_status": pipeline_status,
-                "data_status": data_status,
+                "pipeline_status": status.pipeline_status,
+                "data_status": status.data_status,
                 "last_check": sl.last_attempt,
                 "last_check_human": naturaltime(sl.last_attempt) if sl.last_attempt else None,
                 "last_collected": sl.last_sent_obs,
