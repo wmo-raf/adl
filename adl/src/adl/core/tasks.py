@@ -78,10 +78,11 @@ def get_active_dispatch_tasks(timeout=2.0):
     Map of currently executing station dispatches, keyed by
     ``(channel_id, station_link_id)`` with the task's start timestamp as value.
 
-    Returns ``None`` (rather than ``{}``) when no worker replied to the
-    inspect broadcast — callers must treat that as "unknown", not "idle":
-    the dispatch worker may be down, restarting, or too slow to answer
-    within ``timeout``. Never raises.
+    Returns ``None`` when no worker replied to the inspect broadcast —
+    callers must treat that as "unknown", not "idle": the dispatch worker
+    may be down, restarting, or too slow to answer within ``timeout``.
+    (An idle worker replies ``{'worker@host': []}``, never ``{}`` — inspect
+    has no empty-dict reply, so falsy means no reply.) Never raises.
     """
     try:
         active = app.control.inspect(timeout=timeout).active()
