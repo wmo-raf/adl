@@ -21,6 +21,7 @@ from datetime import timedelta, datetime
 from datetime import timezone as py_tz
 from typing import Iterable, List, Dict, Any, Optional, Tuple, Generator
 
+from celery.exceptions import SoftTimeLimitExceeded
 from django.core.exceptions import ImproperlyConfigured
 from django.utils import timezone as dj_timezone
 
@@ -713,20 +714,32 @@ class Plugin(Instance):
         return total_saved, overall_earliest, overall_latest
     
     # ---------- Orchestration ----------
-    def process_station(self, station_link, initial_start_date=None, initial_end_date=None) -> int:
+    def process_station(self, station_link, initial_start_date=None, initial_end_date=None,
+                        bypass_lock=False) -> int:
         """
         Run the full ingestion pipeline for a single station link.
-    
-        Resolves the date window, calls :meth:`get_station_data`, passes the
-        results to :meth:`save_records`, and writes a
+
+        Acquires the per-station ingestion lock, resolves the date window,
+        calls :meth:`get_station_data`, passes the results to
+        :meth:`save_records`, and writes a
         :class:`~adl.monitoring.models.StationLinkActivityLog` entry regardless
         of outcome. Any exception raised during fetching or saving is caught,
         logged, and recorded on the activity log without re-raising, so that a
         failure on one station does not abort the rest of the connection's run.
-    
+        The one exception is :exc:`~celery.exceptions.SoftTimeLimitExceeded`,
+        which is re-raised after the activity log is finalised so the batch
+        task's time limit actually stops the batch.
+
+        The lock lives here — rather than in the batch task — so every entry
+        path (scheduled batch, manual ``collect_data``, shell invocation) is
+        covered, and so a collision can write a visible ``SKIPPED`` activity
+        row instead of vanishing into a worker log line. The lock carries a
+        TTL derived from the connection's ``ingest_timeout_seconds``, so a
+        killed worker can never leave a station locked permanently.
+
         Called by :meth:`run_process` for each enabled station link. You do not
         normally need to call or override this method directly.
-    
+
         :param station_link: The ``StationLink`` instance to process.
         :param initial_start_date: Override the resolved ``start_date`` with this
             value if provided. Useful for manual or backfill invocations.
@@ -734,24 +747,50 @@ class Plugin(Instance):
         :param initial_end_date: Override the resolved ``end_date`` with this
             value if provided.
         :type initial_end_date: datetime, optional
+        :param bypass_lock: Skip lock acquisition entirely. Only for deliberate
+            backfills, where running alongside a scheduled pull is intended.
+        :type bypass_lock: bool, optional
         :return: The number of ``ObservationRecord`` rows upserted, or ``0`` if
-            no data was available or an error occurred.
+            no data was available, the station was locked, or an error occurred.
         :rtype: int
         """
+        from django.core.cache import cache
         from adl.monitoring.models import StationLinkActivityLog
+        from adl.core.tasks import (
+            INGEST_LOCK_TTL_MARGIN_SECONDS,
+            INGEST_TIME_LIMIT_GRACE_SECONDS,
+            ingest_station_lock_key,
+        )
         log = self.get_logger()
-        
+
+        lock_key = ingest_station_lock_key(station_link.id)
+        if not bypass_lock:
+            lock_ttl = (station_link.network_connection.ingest_timeout_seconds
+                        + INGEST_TIME_LIMIT_GRACE_SECONDS
+                        + INGEST_LOCK_TTL_MARGIN_SECONDS)
+            if not cache.add(lock_key, "locked", timeout=lock_ttl):
+                log.warning("Station link %s is still processing. Skipping...", station_link)
+                StationLinkActivityLog.objects.create(
+                    time=dj_timezone.now(),
+                    station_link=station_link,
+                    direction='pull',
+                    success=True,
+                    status=StationLinkActivityLog.ActivityStatus.SKIPPED,
+                    message="Skipped — previous ingestion still running",
+                )
+                return 0
+
         start = time.monotonic()
         activity_log = StationLinkActivityLog.objects.create(
             time=dj_timezone.now(),
             station_link=station_link,
             direction='pull',
         )
-        
+
         saved_obs_records_count = 0
         earliest_time = None
         latest_time = None
-        
+
         try:
             start_date, end_date = self.get_dates_for_station(station_link)
             
@@ -797,6 +836,15 @@ class Plugin(Instance):
                 activity_log.obs_end_time = latest_time
                 activity_log.message = f"Processed {saved_obs_records_count} records."
         
+        except SoftTimeLimitExceeded:
+            # Re-raised so the batch task's soft limit actually stops the
+            # batch — swallowed with the generic errors below, the limit
+            # would be inert and the worker would run on to the hard kill
+            activity_log.success = False
+            activity_log.message = "Ingestion timed out (batch soft time limit exceeded)"
+            activity_log.status = StationLinkActivityLog.ActivityStatus.FAILED
+            log.error("Ingestion for station %s timed out", station_link)
+            raise
         except Exception as e:
             error_msg = str(e)
             activity_log.success = False
@@ -807,7 +855,9 @@ class Plugin(Instance):
             activity_log.duration_ms = (time.monotonic() - start) * 1000
             activity_log.records_count = saved_obs_records_count
             activity_log.save()
-        
+            if not bypass_lock:
+                cache.delete(lock_key)
+
         return saved_obs_records_count
     
     def run_process(self, network_connection, initial_start_date=None) -> Dict[int, int]:

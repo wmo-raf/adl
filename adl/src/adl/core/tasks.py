@@ -7,8 +7,7 @@ from datetime import timedelta
 from celery import shared_task
 from celery.exceptions import SoftTimeLimitExceeded
 from celery.schedules import crontab
-from celery.signals import worker_ready
-from celery_singleton import Singleton, clear_locks
+from celery_singleton import Singleton
 from django.core.cache import cache
 from django_celery_beat.models import IntervalSchedule, PeriodicTask
 from more_itertools import chunked
@@ -40,9 +39,21 @@ DISPATCH_TIME_LIMIT_GRACE_SECONDS = 30
 # margin, so a killed worker can never leave a station permanently locked
 DISPATCH_LOCK_TTL_MARGIN_SECONDS = 60
 
+# Ingestion twins of the DISPATCH_* pair above — kept separate so each
+# direction can be tuned independently
+INGEST_TIME_LIMIT_GRACE_SECONDS = 30
+INGEST_LOCK_TTL_MARGIN_SECONDS = 60
+
 
 def dispatch_station_lock_key(channel_id, station_link_id):
     return f"lock:dispatch:{channel_id}:{station_link_id}"
+
+
+# Namespace deliberately distinct from the legacy "lock:station:" prefix:
+# locks created before TTLs existed are eternal, so they are orphaned by the
+# rename instead of migrated
+def ingest_station_lock_key(station_link_id):
+    return f"lock:ingest:station:{station_link_id}"
 
 
 def get_active_dispatch_tasks(timeout=2.0):
@@ -166,16 +177,29 @@ def run_network_plugin(self, network_id):
     
     batch_count = 0
     spawned_tasks = []
-    
+
+    interval_seconds = network_connection.plugin_processing_interval * 60
+
     for batch in chunked(station_link_ids, batch_size):
         batch_count += 1
         batch_list = list(batch)
-        
+
         log.info("Spawning batch %d with %d station links: %s",
                  batch_count, len(batch_list), batch_list)
-        
-        task = process_station_link_batch.apply_async(args=[network_id, batch_list], queue='adl')
-        
+
+        # Per-station budget, clamped so a batch can never outlive its own
+        # beat tick and overlap the next coordinator run
+        soft_time_limit = min(
+            len(batch_list) * network_connection.ingest_timeout_seconds,
+            interval_seconds,
+        )
+        task = process_station_link_batch.apply_async(
+            args=[network_id, batch_list],
+            queue='adl',
+            soft_time_limit=soft_time_limit,
+            time_limit=soft_time_limit + INGEST_TIME_LIMIT_GRACE_SECONDS,
+        )
+
         spawned_tasks.append(task.id)
     
     log.success("Successfully spawned %d batch tasks for connection %s",
@@ -231,33 +255,23 @@ def process_station_link_batch(self, network_id, station_link_ids):
     
     total_processed = 0
     total_records = 0
-    skipped = 0
     errors = 0
-    
+
     for station_link_id in station_link_ids:
         station_link = get_object_or_none(StationLink, id=station_link_id)
-        
+
         if not station_link:
             log.error("Station link with id %d does not exist. Skipping...", station_link_id)
             continue
-        
-        lock_key = f"lock:station:{station_link_id}"
-        
-        lock_acquired = cache.add(lock_key, "locked", timeout=None)
-        
-        if not lock_acquired:
-            log.warning("Station link %s (ID: %d) is still processing. Skipping...",
-                        station_link, station_link_id)
-            skipped += 1
-            continue
-        
+
         start = time.monotonic()
         log.info("Processing station link: %s (ID: %d)", station_link, station_link_id)
-        
+
         try:
-            # This will now log to WebSocket via the plugin's logger
+            # Per-station locking (and the SKIPPED trace on collision) lives
+            # inside process_station, beside the activity log
             saved_records_count = plugin.process_station(station_link)
-            
+
             if saved_records_count > 0:
                 log.success("Processed %d records for station link %s",
                             saved_records_count, station_link)
@@ -265,29 +279,32 @@ def process_station_link_batch(self, network_id, station_link_ids):
             else:
                 log.info("No new records for station link %s", station_link)
             total_processed += 1
+        except SoftTimeLimitExceeded:
+            # Swallowed here, the batch soft limit would be decorative: the
+            # loop would roll on until the hard limit SIGKILLs the worker
+            log.error("Batch soft time limit exceeded while processing station link %s",
+                      station_link)
+            raise
         except Exception as e:
             log.error("Error processing station link %s: %s", station_link, str(e), exc_info=True)
             errors += 1
-        
+
         finally:
-            # Release the lock after processing
-            cache.delete(lock_key)
             duration_ms = (time.monotonic() - start) * 1000
             log.info("Station link %s completed in %.2fms", station_link, duration_ms)
-    
+
     # Summary
     log.success(
-        "Batch complete. Processed: %d, Records saved: %d, Skipped: %d, Errors: %d",
-        total_processed, total_records, skipped, errors
+        "Batch complete. Processed: %d, Records saved: %d, Errors: %d",
+        total_processed, total_records, errors
     )
-    
+
     return {
         'status': 'success',
         'network_id': network_id,
         'station_link_ids': station_link_ids,
         'processed': total_processed,
         'total_records': total_records,
-        'skipped': skipped,
         'errors': errors
     }
 
@@ -299,20 +316,6 @@ def setup_network_plugin_processing_tasks(sender, **kwargs):
     
     for network_connection in network_connections:
         create_or_update_network_plugin_periodic_tasks(network_connection)
-
-
-@worker_ready.connect
-def unlock_all(**kwargs):
-    clear_locks(app)
-    
-    # get lock keys
-    cache_lock_keys = cache.keys("lock:station:*")
-    
-    # clear all locks
-    if cache_lock_keys:
-        logger.info(f"Unlocking all station links: {len(cache_lock_keys)}...")
-        for cache_lock_key in cache_lock_keys:
-            cache.delete(cache_lock_key)
 
 
 @dataclass(frozen=True)
