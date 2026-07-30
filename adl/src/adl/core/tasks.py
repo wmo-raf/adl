@@ -16,6 +16,7 @@ from django.utils import timezone as dj_timezone
 
 from adl.config.celery import app
 from adl.monitoring.models import StationLinkActivityLog
+from .classification import stamp_failure
 from .dispatchers import get_station_dispatch_records
 from .logging import TaskLogger
 from .utils import get_object_or_none
@@ -532,11 +533,12 @@ def dispatch_station(self, channel_id, station_link_id):
         log.message = f"Sent {num_sent} records successfully."
         return {"records_sent": num_sent}
 
-    except SoftTimeLimitExceeded:
+    except SoftTimeLimitExceeded as e:
         timeout = channel.dispatch_timeout_seconds
         log.success = False
         log.message = f"Dispatch timed out after {timeout} seconds"
         log.status = StationLinkActivityLog.ActivityStatus.FAILED
+        stamp_failure(log, e)
         logger.error("[DISPATCH] Dispatch for station %s on channel %s timed out after %s seconds",
                      station_link, channel.name, timeout)
         return {"records_sent": 0, "timed_out": True}
@@ -545,6 +547,7 @@ def dispatch_station(self, channel_id, station_link_id):
         log.success = False
         log.message = str(e)
         log.status = StationLinkActivityLog.ActivityStatus.FAILED
+        stamp_failure(log, e)
         logger.error("[DISPATCH] Error dispatching station %s on channel %s: %s",
                      station_link, channel.name, e)
         raise

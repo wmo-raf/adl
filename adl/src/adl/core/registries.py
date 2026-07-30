@@ -25,6 +25,7 @@ from celery.exceptions import SoftTimeLimitExceeded
 from django.core.exceptions import ImproperlyConfigured
 from django.utils import timezone as dj_timezone
 
+from .classification import stamp_failure
 from .date_utils import make_record_timezone_aware
 from .logging import TaskLogger
 from .registry import Registry, Instance
@@ -872,13 +873,14 @@ class Plugin(Instance):
                 activity_log.obs_end_time = latest_time
                 activity_log.message = f"Processed {saved_obs_records_count} records."
         
-        except SoftTimeLimitExceeded:
+        except SoftTimeLimitExceeded as e:
             # Re-raised so the batch task's soft limit actually stops the
             # batch — swallowed with the generic errors below, the limit
             # would be inert and the worker would run on to the hard kill
             activity_log.success = False
             activity_log.message = "Ingestion timed out (batch soft time limit exceeded)"
             activity_log.status = StationLinkActivityLog.ActivityStatus.FAILED
+            stamp_failure(activity_log, e)
             log.error("Ingestion for station %s timed out", station_link)
             raise
         except Exception as e:
@@ -886,6 +888,7 @@ class Plugin(Instance):
             activity_log.success = False
             activity_log.message = error_msg
             activity_log.status = StationLinkActivityLog.ActivityStatus.FAILED
+            stamp_failure(activity_log, e)
             log.error("Error processing station %s: %s", station_link, error_msg)
         finally:
             activity_log.duration_ms = (time.monotonic() - start) * 1000

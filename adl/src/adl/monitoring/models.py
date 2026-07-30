@@ -3,6 +3,8 @@ from django.db.models import Q
 from timescale.db.models.models import TimescaleModel
 from wagtail.snippets.models import register_snippet
 
+from adl.core.classification import FAILURE_CATEGORIES
+
 
 @register_snippet
 class StationLinkActivityLog(TimescaleModel):
@@ -35,6 +37,16 @@ class StationLinkActivityLog(TimescaleModel):
     obs_end_time = models.DateTimeField(blank=True, null=True, verbose_name="Observation End Time")
     dispatch_channel = models.ForeignKey('core.DispatchChannel', on_delete=models.CASCADE, related_name='activity_logs',
                                          blank=True, null=True)
+    # Write-time failure classification (see adl.core.classification).
+    # error_category: NULL = core declined or the row is not a failure.
+    # error_layer: 4 = network path, 5 = source; NULL = producer declined.
+    # exception_class: the raw fact, recorded even when core declines.
+    error_category = models.CharField(
+        max_length=50, blank=True, null=True,
+        choices=[(c, c) for c in FAILURE_CATEGORIES],
+    )
+    error_layer = models.PositiveSmallIntegerField(blank=True, null=True)
+    exception_class = models.CharField(max_length=255, blank=True, null=True)
     
     class Meta:
         indexes = [
