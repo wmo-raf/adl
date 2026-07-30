@@ -1,6 +1,7 @@
 import json
 import logging
 import time
+from dataclasses import dataclass
 from datetime import timedelta
 
 from celery import shared_task
@@ -25,6 +26,11 @@ logger = logging.getLogger(__name__)
 # Dispatch tasks run on their own queue/worker so they can be restarted or
 # starved independently of ingestion
 DISPATCH_QUEUE_NAME = "dispatch"
+
+# The registered name of the ingestion coordinator task. Beat schedule entries
+# for a connection are resolved by this plus their args — see
+# find_connection_schedule_entries
+INGESTION_TASK_NAME = "adl.core.tasks.run_network_plugin"
 
 # Extra time allowed beyond the soft limit before the worker hard-kills a
 # station dispatch task
@@ -96,6 +102,29 @@ def setup_periodic_tasks(sender, **kwargs):
     )
 
 
+def stamp_connection_heartbeat(network_connection, station_links_enabled, batches_spawned, task_id):
+    """
+    Record that the ingestion coordinator ran for this connection.
+
+    Called from ``run_network_plugin`` and nowhere else — the row means "beat
+    delivered a tick and the coordinator ran to completion", and a second
+    writer would erode that into something vaguer. ``last_manual_run_at`` is
+    outside ``defaults`` on purpose, so a manual re-run recorded there survives
+    every scheduled run that follows.
+    """
+    from .models import NetworkConnectionHeartbeat
+
+    NetworkConnectionHeartbeat.objects.update_or_create(
+        connection=network_connection,
+        defaults={
+            "last_run_at": dj_timezone.now(),
+            "station_links_enabled": station_links_enabled,
+            "batches_spawned": batches_spawned,
+            "task_id": task_id,
+        },
+    )
+
+
 @shared_task(bind=True, name='adl.core.tasks.run_network_plugin')
 def run_network_plugin(self, network_id):
     """
@@ -125,8 +154,13 @@ def run_network_plugin(self, network_id):
     
     if not station_link_ids:
         log.warning("No enabled station links found for connection %s", network_connection.name)
+        # Still a completed coordinator run — a connection with nothing enabled
+        # must not read as a dead scheduler.
+        stamp_connection_heartbeat(
+            network_connection, station_links_enabled=0, batches_spawned=0, task_id=task_id
+        )
         return
-    
+
     log.info("Found %d enabled station links. Batch size: %d",
              len(station_link_ids), batch_size)
     
@@ -146,7 +180,14 @@ def run_network_plugin(self, network_id):
     
     log.success("Successfully spawned %d batch tasks for connection %s",
                 batch_count, network_connection.name)
-    
+
+    stamp_connection_heartbeat(
+        network_connection,
+        station_links_enabled=len(station_link_ids),
+        batches_spawned=batch_count,
+        task_id=task_id,
+    )
+
     return {
         'status': 'success',
         'network_id': network_id,
@@ -272,6 +313,62 @@ def unlock_all(**kwargs):
         logger.info(f"Unlocking all station links: {len(cache_lock_keys)}...")
         for cache_lock_key in cache_lock_keys:
             cache.delete(cache_lock_key)
+
+
+@dataclass(frozen=True)
+class ConnectionScheduleEntries:
+    """
+    Every beat schedule entry that runs ingestion for one connection.
+
+    A connection is meant to have exactly one. ``missing`` and ``duplicated``
+    are the two schedule faults an operator needs named, so they are reported
+    rather than collapsed into a single "not found".
+    """
+    entries: tuple
+
+    @property
+    def missing(self):
+        return not self.entries
+
+    @property
+    def duplicated(self):
+        return len(self.entries) > 1
+
+    @property
+    def entry(self):
+        """
+        The one entry, or ``None`` when missing.
+
+        When ``duplicated``, this is only the first of several and says nothing
+        about which one beat actually fires — check ``duplicated`` before
+        reading it as *the* schedule.
+        """
+        return self.entries[0] if self.entries else None
+
+
+def find_connection_schedule_entries(network_connection):
+    """
+    Resolve a connection's ingestion schedule entries by *what they run* — the
+    task name plus its args — never by the generated ``repr(sig)`` name.
+
+    Matching on the generated name means a row whose name drifted (a Celery
+    upgrade, a hand edit) reads as absent while it keeps firing, and a second
+    row for the same connection is invisible. Matching on task + args makes
+    both visible. Args are compared parsed, not as strings, so whitespace or
+    an unparseable value cannot masquerade as a miss or raise.
+    """
+    candidates = PeriodicTask.objects.filter(task=INGESTION_TASK_NAME).order_by("id")
+
+    matched = []
+    for candidate in candidates:
+        try:
+            args = json.loads(candidate.args or "[]")
+        except (TypeError, ValueError):
+            continue
+        if isinstance(args, list) and args and args[0] == network_connection.id:
+            matched.append(candidate)
+
+    return ConnectionScheduleEntries(entries=tuple(matched))
 
 
 def create_or_update_network_plugin_periodic_tasks(network_connection):
