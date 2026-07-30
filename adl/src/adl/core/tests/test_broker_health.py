@@ -69,14 +69,35 @@ class GetIngestionQueueHealthTests(SimpleTestCase):
 
     def test_empty_queue_reports_depth_zero_not_unknown(self):
         # On Redis an empty queue has no key, so the passive declare raises
-        # ChannelError — a healthy idle system, not an unobservable one.
+        # ChannelError NOT_FOUND — a healthy idle system, not an unobservable
+        # one. Mirrors kombu's virtual-transport raise: reply text and a
+        # string '404' reply code.
+        error = ChannelError(
+            "NOT_FOUND - no queue 'adl' in vhost '/'",
+            (50, 10), "Channel.queue_declare", "404",
+        )
         result = self.call(
-            make_connection_mock(declare_side_effect=ChannelError("NOT_FOUND")),
+            make_connection_mock(declare_side_effect=error),
             active_queues={"adl-worker@host": [{"name": INGESTION_QUEUE_NAME}]},
             active={"adl-worker@host": []},
         )
 
         self.assertEqual(result.queue_depth, 0)
+
+    def test_non_not_found_channel_error_is_unknown_not_empty(self):
+        # Only NOT_FOUND means "no key, so empty". Any other channel error
+        # must not manufacture a false healthy depth of zero.
+        error = ChannelError(
+            "ACCESS_REFUSED - access to queue 'adl' refused",
+            (50, 10), "Channel.queue_declare", 403,
+        )
+        result = self.call(
+            make_connection_mock(declare_side_effect=error),
+            active_queues={"adl-worker@host": [{"name": INGESTION_QUEUE_NAME}]},
+            active={"adl-worker@host": []},
+        )
+
+        self.assertIsNone(result.queue_depth)
 
     def test_depth_unknown_when_declare_fails_unexpectedly(self):
         result = self.call(

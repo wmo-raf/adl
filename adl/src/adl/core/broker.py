@@ -29,14 +29,14 @@ from kombu.exceptions import ChannelError
 
 from adl.config.celery import app
 
-logger = logging.getLogger(__name__)
+from .tasks import INGESTION_QUEUE_NAME, INGESTION_TASK_NAME
 
-INGESTION_QUEUE_NAME = "adl"
+logger = logging.getLogger(__name__)
 
 # The task names that constitute ingestion work on the queue — the
 # coordinator and the per-station batch it spawns
 INGESTION_TASK_NAMES = frozenset({
-    "adl.core.tasks.run_network_plugin",
+    INGESTION_TASK_NAME,
     "adl.core.tasks.process_station_link_batch",
 })
 
@@ -140,16 +140,35 @@ def _queue_depth(connection):
         declared = connection.default_channel.queue_declare(
             queue=INGESTION_QUEUE_NAME, passive=True
         )
-    except ChannelError:
+    except ChannelError as e:
         # On Redis an empty queue has no key, so a passive declare reports
-        # NOT_FOUND — that is a healthy idle queue, not an unobservable one
-        return 0
+        # NOT_FOUND — that is a healthy idle queue, not an unobservable one.
+        # Any other channel error stays unknown: it must not manufacture a
+        # false healthy depth of zero.
+        if _is_not_found(e):
+            return 0
+        logger.warning("[BROKER] Could not read ingestion queue depth: %s", e)
+        return None
     except Exception as e:
         logger.warning("[BROKER] Could not read ingestion queue depth: %s", e)
         return None
     # message_count sums across kombu's priority-suffixed keys, which a raw
     # LLEN on the queue name would undercount
     return declared.message_count
+
+
+def _is_not_found(channel_error):
+    """
+    True when a passive declare failed because the queue does not exist.
+
+    kombu's virtual transports raise with a string ``'404'`` reply code and
+    an amqp broker with an int ``404``; older paths carry only the
+    ``NOT_FOUND`` reply text.
+    """
+    reply_code = getattr(channel_error, "reply_code", None)
+    if reply_code is not None:
+        return str(reply_code) == "404"
+    return "NOT_FOUND" in str(channel_error)
 
 
 def _worker_consuming(inspect):

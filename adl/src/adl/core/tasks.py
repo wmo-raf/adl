@@ -27,6 +27,9 @@ logger = logging.getLogger(__name__)
 # starved independently of ingestion
 DISPATCH_QUEUE_NAME = "dispatch"
 
+# The queue the ingestion coordinator and its batches run on
+INGESTION_QUEUE_NAME = "adl"
+
 # The registered name of the ingestion coordinator task. Beat schedule entries
 # for a connection are resolved by this plus their args — see
 # find_connection_schedule_entries
@@ -213,7 +216,7 @@ def run_network_plugin(self, network_id):
         )
         task = process_station_link_batch.apply_async(
             args=[network_id, batch_list],
-            queue='adl',
+            queue=INGESTION_QUEUE_NAME,
             soft_time_limit=soft_time_limit,
             time_limit=soft_time_limit + INGEST_TIME_LIMIT_GRACE_SECONDS,
         )
@@ -411,7 +414,7 @@ def create_or_update_network_plugin_periodic_tasks(network_connection):
             'task': sig.name,
             'args': json.dumps([network_connection.id]),
             'enabled': enabled,
-            'queue': 'adl',
+            'queue': INGESTION_QUEUE_NAME,
         }
     )
 
