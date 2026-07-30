@@ -17,7 +17,7 @@ class DispatchQueueRoutingTests(TestCase):
         for task_name in (
                 "adl.core.tasks.perform_channel_dispatch",
                 "adl.core.tasks.dispatch_station",
-                "adl.core.tasks.sweep_stale_dispatch_logs",
+                "adl.core.tasks.sweep_stale_activity_logs",
         ):
             self.assertEqual(routes[task_name]["queue"], "dispatch", task_name)
 

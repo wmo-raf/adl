@@ -306,7 +306,9 @@ CELERY_TASK_ROUTES = {
     'adl.core.tasks.process_station_link_batch': {'queue': 'adl'},
     'adl.core.tasks.perform_channel_dispatch': {'queue': 'dispatch'},
     'adl.core.tasks.dispatch_station': {'queue': 'dispatch'},
-    'adl.core.tasks.sweep_stale_dispatch_logs': {'queue': 'dispatch'},
+    # The sweep records rows a starved or dead ingestion worker left behind,
+    # so it must not share that queue — routed with dispatch, its own worker
+    'adl.core.tasks.sweep_stale_activity_logs': {'queue': 'dispatch'},
 }
 
 CACHES = {

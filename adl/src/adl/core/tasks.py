@@ -49,6 +49,22 @@ def dispatch_station_lock_key(channel_id, station_link_id):
     return f"lock:dispatch:{channel_id}:{station_link_id}"
 
 
+# The two budgets below are shared between each side's station lock TTL and
+# the stale-activity-log sweep: a row older than the budget cannot still be
+# running, precisely because its lock would already have expired
+
+def dispatch_timeout_budget_seconds(channel):
+    return (channel.dispatch_timeout_seconds
+            + DISPATCH_TIME_LIMIT_GRACE_SECONDS
+            + DISPATCH_LOCK_TTL_MARGIN_SECONDS)
+
+
+def ingest_timeout_budget_seconds(network_connection):
+    return (network_connection.ingest_timeout_seconds
+            + INGEST_TIME_LIMIT_GRACE_SECONDS
+            + INGEST_LOCK_TTL_MARGIN_SECONDS)
+
+
 # Namespace deliberately distinct from the legacy "lock:station:" prefix:
 # locks created before TTLs existed are eternal, so they are orphaned by the
 # rename instead of migrated
@@ -108,8 +124,8 @@ def setup_periodic_tasks(sender, **kwargs):
     )
     sender.add_periodic_task(
         300.0,
-        sweep_stale_dispatch_logs.s(),
-        name="sweep-stale-dispatch-logs-every-5-minutes",
+        sweep_stale_activity_logs.s(),
+        name="sweep-stale-activity-logs-every-5-minutes",
     )
 
 
@@ -452,9 +468,7 @@ def dispatch_station(self, channel_id, station_link_id):
         return
 
     lock_key = dispatch_station_lock_key(channel_id, station_link_id)
-    lock_ttl = (channel.dispatch_timeout_seconds
-                + DISPATCH_TIME_LIMIT_GRACE_SECONDS
-                + DISPATCH_LOCK_TTL_MARGIN_SECONDS)
+    lock_ttl = dispatch_timeout_budget_seconds(channel)
 
     if not cache.add(lock_key, "locked", timeout=lock_ttl):
         logger.warning("[DISPATCH] Station %s on channel %s still dispatching. Skipping...",
@@ -541,41 +555,54 @@ def dispatch_station(self, channel_id, station_link_id):
         log.save()
 
 
-@shared_task(name="adl.core.tasks.sweep_stale_dispatch_logs")
-def sweep_stale_dispatch_logs():
+@shared_task(name="adl.core.tasks.sweep_stale_activity_logs")
+def sweep_stale_activity_logs():
     """
-    Mark push activity logs stranded in STARTED as failed.
+    Mark activity logs stranded in STARTED — in either direction — as failed.
 
-    A dispatch that dies with the worker (hard time limit, OOM, container
-    kill) never reaches the code that finalizes its activity log, leaving the
-    row in STARTED forever. Rows older than their channel's dispatch timeout
-    plus the same grace + margin used for the station lock TTL cannot still
-    be running, so they are swept to FAILED.
+    A run that dies with its worker (hard time limit, OOM, container kill)
+    never reaches the code that finalizes its activity log, leaving the row
+    in STARTED forever. A row older than the timeout budget its own side
+    defines — the channel's dispatch timeout for push rows, the connection's
+    ingest timeout for pull rows — plus the same grace + margin used for that
+    side's lock TTL cannot still be running, so it is swept to FAILED.
     """
     from .models import DispatchChannel  # noqa: F401  (FK target must be loaded)
 
     now = dj_timezone.now()
     swept = 0
 
-    candidates = StationLinkActivityLog.objects.filter(
+    push_candidates = StationLinkActivityLog.objects.filter(
         direction="push",
         status=StationLinkActivityLog.ActivityStatus.STARTED,
         dispatch_channel__isnull=False,
+    ).select_related("dispatch_channel")
+
+    pull_candidates = StationLinkActivityLog.objects.filter(
+        direction="pull",
+        status=StationLinkActivityLog.ActivityStatus.STARTED,
+    ).select_related("station_link__network_connection")
+
+    sides = (
+        (push_candidates,
+         lambda log: dispatch_timeout_budget_seconds(log.dispatch_channel),
+         "Dispatch worker died mid-dispatch (no completion recorded)"),
+        (pull_candidates,
+         lambda log: ingest_timeout_budget_seconds(log.station_link.network_connection),
+         "Ingestion worker died mid-run (no completion recorded)"),
     )
 
-    for log in candidates:
-        threshold_seconds = (log.dispatch_channel.dispatch_timeout_seconds
-                             + DISPATCH_TIME_LIMIT_GRACE_SECONDS
-                             + DISPATCH_LOCK_TTL_MARGIN_SECONDS)
-        if log.time < now - timedelta(seconds=threshold_seconds):
-            log.status = StationLinkActivityLog.ActivityStatus.FAILED
-            log.success = False
-            log.message = "Dispatch worker died mid-dispatch (no completion recorded)"
-            log.save(update_fields=["status", "success", "message"])
-            swept += 1
+    for candidates, threshold_seconds, message in sides:
+        for log in candidates:
+            if log.time < now - timedelta(seconds=threshold_seconds(log)):
+                log.status = StationLinkActivityLog.ActivityStatus.FAILED
+                log.success = False
+                log.message = message
+                log.save(update_fields=["status", "success", "message"])
+                swept += 1
 
     if swept:
-        logger.warning("[DISPATCH] Swept %d stale dispatch activity log(s) to FAILED", swept)
+        logger.warning("[SWEEP] Swept %d stale activity log(s) to FAILED", swept)
 
     return swept
 
