@@ -1,5 +1,6 @@
 {% load wagtailadmin_tags i18n %}
 
+{# Status badges are styled by the shared stylesheet (adl/css/status_badges.css), loaded admin-wide by the insert_global_admin_css hook #}
 <div class="collection-status">
     <div class="collection-status__header">
         <h3 class="collection-status__title">{% trans "Collection Status" %}</h3>
@@ -379,35 +380,9 @@
         font-size: 0.8125rem;
     }
 
-    /* Status Badges */
-    .status-badge {
-        display: inline-block;
-        padding: 0.25rem 0.625rem;
-        border-radius: 12px;
-        font-size: 0.75rem;
-        font-weight: 600;
-        text-transform: uppercase;
-        letter-spacing: 0.5px;
-    }
-
-    .status-badge--success {
-        background: #28a745;
-        color: white;
-    }
-
-    .status-badge--error {
-        background: #dc3545;
-        color: white;
-    }
-
-    .status-badge--warning {
-        background: #ffc107;
-        color: #333;
-    }
-
-    .status-badge--disabled {
-        background: #6c757d;
-        color: white;
+    /* Status badges come from the shared stylesheet (adl/css/status_badges.css);
+       only this panel's spacing tweak lives here */
+    .dispatch-channel__name .status-badge--disabled {
         margin-left: 0.5rem;
         font-size: 0.6875rem;
     }

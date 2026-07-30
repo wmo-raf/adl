@@ -144,3 +144,47 @@ class SweepQueueRoutingTests(TestCase):
                          settings.CELERY_TASK_ROUTES)
         from adl.core import tasks
         self.assertFalse(hasattr(tasks, "sweep_stale_dispatch_logs"))
+
+
+class SweepRunsHealthEvaluatorTests(ActivityLogSweepTestCase):
+    def test_sweep_evaluates_and_stores_every_connections_verdict(self):
+        from adl.monitoring.models import NetworkConnectionHealth
+
+        other_link = StationLinkFactory()
+
+        sweep_stale_activity_logs()
+
+        self.assertTrue(NetworkConnectionHealth.objects.filter(
+            connection=self.link.network_connection).exists())
+        self.assertTrue(NetworkConnectionHealth.objects.filter(
+            connection=other_link.network_connection).exists())
+
+    def test_evaluation_happens_after_sweeping(self):
+        # The sweep still reports its own count with the evaluator riding along
+        log = self._make_log("pull", age_seconds=500)
+
+        swept = sweep_stale_activity_logs()
+
+        self.assertEqual(swept, 1)
+        log.refresh_from_db()
+        self.assertEqual(log.status, StationLinkActivityLog.ActivityStatus.FAILED)
+
+    def test_one_bad_connection_does_not_blind_the_rest(self):
+        from unittest.mock import patch
+
+        from adl.monitoring.models import NetworkConnectionHealth
+
+        other_link = StationLinkFactory()
+
+        from adl.monitoring.health import store_connection_health as real_store
+
+        def flaky_store(connection, checklist, now=None):
+            if connection.id == self.link.network_connection.id:
+                raise RuntimeError("boom")
+            return real_store(connection, checklist, now=now)
+
+        with patch("adl.monitoring.health.store_connection_health", side_effect=flaky_store):
+            sweep_stale_activity_logs()
+
+        self.assertTrue(NetworkConnectionHealth.objects.filter(
+            connection=other_link.network_connection).exists())

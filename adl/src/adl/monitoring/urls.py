@@ -9,8 +9,11 @@ from .views import (
 )
 
 from .views.activity import NetworkConnectionActivityView, DispatchChannelMonitoringView
+from .views.health import connection_health
 
 urlpatterns = [
+    path('connection/<int:connection_id>/health/', connection_health,
+         name='connection_health'),
     path("plugin-processing-results/<int:network_conn_id>/",
          get_network_conn_plugin_task_results_since,
          name="get_network_conn_plugin_task_results_since_no_date"),

@@ -1,0 +1,20 @@
+{% comment %}
+One band of diagnostic checks. Colour carries the verdict axis only —
+epistemic states (skipped, stale, unsupported, disabled, misconfigured)
+render grey via --muted and are distinguished by wording.
+{% endcomment %}
+<table class="listing">
+    <tbody>
+    {% for check in checks %}
+        <tr>
+            <td class="health-check__label">{{ check.label }}</td>
+            <td class="health-check__state">
+                <span class="status-badge {% if check.coloured %}status-badge--{{ check.state|lower }}{% else %}status-badge--muted{% endif %}">
+                    {{ check.state }}
+                </span>
+            </td>
+            <td>{{ check.message }}</td>
+        </tr>
+    {% endfor %}
+    </tbody>
+</table>

@@ -284,7 +284,13 @@ def make_registrable_viewset(model_cls, **kwargs):
 
 
 def get_connection_list_more_buttons(connection):
-    buttons = []
+    buttons = [
+        ListingButton(
+            gettext("Ingestion Diagnostic"),
+            url=reverse("connection_health", args=[connection.id]),
+            icon_name="crosshairs",
+        )
+    ]
     if hasattr(connection, "get_extra_model_admin_links"):
         extra_links = connection.get_extra_model_admin_links()
         for link in extra_links:

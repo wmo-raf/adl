@@ -1,9 +1,12 @@
 from django.db import models
 from django.db.models import Q
+from django.utils.translation import gettext_lazy as _
 from timescale.db.models.models import TimescaleModel
 from wagtail.snippets.models import register_snippet
 
 from adl.core.classification import FAILURE_CATEGORIES
+
+from .constants import CheckState
 
 
 @register_snippet
@@ -87,3 +90,70 @@ class StationLinkActivityLog(TimescaleModel):
     @property
     def complete(self):
         return self.success and self.status == self.ActivityStatus.COMPLETED
+
+
+class NetworkConnectionHealth(models.Model):
+    """
+    The current stored verdict of the ingestion diagnostic for one
+    connection — one overwritten row per connection of headline-only
+    normalised columns, no JSON blob.
+
+    The full checklist is computed on read in :mod:`adl.monitoring.health`;
+    only change is persisted. ``status`` carries ``DISABLED`` (and later
+    ``MISCONFIGURED``) as well as the ladder verdicts; ``first_failing_layer``
+    is ``NULL`` for both, because no layer failed.
+
+    ``since`` moves on ``(status, first_failing_layer)`` only. The category
+    behind a failure flaps; a flapping ``since`` would destroy the field's
+    only claim — how long the connection has been in its current state.
+    """
+
+    connection = models.OneToOneField('core.NetworkConnection', on_delete=models.CASCADE,
+                                      related_name="health", verbose_name=_("Connection"))
+    status = models.CharField(max_length=20, choices=CheckState.choices, verbose_name=_("Status"))
+    first_failing_layer = models.CharField(max_length=32, blank=True, null=True,
+                                           verbose_name=_("First Failing Layer"))
+    headline_check_id = models.CharField(max_length=64, blank=True, null=True,
+                                         verbose_name=_("Headline Check"))
+    headline_message = models.TextField(blank=True, default="", verbose_name=_("Headline Message"))
+    since = models.DateTimeField(verbose_name=_("Since"))
+    evaluated_at = models.DateTimeField(verbose_name=_("Evaluated At"))
+
+    class Meta:
+        verbose_name = _("Network Connection Health")
+        verbose_name_plural = _("Network Connection Health")
+
+    def __str__(self):
+        return f"{self.connection} - {self.status}"
+
+
+class NetworkConnectionHealthTransition(models.Model):
+    """
+    Append-only record of each ``(status, first_failing_layer)`` change —
+    alerting queries transitions, not states, and repeated flapping surfaces
+    as a count of rows. Rows older than 90 days are dropped by the daily
+    monitoring cleanup task.
+    """
+
+    RETENTION_DAYS = 90
+
+    connection = models.ForeignKey('core.NetworkConnection', on_delete=models.CASCADE,
+                                   related_name="health_transitions", verbose_name=_("Connection"))
+    at = models.DateTimeField(verbose_name=_("At"))
+    from_status = models.CharField(max_length=20, choices=CheckState.choices,
+                                   blank=True, null=True, verbose_name=_("From Status"))
+    from_first_failing_layer = models.CharField(max_length=32, blank=True, null=True,
+                                                verbose_name=_("From First Failing Layer"))
+    to_status = models.CharField(max_length=20, choices=CheckState.choices, verbose_name=_("To Status"))
+    to_first_failing_layer = models.CharField(max_length=32, blank=True, null=True,
+                                              verbose_name=_("To First Failing Layer"))
+
+    class Meta:
+        verbose_name = _("Network Connection Health Transition")
+        verbose_name_plural = _("Network Connection Health Transitions")
+        indexes = [
+            models.Index(fields=["connection", "at"], name="health_trans_conn_at_idx"),
+        ]
+
+    def __str__(self):
+        return f"{self.connection} - {self.from_status} -> {self.to_status} at {self.at}"
