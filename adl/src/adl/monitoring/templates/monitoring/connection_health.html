@@ -1,0 +1,75 @@
+{% extends "wagtailadmin/generic/base.html" %}
+{% load i18n wagtailadmin_tags %}
+
+{% block titletag %}{% blocktrans with name=connection.name %}Ingestion Diagnostic — {{ name }}{% endblocktrans %}{% endblock %}
+
+{% block extra_css %}
+    {{ block.super }}
+    <style>
+        .health-diagnostic {
+            margin-top: 2rem;
+            max-width: 900px;
+        }
+
+        .health-headline {
+            display: flex;
+            align-items: baseline;
+            gap: 0.75rem;
+            margin: 1rem 0 0.25rem;
+            flex-wrap: wrap;
+        }
+
+        .health-headline .status-badge {
+            font-size: 0.875rem;
+        }
+
+        .health-headline__since {
+            color: var(--w-color-text-meta);
+            margin-bottom: 1.5rem;
+        }
+
+        .health-check__label {
+            width: 30%;
+            font-weight: 600;
+        }
+
+        .health-check__state {
+            width: 130px;
+            white-space: nowrap;
+        }
+    </style>
+{% endblock %}
+
+{% block main_content %}
+    <div class="health-diagnostic">
+        {# Headline: the first failing layer, or the resting verdict #}
+        <div class="health-headline">
+            <span class="status-badge status-badge--{{ checklist.status|lower }}">
+                {{ checklist.status }}
+            </span>
+            {% if first_failing_layer_label %}
+                <strong class="health-headline__layer">{{ first_failing_layer_label }}</strong>
+            {% endif %}
+            <span class="health-headline__message">{{ checklist.headline_message }}</span>
+        </div>
+        <p class="health-headline__since">
+            {% if health %}
+                {% blocktrans with since=health.since|date:"Y-m-d H:i:s" %}In this state since {{ since }}{% endblocktrans %}
+                &middot;
+                {% blocktrans with at=health.evaluated_at|date:"Y-m-d H:i:s" %}last recorded {{ at }}{% endblocktrans %}
+            {% else %}
+                {% trans "No verdict recorded yet — the periodic sweep has not run since this connection was created." %}
+            {% endif %}
+        </p>
+
+        {# Precondition band: assertions about configuration, above the ladder #}
+        <h2 class="w-text-h3">{% trans "Preconditions" %}</h2>
+        {% include "monitoring/partials/health_check_table.html" with checks=checklist.precondition %}
+
+        {# The ladder, in the order a failure propagates #}
+        {% for group in layer_groups %}
+            <h2 class="w-text-h3">{{ group.label }}</h2>
+            {% include "monitoring/partials/health_check_table.html" with checks=group.checks %}
+        {% endfor %}
+    </div>
+{% endblock %}

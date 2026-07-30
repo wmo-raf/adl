@@ -611,6 +611,14 @@ def sweep_stale_activity_logs():
     if swept:
         logger.warning("[SWEEP] Swept %d stale activity log(s) to FAILED", swept)
 
+    # Sweep-then-evaluate: the diagnostic verdict is computed only after
+    # stranded rows have been made terminal, so the evaluator never reads a
+    # dead run as still in progress. Riding this task also inherits its
+    # off-ingestion-queue routing — the evaluator survives the starvation it
+    # exists to record.
+    from adl.monitoring.health import evaluate_all_connections
+    evaluate_all_connections()
+
     return swept
 
 

@@ -1,0 +1,47 @@
+/*
+ * The one status-badge convention, shared by the station-link status panel
+ * and the ingestion diagnostic page.
+ *
+ * Built on Wagtail's CSS variables so the colours track the admin theme and
+ * do not lie in dark mode. Colour carries the verdict axis only: OK/WARNING/
+ * FAILED are coloured; the epistemic states (skipped, stale, unsupported,
+ * disabled, misconfigured) all render grey and are distinguished by wording —
+ * colouring them is exactly what would make a resting "stale" read as a fault.
+ */
+
+.status-badge {
+    display: inline-block;
+    padding: 0.25rem 0.625rem;
+    border-radius: 12px;
+    border: 1px solid currentColor;
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    background: transparent;
+    background: color-mix(in srgb, currentColor 14%, transparent);
+    color: var(--w-color-text-context, #333);
+}
+
+.status-badge--ok,
+.status-badge--success {
+    color: var(--w-color-positive-100, #1b8666);
+}
+
+.status-badge--warning {
+    color: var(--w-color-warning-100, #c76b00);
+}
+
+.status-badge--failed,
+.status-badge--error {
+    color: var(--w-color-critical-200, #ca3b3b);
+}
+
+.status-badge--skipped,
+.status-badge--stale,
+.status-badge--unsupported,
+.status-badge--disabled,
+.status-badge--misconfigured,
+.status-badge--muted {
+    color: var(--w-color-text-meta, #6c757d);
+}

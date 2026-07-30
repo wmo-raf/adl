@@ -6,7 +6,7 @@ from celery_singleton import Singleton
 from django.utils import timezone
 
 from adl.config.celery import app
-from .models import StationLinkActivityLog
+from .models import NetworkConnectionHealthTransition, StationLinkActivityLog
 
 logger = logging.getLogger(__name__)
 
@@ -17,6 +17,12 @@ def run_station_link_activity_log_cleanup(self):
     cutoff = timezone.now() - timedelta(days=7)
     deleted_count, _ = StationLinkActivityLog.objects.filter(time__lt=cutoff).delete()
     logger.info(f"[StationLinkActivityLog Cleanup] Deleted {deleted_count} old logs")
+
+    transition_cutoff = timezone.now() - timedelta(days=NetworkConnectionHealthTransition.RETENTION_DAYS)
+    deleted_transitions, _ = NetworkConnectionHealthTransition.objects.filter(
+        at__lt=transition_cutoff
+    ).delete()
+    logger.info(f"[HealthTransition Cleanup] Deleted {deleted_transitions} old transitions")
 
 
 @app.on_after_finalize.connect
