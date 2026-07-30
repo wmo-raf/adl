@@ -49,6 +49,22 @@ def dispatch_station_lock_key(channel_id, station_link_id):
     return f"lock:dispatch:{channel_id}:{station_link_id}"
 
 
+# The two budgets below are shared between each side's station lock TTL and
+# the stale-activity-log sweep: a row older than the budget cannot still be
+# running, precisely because its lock would already have expired
+
+def dispatch_timeout_budget_seconds(channel):
+    return (channel.dispatch_timeout_seconds
+            + DISPATCH_TIME_LIMIT_GRACE_SECONDS
+            + DISPATCH_LOCK_TTL_MARGIN_SECONDS)
+
+
+def ingest_timeout_budget_seconds(network_connection):
+    return (network_connection.ingest_timeout_seconds
+            + INGEST_TIME_LIMIT_GRACE_SECONDS
+            + INGEST_LOCK_TTL_MARGIN_SECONDS)
+
+
 # Namespace deliberately distinct from the legacy "lock:station:" prefix:
 # locks created before TTLs existed are eternal, so they are orphaned by the
 # rename instead of migrated
@@ -452,9 +468,7 @@ def dispatch_station(self, channel_id, station_link_id):
         return
 
     lock_key = dispatch_station_lock_key(channel_id, station_link_id)
-    lock_ttl = (channel.dispatch_timeout_seconds
-                + DISPATCH_TIME_LIMIT_GRACE_SECONDS
-                + DISPATCH_LOCK_TTL_MARGIN_SECONDS)
+    lock_ttl = dispatch_timeout_budget_seconds(channel)
 
     if not cache.add(lock_key, "locked", timeout=lock_ttl):
         logger.warning("[DISPATCH] Station %s on channel %s still dispatching. Skipping...",
@@ -571,14 +585,10 @@ def sweep_stale_activity_logs():
 
     sides = (
         (push_candidates,
-         lambda log: log.dispatch_channel.dispatch_timeout_seconds
-                     + DISPATCH_TIME_LIMIT_GRACE_SECONDS
-                     + DISPATCH_LOCK_TTL_MARGIN_SECONDS,
+         lambda log: dispatch_timeout_budget_seconds(log.dispatch_channel),
          "Dispatch worker died mid-dispatch (no completion recorded)"),
         (pull_candidates,
-         lambda log: log.station_link.network_connection.ingest_timeout_seconds
-                     + INGEST_TIME_LIMIT_GRACE_SECONDS
-                     + INGEST_LOCK_TTL_MARGIN_SECONDS,
+         lambda log: ingest_timeout_budget_seconds(log.station_link.network_connection),
          "Ingestion worker died mid-run (no completion recorded)"),
     )
 

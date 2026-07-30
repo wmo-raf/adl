@@ -306,8 +306,8 @@ CELERY_TASK_ROUTES = {
     'adl.core.tasks.process_station_link_batch': {'queue': 'adl'},
     'adl.core.tasks.perform_channel_dispatch': {'queue': 'dispatch'},
     'adl.core.tasks.dispatch_station': {'queue': 'dispatch'},
-    # The sweep watches the ingestion queue for starvation, so it must not
-    # share it — routed with dispatch, which runs on its own worker
+    # The sweep records rows a starved or dead ingestion worker left behind,
+    # so it must not share that queue — routed with dispatch, its own worker
     'adl.core.tasks.sweep_stale_activity_logs': {'queue': 'dispatch'},
 }
 

@@ -757,17 +757,14 @@ class Plugin(Instance):
         from django.core.cache import cache
         from adl.monitoring.models import StationLinkActivityLog
         from adl.core.tasks import (
-            INGEST_LOCK_TTL_MARGIN_SECONDS,
-            INGEST_TIME_LIMIT_GRACE_SECONDS,
             ingest_station_lock_key,
+            ingest_timeout_budget_seconds,
         )
         log = self.get_logger()
 
         lock_key = ingest_station_lock_key(station_link.id)
         if not bypass_lock:
-            lock_ttl = (station_link.network_connection.ingest_timeout_seconds
-                        + INGEST_TIME_LIMIT_GRACE_SECONDS
-                        + INGEST_LOCK_TTL_MARGIN_SECONDS)
+            lock_ttl = ingest_timeout_budget_seconds(station_link.network_connection)
             if not cache.add(lock_key, "locked", timeout=lock_ttl):
                 log.warning("Station link %s is still processing. Skipping...", station_link)
                 StationLinkActivityLog.objects.create(
