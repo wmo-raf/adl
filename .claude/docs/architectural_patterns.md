@@ -29,6 +29,13 @@ All data sources are plugins — separate installable Python packages that subcl
 Built-in behavior in `Plugin.save_records()` (`registries.py`): QC pipeline application, chunked upserts (
 `SAVE_CHUNK_SIZE`), timezone normalization to UTC, and `TaskLogger` audit entries — plugins get all this for free.
 
+**Sources-count handover (duck-typed convention):** a plugin that can count the candidate source items it resolved
+(files matched, API entries) sets `station_link.adl_sources_count = n` while listing, inside `get_station_data`.
+`process_station` initialises the attribute to `None` before the call and stores it on
+`StationLinkActivityLog.sources_count` afterwards. Tri-state: `NULL` = did not look (or plugin doesn't report),
+`0` = looked and found nothing, `n` = found `n`. Malformed values degrade to `NULL`, never `0`. An attribute rather
+than a return value or core import so plugins can ship it before core is upgraded.
+
 New plugins are scaffolded using the Cookiecutter template in `plugin-boilerplate/`.
 
 ## 3. Polymorphic Models
