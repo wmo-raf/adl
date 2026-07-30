@@ -36,6 +36,13 @@ Built-in behavior in `Plugin.save_records()` (`registries.py`): QC pipeline appl
 `0` = looked and found nothing, `n` = found `n`. Malformed values degrade to `NULL`, never `0`. An attribute rather
 than a return value or core import so plugins can ship it before core is upgraded.
 
+**Failure-classification handover (duck-typed convention):** when a run fails, core stamps the activity log with
+`error_category`, `error_layer` and `exception_class` (see `adl/core/classification.py`, at every failure write point
+in both directions). A plugin that knows what its exception means may pre-stamp it: `e.adl_category = "AUTH_FAILED"`,
+`e.adl_layer = 5` (4 = network path, 5 = source) before raising. Core validates against the closed vocabulary in
+`FAILURE_CATEGORIES` and drops bad values; unknown/ambiguous types are declined (`NULL`), never guessed. An attribute
+rather than a core exception class so plugins keep importing cleanly against older core.
+
 New plugins are scaffolded using the Cookiecutter template in `plugin-boilerplate/`.
 
 ## 3. Polymorphic Models
