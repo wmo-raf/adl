@@ -539,6 +539,15 @@ class NetworkConnection(PolymorphicModel, ClusterableModel):
                                       help_text=_("Default Timezone of the stations in this network connection"))
     batch_size = models.PositiveIntegerField(default=10, verbose_name=_("Processing Batch Size"),
                                              help_text=_("Number of stations to process in a single batch"))
+    ingest_timeout_seconds = models.PositiveIntegerField(default=300,
+                                                         verbose_name=_("Ingestion Timeout in Seconds"),
+                                                         help_text=_(
+                                                             "Maximum time ingesting a single station may run "
+                                                             "before it is terminated"),
+                                                         validators=[
+                                                             MinValueValidator(30),
+                                                             MaxValueValidator(1800)
+                                                         ])
     is_daily_data = models.BooleanField(default=False, verbose_name=_("Is Daily Data"),
                                         help_text=_("Check to mark data from this connection as daily data"))
     sort_order = models.PositiveIntegerField(default=0, verbose_name=_("Sort Order"),
@@ -553,6 +562,7 @@ class NetworkConnection(PolymorphicModel, ClusterableModel):
             FieldPanel("plugin_processing_enabled"),
             FieldPanel("plugin_processing_interval"),
             FieldPanel("batch_size"),
+            FieldPanel("ingest_timeout_seconds"),
         ], heading=_("Plugin Configuration")),
         FieldPanel("is_daily_data"),
         FieldPanel("sort_order"),
