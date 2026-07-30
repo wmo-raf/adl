@@ -465,6 +465,42 @@ class OscarSurfaceStationLocal(models.Model):
         return self.wigos_id
 
 
+COORDINATOR_OVERDUE_INTERVAL_MULTIPLE = 2
+
+
+def is_coordinator_overdue(enabled, interval_minutes, last_run_at, now=None):
+    """
+    True when an enabled coordinator has not run within twice its own
+    interval — the signal that a direction of the pipeline is silently stalled
+    (dead beat scheduler, wedged queue, or downed worker) rather than merely
+    finding nothing to do.
+
+    Both directions ask this question of their heartbeat, so both answer it
+    here: a threshold that drifted apart between ingestion and dispatch would
+    make the two halves of the same diagnostic disagree.
+
+    Disabled coordinators are never overdue. An enabled one that has never run
+    (``last_run_at`` of ``None``) is overdue.
+    """
+    if not enabled:
+        return False
+
+    if last_run_at is None:
+        return True
+
+    if now is None:
+        now = dj_timezone.now()
+
+    threshold = timedelta(minutes=COORDINATOR_OVERDUE_INTERVAL_MULTIPLE * interval_minutes)
+    return now - last_run_at > threshold
+
+
+def heartbeat_last_run_at(instance):
+    """``last_run_at`` of ``instance``'s heartbeat row, or ``None`` if it has never run."""
+    heartbeat = getattr(instance, "heartbeat", None)
+    return heartbeat.last_run_at if heartbeat else None
+
+
 class NetworkConnection(PolymorphicModel, ClusterableModel):
     """
     Configuration for one upstream data integration — credentials, schedule,
@@ -538,6 +574,18 @@ class NetworkConnection(PolymorphicModel, ClusterableModel):
     def interval(self):
         return self.plugin_processing_interval
     
+    def is_ingestion_overdue(self, now=None):
+        """
+        True when this enabled connection's ingestion coordinator has not run
+        within twice its ``plugin_processing_interval``.
+
+        Deliberately a different number from the ``× 3`` tolerance the activity
+        view applies to a *station's* last check: this asks whether the
+        coordinator itself is still being ticked, which is answered by the
+        connection heartbeat alone.
+        """
+        return is_coordinator_overdue(self.enabled, self.interval, heartbeat_last_run_at(self), now)
+
     def get_plugin(self):
         plugin_type = self.plugin
         plugin = plugin_registry.get(plugin_type)
@@ -1038,22 +1086,10 @@ class DispatchChannel(PolymorphicModel, ClusterableModel):
         True when this enabled channel has not run within twice its
         ``data_check_interval`` — the signal that dispatch is silently
         stalled (dead beat scheduler, wedged queue, or downed worker).
-
-        Disabled channels are never overdue. An enabled channel that has
-        never run (no heartbeat yet) is overdue.
         """
-        if not self.enabled:
-            return False
-
-        if now is None:
-            now = dj_timezone.now()
-
-        heartbeat = getattr(self, "heartbeat", None)
-        if heartbeat is None or heartbeat.last_run_at is None:
-            return True
-
-        threshold = timedelta(minutes=2 * self.data_check_interval)
-        return now - heartbeat.last_run_at > threshold
+        return is_coordinator_overdue(
+            self.enabled, self.data_check_interval, heartbeat_last_run_at(self), now
+        )
 
     @property
     def edit_url(self):
@@ -1241,6 +1277,39 @@ class DispatchChannelHeartbeat(models.Model):
 
     def __str__(self):
         return f"{self.channel.name} - {self.last_run_at}"
+
+
+class NetworkConnectionHeartbeat(models.Model):
+    """
+    Records each ingestion coordinator run for a :class:`NetworkConnection` —
+    one row per connection, stamped on every run.
+
+    The row is written from exactly one place, ``run_network_plugin``, so a
+    fresh ``last_run_at`` means precisely *"beat delivered a tick and the
+    coordinator ran to completion"* — including the run where the connection
+    had no enabled station links to spawn. Anything looser would blur the one
+    distinction the diagnostic depends on: beat-said-yes versus
+    worker-said-nothing (see :meth:`NetworkConnection.is_ingestion_overdue`).
+
+    ``last_manual_run_at`` is the slot for an operator-triggered re-run, kept
+    apart from ``last_run_at`` so a manual run can never be mistaken for the
+    schedule working. Nothing writes it yet — the manual re-run path is a
+    later ticket; the coordinator deliberately leaves it alone.
+    """
+    connection = models.OneToOneField(NetworkConnection, on_delete=models.CASCADE,
+                                      related_name="heartbeat", verbose_name=_("Connection"))
+    last_run_at = models.DateTimeField(verbose_name=_("Last Run At"))
+    station_links_enabled = models.PositiveIntegerField(default=0, verbose_name=_("Station Links Enabled"))
+    batches_spawned = models.PositiveIntegerField(default=0, verbose_name=_("Batches Spawned"))
+    task_id = models.CharField(max_length=255, blank=True, null=True, verbose_name=_("Task ID"))
+    last_manual_run_at = models.DateTimeField(blank=True, null=True, verbose_name=_("Last Manual Run At"))
+
+    class Meta:
+        verbose_name = _("Network Connection Heartbeat")
+        verbose_name_plural = _("Network Connection Heartbeats")
+
+    def __str__(self):
+        return f"{self.connection.name} - {self.last_run_at}"
 
 
 def status_from_bits(bits: QCBits) -> int:
