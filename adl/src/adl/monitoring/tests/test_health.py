@@ -500,6 +500,21 @@ class SourceProbeLayerTests(ExternalLayerTestCase):
         self.assertEqual(self.check(checklist, "network_path").state, CheckState.STALE)
         self.assertEqual(checklist.status, CheckState.OK)
 
+    def test_station_scope_source_check_cannot_move_the_connection_verdict(self):
+        # The on-demand station check persists against the same model with
+        # its station-link FK set; a fresh FAILED station row must leave
+        # layer 5 at its resting STALE state, not seize the headline
+        self.make_healthy()
+        self.with_supported_contract()
+        self.probe_row("station_source_check", "FAILED", age=timedelta(minutes=1),
+                       layer="source", category="AUTH_FAILED",
+                       station_link=self.link)
+
+        checklist = self.evaluate()
+
+        self.assertEqual(self.check(checklist, "source_check").state, CheckState.STALE)
+        self.assertEqual(checklist.status, CheckState.OK)
+
     def test_malformed_probe_row_reports_unsupported_not_a_verdict(self):
         self.make_healthy()
         self.with_supported_contract()

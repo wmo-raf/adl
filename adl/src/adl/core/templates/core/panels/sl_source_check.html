@@ -1,0 +1,72 @@
+{% load wagtailadmin_tags i18n %}
+
+{# Status badges are styled by the shared stylesheet (adl/css/status_badges.css), loaded admin-wide by the insert_global_admin_css hook #}
+<div class="collection-status">
+    <div class="collection-status__header">
+        <h3 class="collection-status__title">{% trans "Station Source Check" %}</h3>
+    </div>
+
+    {% if configuration_drift %}
+        {% comment %}Station-scope drift is advisory: it renders here, beside
+        this station's own status, and never changes the connection's
+        verdict.{% endcomment %}
+        <div class="help-block help-warning">
+            <p>
+                {% trans "Configuration drift — this station link's stored configuration no longer passes validation. Fix the named field(s) on the station link's edit form. Ingestion is not stopped by this finding, but this station's runs are excluded from the connection's source-layer evidence." %}
+            </p>
+            <ul>
+                {% for message in configuration_drift.messages %}
+                    <li>{{ message }}</li>
+                {% endfor %}
+            </ul>
+        </div>
+    {% endif %}
+
+    {% if latest_result %}
+        <div class="status-card {% if latest_result.status == 'OK' %}status-card--success{% elif latest_result.status == 'FAILED' %}status-card--error{% endif %}">
+            <div class="status-card__grid">
+                <div class="status-card__item">
+                    <span class="status-card__label">{% trans "Status" %}</span>
+                    <span class="status-card__value">
+                        <span class="status-badge {% if latest_result.status == 'OK' %}status-badge--success{% elif latest_result.status == 'FAILED' %}status-badge--error{% endif %}">
+                            {{ latest_result.status }}
+                        </span>
+                    </span>
+                </div>
+                <div class="status-card__item">
+                    <span class="status-card__label">{% trans "Checked" %}</span>
+                    <span class="status-card__value">
+                        {% blocktrans with minutes=latest_result.age_minutes %}{{ minutes }} minute(s) ago{% endblocktrans %}
+                    </span>
+                </div>
+                {% if latest_result.latency_ms %}
+                    <div class="status-card__item">
+                        <span class="status-card__label">{% trans "Latency" %}</span>
+                        <span class="status-card__value">{{ latest_result.latency_ms }} ms</span>
+                    </div>
+                {% endif %}
+            </div>
+            {% if latest_result.message %}
+                <div class="status-card__item" style="margin-top: 0.5rem;">
+                    <span class="status-card__value">{{ latest_result.message }}</span>
+                </div>
+            {% endif %}
+        </div>
+    {% else %}
+        <p class="help-block help-info">
+            {% trans "This station's source configuration has not been checked yet." %}
+        </p>
+    {% endif %}
+
+    {% if show_check_button %}
+        {% comment %}One station at a time, on demand only — a press inside
+        the 60-second cooldown returns the stored result, never an
+        error{% endcomment %}
+        <form method="post" action="{{ check_source_url }}">
+            {% csrf_token %}
+            <button type="submit" class="button button-small">
+                {% trans "Check station source now" %}
+            </button>
+        </form>
+    {% endif %}
+</div>

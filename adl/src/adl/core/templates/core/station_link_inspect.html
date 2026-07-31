@@ -65,6 +65,10 @@
         {% component collection_status_panel with station_link=object %}
     {% endif %}
 
+    {% if source_check_panel %}
+        {% component source_check_panel with station_link=object %}
+    {% endif %}
+
     {% block fields_output %}
         {% if fields %}
             <div class="inspect-fields">

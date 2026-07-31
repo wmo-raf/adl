@@ -7,7 +7,7 @@ from wagtail.admin.viewsets.chooser import ChooserViewSet
 from wagtail.admin.viewsets.model import ModelViewSet
 from wagtail.admin.widgets import HeaderButton
 
-from .components import StationLinkCollectionStatusPanel
+from .components import StationLinkCollectionStatusPanel, StationLinkSourceCheckPanel
 from .constants import PREDEFINED_DATA_PARAMETERS
 from .models import (
     Network,
@@ -203,6 +203,7 @@ class StationLinkInspectView(generic.InspectView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context["collection_status_panel"] = StationLinkCollectionStatusPanel()
+        context["source_check_panel"] = StationLinkSourceCheckPanel()
         return context
 
 

@@ -10,8 +10,12 @@ from django.urls import reverse
 from django.utils import timezone as dj_timezone
 from django.utils.translation import gettext as _
 
-from adl.core.models import NetworkConnection
-from adl.core.source_checks import SourceCheckStatus, run_source_probe
+from adl.core.models import NetworkConnection, StationLink
+from adl.core.source_checks import (
+    SourceCheckStatus,
+    run_source_probe,
+    run_station_source_check,
+)
 
 from ..constants import LAYER_LABELS, LAYER_SOURCE, PROBE_LAYER_IDS
 from ..health import EVALUATED_LAYERS, evaluate_connection_health, probe_age_minutes
@@ -31,6 +35,23 @@ PROBE_COOLDOWN_SECONDS = 60
 PROBE_PERMISSION = "core.change_networkconnection"
 
 
+def _source_host(connection):
+    """The connection's source host for cooldown keying, or ``None`` where
+    the endpoint is unimplemented or its lookup raises — a plugin's endpoint
+    lookup is never trusted to succeed, and a raising override must not turn
+    a POST into a server error."""
+    try:
+        endpoint = connection.get_source_endpoint()
+    except Exception:
+        logger.exception("[SOURCE PROBE] get_source_endpoint raised for connection %s",
+                         connection.id)
+        return None
+    if endpoint is None:
+        return None
+    host, _port = endpoint
+    return host
+
+
 def source_probe_cooldown_key(connection):
     """
     The cooldown cache key for one connection's source, keyed on the host
@@ -38,18 +59,23 @@ def source_probe_cooldown_key(connection):
     share one budget. Falls back to the connection id where the endpoint is
     unimplemented.
     """
-    try:
-        endpoint = connection.get_source_endpoint()
-    except Exception:
-        # A plugin's endpoint lookup is never trusted to succeed — a raising
-        # override must not turn the probe POST into a server error
-        logger.exception("[SOURCE PROBE] get_source_endpoint raised for connection %s",
-                         connection.id)
-        endpoint = None
-    if endpoint is not None:
-        host, _port = endpoint
+    host = _source_host(connection)
+    if host is not None:
         return f"adl_source_probe_cooldown:{host}"
     return f"adl_source_probe_cooldown:connection:{connection.id}"
+
+
+def station_source_check_cooldown_key(station_link):
+    """
+    The cooldown cache key for one station link's source check, keyed on
+    **(host, station link)** and independent of the connection probe —
+    host-only keying would hand one station another station's verdict.
+    """
+    host = _source_host(station_link.network_connection)
+    if host is not None:
+        return f"adl_station_source_check_cooldown:{host}:{station_link.id}"
+    return (f"adl_station_source_check_cooldown:"
+            f"connection:{station_link.network_connection_id}:{station_link.id}")
 
 
 def connection_health(request, connection_id):
@@ -204,6 +230,127 @@ def _report_existing_probe(request, connection, claim, now):
             _("A probe for this source was started less than a minute ago "
               "and has not recorded a result yet. Refresh shortly, or try "
               "again in a minute."),
+        )
+
+
+def _station_link_page(station_link):
+    """Redirect back to the station link's inspect page — the page the
+    check button lives on. Falls back to the monitoring timeline where the
+    inspect viewset is not registered for this model."""
+    from adl.core.utils import get_url_for_station_link
+    try:
+        return redirect(get_url_for_station_link(station_link, "inspect",
+                                                 takes_args=True))
+    except Exception:
+        return redirect("station_link_monitoring", link_id=station_link.id)
+
+
+def station_link_check_source(request, link_id):
+    """
+    Run the on-demand station-scope source check (layer 5) for **one**
+    station link — synchronously, one station at a time, with no fan-out
+    anywhere: 27 stations means 27 connect/auth/list cycles, and a burst of
+    failed authentications is what actually trips a ban.
+
+    Cooldown mechanics mirror the connection probe, but the key is
+    **(host, station link)** — one station's press must never answer for
+    another's. The result persists against the same probe-result model with
+    the station-link FK set; the connection evaluator filters those rows
+    out by query, so this check can never move the connection's verdict.
+    """
+    station_link = get_object_or_404(StationLink, id=link_id)
+
+    if not request.user.has_perm(PROBE_PERMISSION):
+        raise PermissionDenied
+
+    inspect_page = _station_link_page(station_link)
+    if request.method != "POST":
+        return inspect_page
+
+    if not station_link.station_source_check_supported:
+        messages.warning(
+            request,
+            _("This plugin does not implement the station source check, so "
+              "there is nothing to run."),
+        )
+        return inspect_page
+
+    now = dj_timezone.now()
+    key = station_source_check_cooldown_key(station_link)
+    if not cache.add(key, now.isoformat(), timeout=PROBE_COOLDOWN_SECONDS):
+        _report_existing_station_check(request, station_link, cache.get(key), now)
+        return inspect_page
+
+    try:
+        step = run_station_source_check(station_link)
+    except Exception:
+        # The claim stays: a crashed check still dialled the host, so the
+        # budget is spent either way
+        logger.exception("[SOURCE PROBE] Station check crashed for station link %s",
+                         station_link.id)
+        messages.error(
+            request,
+            _("The station source check could not run to completion. See "
+              "the application logs for the cause."),
+        )
+        return inspect_page
+
+    SourceProbeResult.objects.create(
+        connection=station_link.network_connection,
+        station_link=station_link,
+        check_id=step.check_id,
+        layer=PROBE_LAYER_IDS[step.layer],
+        status=step.result.status,
+        category=step.result.category,
+        message=step.result.message,
+        latency_ms=step.result.latency_ms,
+        at=now,
+    )
+
+    _report_station_check_outcome(request, step)
+    return inspect_page
+
+
+def _report_existing_station_check(request, station_link, claim, now):
+    """A press inside the cooldown: the shared result is the limit, so the
+    answer is this station's own stored result (with its age and origin) or
+    the in-flight state — never a refusal."""
+    claimed_at = _parse_claim(claim)
+    newest = (SourceProbeResult.objects
+              .filter(station_link=station_link)
+              .order_by("-at")
+              .first())
+
+    if newest is not None and (claimed_at is None or newest.at >= claimed_at):
+        messages.info(
+            request,
+            _("Checked %(minutes)d minute(s) ago (on-demand station check): "
+              "%(message)s — one check per station per minute; this shared "
+              "result is the limit.")
+            % {"minutes": probe_age_minutes(now, newest.at),
+               "message": newest.message},
+        )
+    else:
+        messages.info(
+            request,
+            _("A check for this station was started less than a minute ago "
+              "and has not recorded a result yet. Refresh shortly, or try "
+              "again in a minute."),
+        )
+
+
+def _report_station_check_outcome(request, step):
+    result = step.result
+    if result.status == SourceCheckStatus.FAILED:
+        messages.error(request, result.message)
+    elif result.status == SourceCheckStatus.OK:
+        # Zero matches is OK by design: the resolved path and match count
+        # in the message let the operator judge better than a rule can
+        messages.success(request, result.message)
+    else:
+        messages.warning(
+            request,
+            _("The check ran, but the plugin did not return a usable result."),
         )
 
 
