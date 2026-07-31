@@ -10,6 +10,15 @@ django-cleanup==9.0.0
 pyoscar==0.9.0
 django-timezone-field==7.2.1
 django-redis==6.0.0
+# The broker stack is a direct dependency: first-party code calls
+# celery's inspect API, opens kombu connections and rides the redis
+# transport (adl/src/adl/core/broker.py). Exact pins at the measured set —
+# the tested stack is the shipped stack. Mirror any change in
+# constraints.txt AND the tested ranges in adl/src/adl/core/broker.py;
+# core/tests/test_dependency_pins.py fails when they drift apart.
+celery==5.6.3
+kombu==5.6.2
+redis==8.0.1
 celery-singleton==0.3.1
 django-celery-beat==2.9.0
 django-celery-results==2.6.0

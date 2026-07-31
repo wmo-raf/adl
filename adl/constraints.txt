@@ -1,0 +1,13 @@
+# Pip constraints passed to every plugin install (build and runtime paths —
+# see deploy/plugins/install_plugin.sh). Plugins run an unconstrained pip
+# install into the same virtualenv as core, so without this file a plugin's
+# own requirements can silently resolve the broker stack away from the set
+# the ingestion diagnostic was measured against. With it, a plugin that
+# genuinely needs a different version fails at install time, loudly, on the
+# installer's machine — not weeks later as a silently degraded diagnostic.
+#
+# Must mirror the pins in requirements.txt exactly;
+# core/tests/test_dependency_pins.py fails when they drift apart.
+celery==5.6.3
+kombu==5.6.2
+redis==8.0.1

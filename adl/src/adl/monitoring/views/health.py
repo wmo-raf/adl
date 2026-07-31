@@ -11,7 +11,12 @@ from django.utils import timezone as dj_timezone
 from django.utils.translation import gettext as _
 from wagtail.admin.paginator import WagtailPaginator
 
-from adl.core.broker import get_ingestion_queue_health
+from adl.core.broker import (
+    BROKER_LIBRARIES,
+    get_ingestion_queue_health,
+    local_library_versions,
+    tested_range_display,
+)
 from adl.core.models import NetworkConnection, StationLink
 from adl.core.tasks import INGESTION_QUEUE_NAME, run_network_plugin
 from adl.core.source_checks import (
@@ -20,7 +25,7 @@ from adl.core.source_checks import (
     run_station_source_check,
 )
 
-from ..constants import LAYER_LABELS, LAYER_SOURCE, PROBE_LAYER_IDS
+from ..constants import LAYER_LABELS, LAYER_SOURCE, LAYER_WORKER, PROBE_LAYER_IDS
 from ..health import EVALUATED_LAYERS, evaluate_connection_health, probe_age_minutes
 from ..models import (
     NetworkConnectionHealth,
@@ -139,6 +144,23 @@ def connection_health(request, connection_id):
         and connection.source_probe_supported
     )
 
+    # The broker stack renders always — not only on drift, and regardless of
+    # what the ladder concluded — because nothing else reports which broker
+    # libraries a running installation actually has. "This process" is the
+    # page's own container; the worker column is cached on the heartbeat,
+    # since containers pip-install per entrypoint and genuinely diverge.
+    worker_versions = heartbeat.worker_versions if heartbeat else None
+    local_versions = local_library_versions()
+    broker_stack = [
+        {
+            "name": name,
+            "local": local_versions.get(name),
+            "worker": (worker_versions or {}).get(name),
+            "tested": tested_range_display(name),
+        }
+        for name in BROKER_LIBRARIES
+    ]
+
     layer_groups = [
         {
             "layer": layer,
@@ -147,6 +169,7 @@ def connection_health(request, connection_id):
             # The one button covers both external layers, rendered inside
             # the layers 4-5 block, after the source group
             "probe_button": show_probe_button and layer == LAYER_SOURCE,
+            "broker_stack": broker_stack if layer == LAYER_WORKER else None,
         }
         for layer in EVALUATED_LAYERS
     ]

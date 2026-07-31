@@ -149,13 +149,21 @@ def stamp_connection_heartbeat(network_connection, station_links_enabled, batche
     ``defaults``, so a recorded press survives every scheduled run that
     follows. The activity logs are not marked either way — the log records
     what happened; the heartbeat records who asked.
+
+    Both branches cache ``worker_versions`` — the coordinator runs in the
+    worker process either way, so the value is genuinely the worker's own
+    stack, and it says nothing about scheduling.
     """
+    from .broker import local_library_versions
     from .models import NetworkConnectionHeartbeat
 
     if manual:
         NetworkConnectionHeartbeat.objects.update_or_create(
             connection=network_connection,
-            defaults={"last_manual_run_at": dj_timezone.now()},
+            defaults={
+                "last_manual_run_at": dj_timezone.now(),
+                "worker_versions": local_library_versions(),
+            },
         )
         return
 
@@ -166,6 +174,7 @@ def stamp_connection_heartbeat(network_connection, station_links_enabled, batche
             "station_links_enabled": station_links_enabled,
             "batches_spawned": batches_spawned,
             "task_id": task_id,
+            "worker_versions": local_library_versions(),
         },
     )
 

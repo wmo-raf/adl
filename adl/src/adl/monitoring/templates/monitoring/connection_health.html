@@ -43,6 +43,16 @@
             margin-top: 0.25rem;
         }
 
+        .health-broker-stack__title {
+            font-weight: 600;
+            margin: 1rem 0 0.25rem;
+        }
+
+        .health-broker-stack__hint {
+            color: var(--w-color-text-meta);
+            margin: 0.5rem 0 1.5rem;
+        }
+
         .health-probe-form {
             margin: 0.5rem 0 1.5rem;
         }
@@ -141,6 +151,37 @@
         {% for group in layer_groups %}
             <h2 class="w-text-h3">{{ group.label }}</h2>
             {% include "monitoring/partials/health_check_table.html" with checks=group.checks %}
+            {% if group.broker_stack %}
+                {# Always rendered, whatever the ladder concluded — nothing
+                   else reports which broker stack an installation runs, and
+                   the diagnostic serves operators debugging deployments they
+                   did not build. Two columns because containers pip-install
+                   per entrypoint and genuinely diverge. #}
+                <p class="health-broker-stack__title">{% trans "Broker libraries" %}</p>
+                <table class="listing health-broker-stack">
+                    <thead>
+                        <tr>
+                            <th>{% trans "Library" %}</th>
+                            <th>{% trans "This process" %}</th>
+                            <th>{% trans "Worker" %}</th>
+                            <th>{% trans "Tested range" %}</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for lib in group.broker_stack %}
+                            <tr>
+                                <td>{{ lib.name }}</td>
+                                <td>{{ lib.local|default:_("unknown") }}</td>
+                                <td>{{ lib.worker|default:_("not yet reported") }}</td>
+                                <td>{{ lib.tested }}</td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+                <p class="health-broker-stack__hint">
+                    {% trans "The worker column is cached from the last coordinator run — containers install independently and can diverge." %}
+                </p>
+            {% endif %}
             {% if group.probe_button %}
                 {# One button covers both external layers. Present whenever the
                    user may probe and the plugin supports it — hidden otherwise,

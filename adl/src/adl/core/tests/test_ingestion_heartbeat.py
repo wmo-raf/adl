@@ -46,6 +46,24 @@ class IngestionHeartbeatStampTests(TestCase):
         heartbeat.refresh_from_db()
         self.assertGreaterEqual(heartbeat.last_run_at, first_run_at)
 
+    def test_coordinator_caches_the_workers_broker_stack(self):
+        # The running-task-age guard judges the worker's own stack; the
+        # coordinator runs in the worker process, so its stamp is that stack
+        self.run_coordinator()
+
+        heartbeat = NetworkConnectionHeartbeat.objects.get(connection=self.connection)
+        self.assertEqual(set(heartbeat.worker_versions), {"celery", "kombu", "redis"})
+
+    def test_manual_run_caches_the_workers_broker_stack_too(self):
+        # A manual run executes in the worker as well — the version cache is
+        # about which container ran, not about scheduling
+        with patch("adl.core.tasks.process_station_link_batch.apply_async"):
+            run_network_plugin(self.connection.id, manual=True)
+
+        heartbeat = NetworkConnectionHeartbeat.objects.get(connection=self.connection)
+        self.assertIsNone(heartbeat.last_run_at)
+        self.assertEqual(set(heartbeat.worker_versions), {"celery", "kombu", "redis"})
+
     def test_heartbeat_is_stamped_when_no_station_links_are_enabled(self):
         self.link.enabled = False
         self.link.save()

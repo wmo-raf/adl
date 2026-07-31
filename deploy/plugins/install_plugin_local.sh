@@ -143,10 +143,19 @@ check_and_run_script() {
 
 log "Building ${plugin_name}."
 
+# Constrain to core's pinned broker stack (celery/kombu/redis) when the
+# constraints file is present in the checkout
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+CONSTRAINTS_FILE="$SCRIPT_DIR/../../adl/constraints.txt"
+constraint_args=()
+if [[ -f "$CONSTRAINTS_FILE" ]]; then
+  constraint_args=(-c "$CONSTRAINTS_FILE")
+fi
+
 if [[ "$dev" == true ]]; then
-  pip3 install -e "$folder"
+  pip3 install -e "$folder" "${constraint_args[@]}"
 else
-  pip3 install "$folder"
+  pip3 install "$folder" "${constraint_args[@]}"
 fi
 
 check_and_run_script "$folder" build.sh
