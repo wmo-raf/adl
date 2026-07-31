@@ -87,6 +87,9 @@ class HealthEvaluatorTestCase(TestCase):
         return matches[0]
 
 
+PROBE_CHECK_IDS = ("dns_resolution", "tcp_connect", "source_check")
+
+
 class HealthyConnectionTests(HealthEvaluatorTestCase):
     def test_healthy_connection_reports_ok_with_no_failing_layer(self):
         self.make_healthy()
@@ -96,7 +99,12 @@ class HealthyConnectionTests(HealthEvaluatorTestCase):
         self.assertEqual(checklist.status, CheckState.OK)
         self.assertIsNone(checklist.first_failing_layer)
         for check in checklist.checks:
-            self.assertEqual(check.state, CheckState.OK, check.id)
+            if check.id in PROBE_CHECK_IDS:
+                # The stub plugin implements no source-check contract, so the
+                # external layers report UNSUPPORTED — never a fault
+                self.assertEqual(check.state, CheckState.UNSUPPORTED, check.id)
+            else:
+                self.assertEqual(check.state, CheckState.OK, check.id)
 
 
 class DisabledConnectionTests(HealthEvaluatorTestCase):
@@ -330,6 +338,155 @@ class LocksLayerTests(HealthEvaluatorTestCase):
         check = self.check(checklist, "station_locks")
         self.assertEqual(check.state, CheckState.WARNING)
         self.assertFalse(check.blocking)
+
+
+class SourceProbeLayerTests(HealthEvaluatorTestCase):
+    """Layers 4-5 are external and on-demand: the evaluator only ever reads
+    stored probe rows, rests at STALE (or UNSUPPORTED where the plugin has
+    no contract), and STALE never reaches the headline."""
+
+    def probe_row(self, check_id, status, age=None, layer="network",
+                  station_link=None, message="probe message", category=None):
+        from adl.monitoring.models import SourceProbeResult
+
+        return SourceProbeResult.objects.create(
+            connection=self.connection,
+            station_link=station_link,
+            check_id=check_id,
+            layer=layer,
+            status=status,
+            category=category,
+            message=message,
+            at=dj_tz.now() - (age or timedelta(0)),
+        )
+
+    def with_supported_contract(self):
+        """A connection whose plugin implements the whole contract, without
+        needing a polymorphic subclass: the endpoint via an instance
+        attribute (the evaluator calls it), check_source via its no-I/O
+        implemented-ness seam."""
+        self.connection.get_source_endpoint = lambda: ("ftp.example.org", 21)
+        patcher = patch(
+            "adl.monitoring.health.connection_implements_check_source",
+            return_value=True,
+        )
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def test_unsupported_contract_reports_unsupported_never_stale(self):
+        self.make_healthy()
+
+        checklist = self.evaluate()
+
+        for check_id in PROBE_CHECK_IDS:
+            check = self.check(checklist, check_id)
+            self.assertEqual(check.state, CheckState.UNSUPPORTED, check_id)
+            self.assertFalse(check.blocking, check_id)
+        self.assertEqual(checklist.status, CheckState.OK)
+
+    def test_supported_but_never_probed_rests_at_stale_excluded_from_headline(self):
+        self.make_healthy()
+        self.with_supported_contract()
+
+        checklist = self.evaluate()
+
+        for check_id in PROBE_CHECK_IDS:
+            self.assertEqual(self.check(checklist, check_id).state,
+                             CheckState.STALE, check_id)
+        self.assertEqual(checklist.status, CheckState.OK)
+        self.assertIsNone(checklist.first_failing_layer)
+
+    def test_result_older_than_fifteen_minutes_is_stale(self):
+        self.make_healthy()
+        self.with_supported_contract()
+        self.probe_row("dns_resolution", "FAILED", age=timedelta(minutes=16))
+
+        checklist = self.evaluate()
+
+        self.assertEqual(self.check(checklist, "dns_resolution").state, CheckState.STALE)
+        self.assertEqual(checklist.status, CheckState.OK)
+
+    def test_result_inside_fifteen_minutes_is_fresh(self):
+        self.make_healthy()
+        self.with_supported_contract()
+        self.probe_row("dns_resolution", "OK", age=timedelta(minutes=14))
+
+        checklist = self.evaluate()
+
+        check = self.check(checklist, "dns_resolution")
+        self.assertEqual(check.state, CheckState.OK)
+        # The rendered message carries the result's age and origin
+        self.assertIn("on-demand probe", check.message)
+
+    def test_fresh_failed_dns_leads_the_headline_and_skips_below(self):
+        from adl.monitoring.constants import LAYER_NETWORK
+
+        self.make_healthy()
+        self.with_supported_contract()
+        self.probe_row("dns_resolution", "FAILED", age=timedelta(minutes=1),
+                       category="DNS_FAILURE")
+
+        checklist = self.evaluate()
+
+        self.assertEqual(checklist.status, CheckState.FAILED)
+        self.assertEqual(checklist.first_failing_layer, LAYER_NETWORK)
+        self.assertEqual(checklist.headline_check_id, "dns_resolution")
+        for check_id in ("tcp_connect", "source_check", "data_freshness"):
+            self.assertEqual(self.check(checklist, check_id).state,
+                             CheckState.SKIPPED, check_id)
+
+    def test_fresh_failed_source_check_leads_with_the_source_layer(self):
+        from adl.monitoring.constants import LAYER_SOURCE
+
+        self.make_healthy()
+        self.with_supported_contract()
+        self.probe_row("dns_resolution", "OK", age=timedelta(minutes=1))
+        self.probe_row("tcp_connect", "OK", age=timedelta(minutes=1))
+        self.probe_row("source_check", "FAILED", age=timedelta(minutes=1),
+                       layer="source", category="AUTH_FAILED")
+
+        checklist = self.evaluate()
+
+        self.assertEqual(checklist.status, CheckState.FAILED)
+        self.assertEqual(checklist.first_failing_layer, LAYER_SOURCE)
+        self.assertEqual(checklist.headline_check_id, "source_check")
+
+    def test_station_scope_rows_are_excluded_by_construction(self):
+        # An operator-chosen station sample must never move the connection's
+        # verdict — the fresh FAILED row below carries a station link and is
+        # invisible to the evaluator
+        self.make_healthy()
+        self.with_supported_contract()
+        self.probe_row("dns_resolution", "FAILED", age=timedelta(minutes=1),
+                       station_link=self.link)
+
+        checklist = self.evaluate()
+
+        self.assertEqual(self.check(checklist, "dns_resolution").state, CheckState.STALE)
+        self.assertEqual(checklist.status, CheckState.OK)
+
+    def test_malformed_probe_row_reports_unsupported_not_a_verdict(self):
+        self.make_healthy()
+        self.with_supported_contract()
+        self.probe_row("source_check", "MALFORMED", age=timedelta(minutes=1),
+                       layer="source")
+
+        checklist = self.evaluate()
+
+        check = self.check(checklist, "source_check")
+        self.assertEqual(check.state, CheckState.UNSUPPORTED)
+        self.assertFalse(check.blocking)
+        self.assertEqual(checklist.status, CheckState.OK)
+
+    def test_probe_layers_are_skipped_below_an_internal_failure(self):
+        self.with_supported_contract()
+        # No schedule entry: the scheduler fails first
+        checklist = self.evaluate()
+
+        self.assertEqual(checklist.first_failing_layer, LAYER_SCHEDULER)
+        for check_id in PROBE_CHECK_IDS:
+            self.assertEqual(self.check(checklist, check_id).state,
+                             CheckState.SKIPPED, check_id)
 
 
 class StoredVerdictTests(HealthEvaluatorTestCase):

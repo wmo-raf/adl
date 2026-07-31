@@ -612,6 +612,44 @@ class NetworkConnection(PolymorphicModel, ClusterableModel):
             raise ValueError(f"Plugin {self.plugin} not found in the registry.")
         return plugin.run_process(self, initial_start_date=initial_start_date)
     
+    def get_source_endpoint(self):
+        """
+        The ``(host, port)`` of this connection's upstream source, or ``None``.
+
+        Core owns the generic DNS -> TCP probe built on this (layer 4 of the
+        ingestion diagnostic), so a plugin only ever names its endpoint and
+        never implements network probing itself. The base default reports
+        the contract as unimplemented.
+        """
+        return None
+
+    def check_source(self):
+        """
+        Ask whether the source accepts our credentials and offers data
+        (layer 5 of the ingestion diagnostic). Connection-scoped, strictly
+        **read-only**, and run **on demand only** — never on a schedule.
+
+        Plugins override this to return a
+        :class:`~adl.core.source_checks.SourceCheckResult`; whatever they
+        return is normalised by core and never trusted as-is. The base
+        default keeps the other plugins working untouched.
+        """
+        from adl.core.source_checks import SourceCheckResult, SourceCheckStatus
+        return SourceCheckResult(
+            status=SourceCheckStatus.UNSUPPORTED,
+            message=_("This plugin does not implement the source check."),
+        )
+
+    @property
+    def source_probe_supported(self):
+        """True when this connection's plugin implements any part of the
+        source-check contract — what decides whether the probe button exists
+        at all, without performing any I/O."""
+        return (
+            type(self).get_source_endpoint is not NetworkConnection.get_source_endpoint
+            or type(self).check_source is not NetworkConnection.check_source
+        )
+
     @property
     def edit_url(self):
         from adl.core.utils import get_url_for_connection

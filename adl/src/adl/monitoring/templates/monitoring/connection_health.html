@@ -70,6 +70,21 @@
         {% for group in layer_groups %}
             <h2 class="w-text-h3">{{ group.label }}</h2>
             {% include "monitoring/partials/health_check_table.html" with checks=group.checks %}
+            {% if group.probe_button %}
+                {# One button covers both external layers. Present whenever the
+                   user may probe and the plugin supports it — hidden otherwise,
+                   never disabled, and enabled during cooldown: a press inside
+                   the cooldown answers with the shared result, not a refusal. #}
+                <form method="post"
+                      action="{% url 'connection_probe_source' connection.id %}"
+                      class="health-probe-form">
+                    {% csrf_token %}
+                    <button type="submit" class="button">{% trans "Probe source now" %}</button>
+                    <p class="health-probe-form__hint">
+                        {% trans "Checks DNS, TCP and the source's own credential/data check on demand. Results are shared between users and stay fresh for 15 minutes." %}
+                    </p>
+                </form>
+            {% endif %}
         {% endfor %}
     </div>
 {% endblock %}

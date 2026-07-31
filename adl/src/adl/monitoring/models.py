@@ -127,6 +127,55 @@ class NetworkConnectionHealth(models.Model):
         return f"{self.connection} - {self.status}"
 
 
+class SourceProbeResult(models.Model):
+    """
+    One persisted step of an on-demand source probe (layers 4-5 of the
+    ingestion diagnostic): DNS resolution, TCP connect, or the plugin's own
+    source check. Written only by the probe view — the external layers are
+    never probed on a schedule — and read by the evaluator, where a result
+    older than the 15-minute freshness window renders as ``STALE``.
+
+    ``station_link`` is null for connection-scope probes; station-scope
+    checks (a later ticket) fill it, and the evaluator filters to
+    connection-scope rows only — an operator-chosen station sample is
+    excluded from the connection's verdict by construction.
+
+    Rows older than 30 days are dropped by the daily monitoring cleanup.
+    """
+
+    RETENTION_DAYS = 30
+
+    connection = models.ForeignKey('core.NetworkConnection', on_delete=models.CASCADE,
+                                   related_name="source_probe_results",
+                                   verbose_name=_("Connection"))
+    station_link = models.ForeignKey('core.StationLink', on_delete=models.CASCADE,
+                                     related_name="source_probe_results",
+                                     blank=True, null=True, verbose_name=_("Station Link"))
+    # A stable step identifier from adl.core.source_checks (dns_resolution,
+    # tcp_connect, source_check), never an ordinal
+    check_id = models.CharField(max_length=32, verbose_name=_("Check"))
+    # The diagnostic layer stamped by the producer: "network" or "source"
+    layer = models.CharField(max_length=32, verbose_name=_("Layer"))
+    status = models.CharField(max_length=20, verbose_name=_("Status"))
+    category = models.CharField(max_length=50, blank=True, null=True,
+                                choices=[(c, c) for c in FAILURE_CATEGORIES],
+                                verbose_name=_("Category"))
+    message = models.TextField(blank=True, default="", verbose_name=_("Message"))
+    latency_ms = models.IntegerField(blank=True, null=True, verbose_name=_("Latency (ms)"))
+    at = models.DateTimeField(verbose_name=_("At"))
+
+    class Meta:
+        verbose_name = _("Source Probe Result")
+        verbose_name_plural = _("Source Probe Results")
+        indexes = [
+            models.Index(fields=["connection", "check_id", "at"],
+                         name="probe_conn_check_at_idx"),
+        ]
+
+    def __str__(self):
+        return f"{self.connection} - {self.check_id} - {self.status} at {self.at}"
+
+
 class NetworkConnectionHealthTransition(models.Model):
     """
     Append-only record of each ``(status, first_failing_layer)`` change —
