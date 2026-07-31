@@ -1371,12 +1371,13 @@ class NetworkConnectionHeartbeat(models.Model):
 
     ``last_manual_run_at`` is the slot for an operator-triggered re-run, kept
     apart from ``last_run_at`` so a manual run can never be mistaken for the
-    schedule working. Nothing writes it yet — the manual re-run path is a
-    later ticket; the coordinator deliberately leaves it alone.
+    schedule working: the log records what happened, the heartbeat records
+    who asked. A manual run stamps only its own slot — which is why
+    ``last_run_at`` is nullable: a manual press can be the row's first write.
     """
     connection = models.OneToOneField(NetworkConnection, on_delete=models.CASCADE,
                                       related_name="heartbeat", verbose_name=_("Connection"))
-    last_run_at = models.DateTimeField(verbose_name=_("Last Run At"))
+    last_run_at = models.DateTimeField(blank=True, null=True, verbose_name=_("Last Run At"))
     station_links_enabled = models.PositiveIntegerField(default=0, verbose_name=_("Station Links Enabled"))
     batches_spawned = models.PositiveIntegerField(default=0, verbose_name=_("Batches Spawned"))
     task_id = models.CharField(max_length=255, blank=True, null=True, verbose_name=_("Task ID"))

@@ -134,17 +134,30 @@ def setup_periodic_tasks(sender, **kwargs):
     )
 
 
-def stamp_connection_heartbeat(network_connection, station_links_enabled, batches_spawned, task_id):
+def stamp_connection_heartbeat(network_connection, station_links_enabled, batches_spawned, task_id,
+                               manual=False):
     """
     Record that the ingestion coordinator ran for this connection.
 
     Called from ``run_network_plugin`` and nowhere else — the row means "beat
     delivered a tick and the coordinator ran to completion", and a second
-    writer would erode that into something vaguer. ``last_manual_run_at`` is
-    outside ``defaults`` on purpose, so a manual re-run recorded there survives
-    every scheduled run that follows.
+    writer would erode that into something vaguer.
+
+    A ``manual`` run stamps only ``last_manual_run_at``: a human press writing
+    ``last_run_at`` would make the scheduler layer report healthy when beat
+    may be dead. Conversely ``last_manual_run_at`` is outside the scheduled
+    ``defaults``, so a recorded press survives every scheduled run that
+    follows. The activity logs are not marked either way — the log records
+    what happened; the heartbeat records who asked.
     """
     from .models import NetworkConnectionHeartbeat
+
+    if manual:
+        NetworkConnectionHeartbeat.objects.update_or_create(
+            connection=network_connection,
+            defaults={"last_manual_run_at": dj_timezone.now()},
+        )
+        return
 
     NetworkConnectionHeartbeat.objects.update_or_create(
         connection=network_connection,
@@ -158,10 +171,15 @@ def stamp_connection_heartbeat(network_connection, station_links_enabled, batche
 
 
 @shared_task(bind=True, name='adl.core.tasks.run_network_plugin')
-def run_network_plugin(self, network_id):
+def run_network_plugin(self, network_id, manual=False):
     """
     Coordinator task that spawns batch processing subtasks.
     This task primarily logs orchestration events.
+
+    ``manual=True`` is the operator-triggered re-run. The run itself is
+    identical to a scheduled one — same start date, batch size, per-station
+    timeout and batch clamp, on the same queue — only the heartbeat write
+    differs (see :func:`stamp_connection_heartbeat`).
     """
     from .models import NetworkConnection
     
@@ -189,7 +207,8 @@ def run_network_plugin(self, network_id):
         # Still a completed coordinator run — a connection with nothing enabled
         # must not read as a dead scheduler.
         stamp_connection_heartbeat(
-            network_connection, station_links_enabled=0, batches_spawned=0, task_id=task_id
+            network_connection, station_links_enabled=0, batches_spawned=0, task_id=task_id,
+            manual=manual,
         )
         return
 
@@ -231,6 +250,7 @@ def run_network_plugin(self, network_id):
         station_links_enabled=len(station_link_ids),
         batches_spawned=batch_count,
         task_id=task_id,
+        manual=manual,
     )
 
     return {

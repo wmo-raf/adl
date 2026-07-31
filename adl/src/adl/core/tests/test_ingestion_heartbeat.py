@@ -75,6 +75,55 @@ class IngestionHeartbeatStampTests(TestCase):
 
         self.assertEqual(NetworkConnectionHeartbeat.objects.count(), 0)
 
+    def test_manual_run_stamps_last_manual_run_at_not_last_run_at(self):
+        with patch("adl.core.tasks.process_station_link_batch.apply_async"):
+            run_network_plugin(self.connection.id, manual=True)
+
+        heartbeat = NetworkConnectionHeartbeat.objects.get(connection=self.connection)
+        self.assertIsNone(heartbeat.last_run_at)
+        self.assertAlmostEqual(
+            heartbeat.last_manual_run_at, dj_tz.now(), delta=timedelta(seconds=10)
+        )
+
+    def test_manual_run_preserves_the_scheduled_heartbeat(self):
+        scheduled_at = dj_tz.now() - timedelta(hours=1)
+        NetworkConnectionHeartbeat.objects.create(
+            connection=self.connection,
+            last_run_at=scheduled_at,
+            station_links_enabled=1,
+            batches_spawned=1,
+            task_id="scheduled-task",
+        )
+
+        with patch("adl.core.tasks.process_station_link_batch.apply_async"):
+            run_network_plugin(self.connection.id, manual=True)
+
+        heartbeat = NetworkConnectionHeartbeat.objects.get(connection=self.connection)
+        self.assertEqual(heartbeat.last_run_at, scheduled_at)
+        self.assertEqual(heartbeat.station_links_enabled, 1)
+        self.assertEqual(heartbeat.batches_spawned, 1)
+        self.assertEqual(heartbeat.task_id, "scheduled-task")
+        self.assertIsNotNone(heartbeat.last_manual_run_at)
+
+    def test_manual_run_with_no_enabled_links_still_stamps_only_the_manual_slot(self):
+        self.link.enabled = False
+        self.link.save()
+
+        with patch("adl.core.tasks.process_station_link_batch.apply_async"):
+            run_network_plugin(self.connection.id, manual=True)
+
+        heartbeat = NetworkConnectionHeartbeat.objects.get(connection=self.connection)
+        self.assertIsNone(heartbeat.last_run_at)
+        self.assertIsNotNone(heartbeat.last_manual_run_at)
+
+    def test_manual_run_spawns_batches_identically_to_a_scheduled_run(self):
+        with patch("adl.core.tasks.process_station_link_batch.apply_async") as scheduled:
+            run_network_plugin(self.connection.id)
+        with patch("adl.core.tasks.process_station_link_batch.apply_async") as manual:
+            run_network_plugin(self.connection.id, manual=True)
+
+        self.assertEqual(scheduled.call_args_list, manual.call_args_list)
+
     def test_coordinator_write_preserves_last_manual_run_at(self):
         manual_run_at = dj_tz.now() - timedelta(hours=2)
         NetworkConnectionHeartbeat.objects.create(

@@ -10,7 +10,9 @@ from django.urls import reverse
 from django.utils import timezone as dj_timezone
 from django.utils.translation import gettext as _
 
+from adl.core.broker import get_ingestion_queue_health
 from adl.core.models import NetworkConnection, StationLink
+from adl.core.tasks import INGESTION_QUEUE_NAME, run_network_plugin
 from adl.core.source_checks import (
     SourceCheckStatus,
     run_source_probe,
@@ -33,6 +35,12 @@ PROBE_COOLDOWN_SECONDS = 60
 # credentials can already make the runtime dial them, and a new permission
 # would have to be discovered and assigned across 26 deployments
 PROBE_PERMISSION = "core.change_networkconnection"
+
+# The manual re-run cooldown is the connection's own processing interval,
+# capped here — deliberately stricter than the probe's 60 seconds: one press
+# is a full auth cycle per station link, fired precisely when auth may be
+# what is broken
+MANUAL_RUN_COOLDOWN_CAP_SECONDS = 15 * 60
 
 
 def _source_host(connection):
@@ -78,6 +86,31 @@ def station_source_check_cooldown_key(station_link):
             f"connection:{station_link.network_connection_id}:{station_link.id}")
 
 
+def manual_run_cooldown_key(connection):
+    """
+    The cooldown cache key for one connection's manual re-run —
+    **connection-keyed**, unlike the probe's host key: the run fans out to
+    every station link on the connection, so the budget belongs to the
+    connection that spends it.
+    """
+    return f"adl_manual_run_cooldown:connection:{connection.id}"
+
+
+def manual_run_cooldown_seconds(connection):
+    """The connection's processing interval, capped at 15 minutes."""
+    return min(connection.interval * 60, MANUAL_RUN_COOLDOWN_CAP_SECONDS)
+
+
+def latest_run_was_manual(heartbeat):
+    """Whether the connection's most recent coordinator run was an operator
+    press — the caption predicate: green that came from a manual run must
+    say so, or the press reads as evidence of a working schedule."""
+    if heartbeat is None or heartbeat.last_manual_run_at is None:
+        return False
+    return (heartbeat.last_run_at is None
+            or heartbeat.last_manual_run_at > heartbeat.last_run_at)
+
+
 def connection_health(request, connection_id):
     """
     The per-connection ingestion diagnostic page. The checklist is computed
@@ -91,6 +124,7 @@ def connection_health(request, connection_id):
 
     checklist = evaluate_connection_health(connection)
     health = NetworkConnectionHealth.objects.filter(connection=connection).first()
+    heartbeat = getattr(connection, "heartbeat", None)
 
     # Hidden rather than disabled when unpermitted or unsupported — and
     # enabled during cooldown: the shared result is the limit, and a
@@ -125,6 +159,12 @@ def connection_health(request, connection_id):
         "health": health,
         "first_failing_layer_label": LAYER_LABELS.get(checklist.first_failing_layer),
         "layer_groups": layer_groups,
+        # Hidden rather than disabled, like the probe button — and hidden on
+        # a disabled connection: there is nothing to run
+        "show_run_button": (request.user.has_perm(PROBE_PERMISSION)
+                            and connection.enabled),
+        "latest_run_was_manual": latest_run_was_manual(heartbeat),
+        "heartbeat": heartbeat,
     }
     return render(request, "monitoring/connection_health.html", context=context)
 
@@ -231,6 +271,100 @@ def _report_existing_probe(request, connection, claim, now):
               "and has not recorded a result yet. Refresh shortly, or try "
               "again in a minute."),
         )
+
+
+def _running_ingestion_tasks_for(connection):
+    """Ingestion tasks the workers report as currently executing for this
+    connection, or ``()`` when none — including when the broker did not
+    answer: unknown must not block the press, the cooldown still protects
+    the source.
+
+    Matching on ``args[0]`` requires that both ingestion task signatures
+    (``run_network_plugin`` and ``process_station_link_batch``) keep the
+    connection id as their first argument; a batch still executing counts
+    as a run in flight."""
+    observation = get_ingestion_queue_health()
+    tasks = observation.running_tasks or ()
+    return tuple(task for task in tasks
+                 if task.args and task.args[0] == connection.id)
+
+
+def connection_run_now(request, connection_id):
+    """
+    Trigger an ingestion run immediately — "run the tick now", nothing
+    narrower or wider. The press enqueues the **coordinator task** on the
+    real ingestion queue, so a successful run proves the workers are alive;
+    the run itself is byte-identical to a scheduled one (start date, batch
+    size, per-station timeout, batch clamp all come from the coordinator).
+
+    ``manual=True`` changes only the heartbeat write: the press stamps
+    ``last_manual_run_at``, never ``last_run_at``, so a manual run cannot
+    make the scheduler layer look healthy.
+
+    The in-flight state is the primary limiter — a press while a run is
+    executing shows the running one instead of queueing duplicate work (the
+    worker's per-station lock writes the pull-side SKIPPED row on any
+    collision that slips through). Below that sits a connection-keyed
+    cooldown of the processing interval capped at 15 minutes, deliberately
+    stricter than the probe's: one press is an auth cycle per station link.
+    """
+    connection = get_object_or_404(NetworkConnection, id=connection_id)
+
+    if not request.user.has_perm(PROBE_PERMISSION):
+        raise PermissionDenied
+
+    diagnostic_page = redirect("connection_health", connection_id=connection.id)
+    if request.method != "POST":
+        return diagnostic_page
+
+    if not connection.enabled:
+        messages.warning(
+            request,
+            _("Ingestion for this connection is disabled — enable it before "
+              "running it."),
+        )
+        return diagnostic_page
+
+    running = _running_ingestion_tasks_for(connection)
+    if running:
+        ages = [task.age_seconds for task in running if task.age_seconds is not None]
+        if ages:
+            message = _("An ingestion run for this connection is already "
+                        "running (started %(minutes)d minute(s) ago). Its "
+                        "outcome will appear in the activity log.") \
+                      % {"minutes": int(max(ages) // 60)}
+        else:
+            message = _("An ingestion run for this connection is already "
+                        "running. Its outcome will appear in the activity log.")
+        messages.info(request, message)
+        return diagnostic_page
+
+    now = dj_timezone.now()
+    key = manual_run_cooldown_key(connection)
+    if not cache.add(key, now.isoformat(),
+                     timeout=manual_run_cooldown_seconds(connection)):
+        claimed_at = _parse_claim(cache.get(key))
+        minutes = probe_age_minutes(now, claimed_at) if claimed_at else 0
+        messages.info(
+            request,
+            _("A manual run was triggered %(minutes)d minute(s) ago. The "
+              "cooldown is the connection's processing interval, capped at "
+              "15 minutes — check the activity log for that run's outcome.")
+            % {"minutes": minutes},
+        )
+        return diagnostic_page
+
+    run_network_plugin.apply_async(
+        args=[connection.id],
+        kwargs={"manual": True},
+        queue=INGESTION_QUEUE_NAME,
+    )
+    messages.success(
+        request,
+        _("Ingestion run enqueued on the real queue — it runs exactly as a "
+          "scheduled tick would. Results will appear in the activity log."),
+    )
+    return diagnostic_page
 
 
 def _station_link_page(station_link):
