@@ -21,9 +21,12 @@ Two rules govern the checklist shape:
 
 import logging
 from dataclasses import dataclass
+from datetime import datetime, timedelta
 from typing import Optional, Tuple
 
 from django.core.cache import cache
+from django.core.exceptions import ValidationError
+from django.db.models import Count, Max, Q
 from django.urls import reverse
 from django.utils import timezone as dj_timezone
 from django.utils.translation import gettext as _
@@ -48,6 +51,7 @@ from adl.core.source_checks import (
 )
 from adl.core.tasks import find_connection_schedule_entries, ingest_station_lock_key
 
+from .classification import category_message, classify_failure_text
 from .constants import (
     LAYER_DATA,
     LAYER_LOCKS,
@@ -55,12 +59,17 @@ from .constants import (
     LAYER_SCHEDULER,
     LAYER_SOURCE,
     LAYER_WORKER,
+    PROVENANCE_INTERNAL,
+    PROVENANCE_LABELS,
+    PROVENANCE_LOG_CLASSIFICATION,
+    PROVENANCE_PROBE,
     CheckState,
 )
 from .models import (
     NetworkConnectionHealth,
     NetworkConnectionHealthTransition,
     SourceProbeResult,
+    StationLinkActivityLog,
 )
 from .status import (
     ERROR as STATION_DATA_ERROR,
@@ -86,6 +95,57 @@ EVALUATED_LAYERS = (LAYER_SCHEDULER, LAYER_WORKER, LAYER_LOCKS,
 # cooldown: freshness asks "can I still trust this", cooldown asks "may I
 # ask again yet".
 PROBE_FRESHNESS_SECONDS = 15 * 60
+
+# Evidence read from activity logs is fresh within 2x the connection's own
+# interval — reusing the heartbeat's overdue margin rather than the
+# probe-shaped 15 minutes, so a daily and a 5-minutely connection are both
+# judged fairly
+LOG_EVIDENCE_INTERVAL_MULTIPLIER = 2
+
+# The terminal activity states that constitute evidence. SKIPPED is
+# deliberately absent: a lock collision merely looks like a run, and
+# counting it would manufacture fake layer-4 OK evidence exactly when the
+# system is busiest.
+_TERMINAL_LOG_STATUSES = (
+    StationLinkActivityLog.ActivityStatus.COMPLETED,
+    StationLinkActivityLog.ActivityStatus.FAILED,
+)
+
+
+@dataclass(frozen=True)
+class Evidence:
+    """One observation feeding an external layer's evidence slot.
+
+    ``message`` is always normalised text (a probe step's own message, a
+    classification rule's wording, or core's run summary) — never a raw
+    exception message, which can embed credentials.
+    """
+
+    provenance: str  # PROVENANCE_INTERNAL / PROVENANCE_PROBE / PROVENANCE_LOG_CLASSIFICATION
+    state: str       # CheckState.OK or CheckState.FAILED
+    message: str
+    at: datetime
+
+
+def station_link_drifted(station_link) -> bool:
+    """
+    Whether a stored station link no longer passes its own validation
+    rules — ``full_clean()`` and nothing more, so every rule a plugin adds
+    to ``clean()`` improves this check retroactively.
+
+    Only ``ValidationError`` means drift: a crash in a validator is not
+    evidence the configuration is wrong, and unhandled it would blind the
+    diagnostic from one bad plugin.
+    """
+    try:
+        station_link.full_clean(validate_unique=False)
+    except ValidationError:
+        return True
+    except Exception:
+        logger.exception("[HEALTH] full_clean crashed for station link %s",
+                         station_link.id)
+        return False
+    return False
 
 
 def probe_age_minutes(now, at):
@@ -115,6 +175,11 @@ class HealthCheck:
     # Advisory checks are shown but never seize the headline
     blocking: bool = True
     link: Optional[CheckLink] = None
+    # External layers only: who produced the winning observation, the
+    # superseded observation it displaced, and that loser's rendered line
+    provenance: Optional[str] = None
+    superseded: Optional[Evidence] = None
+    superseded_message: Optional[str] = None
 
     @property
     def coloured(self):
@@ -227,9 +292,10 @@ def _ladder_plan():
         ("running_tasks", LAYER_WORKER, _("Running ingestion tasks")),
         ("tick_consumed", LAYER_WORKER, _("Tick reached a worker")),
         ("station_locks", LAYER_LOCKS, _("Station locks")),
-        (CHECK_DNS, LAYER_NETWORK, _("Source host resolves (DNS)")),
-        (CHECK_TCP, LAYER_NETWORK, _("TCP connection to the source")),
-        (CHECK_SOURCE, LAYER_SOURCE, _("Source accepts credentials and offers data")),
+        # One evidence slot per external layer: probe steps stay stored at
+        # DNS/TCP granularity, but the layer holds a single verdict
+        ("network_path", LAYER_NETWORK, _("Network path to the source")),
+        ("source_check", LAYER_SOURCE, _("Source accepts credentials and offers data")),
         ("data_freshness", LAYER_DATA, _("Data freshness")),
     )
 
@@ -258,6 +324,8 @@ class _ChecklistBuilder:
         self.now = now
         self.failed = False
         self._source_endpoint = _UNRESOLVED
+        self._drifted_ids = None
+        self._data = None
         self.schedule_entries = find_connection_schedule_entries(connection)
 
     @property
@@ -269,7 +337,13 @@ class _ChecklistBuilder:
     def run(self):
         checks = []
         for check_id, layer, label in _ladder_plan():
-            if self.failed:
+            # A failure above makes a check meaningless — with one honest
+            # exception: when the source layer consulted data freshness (for
+            # the sources-count qualification), the data verdict was
+            # genuinely observed and reporting it as SKIPPED would hide the
+            # very evidence that triggered the layer-5 verdict
+            observed_anyway = check_id == "data_freshness" and self._data is not None
+            if self.failed and not observed_anyway:
                 check = HealthCheck(
                     id=check_id, layer=layer, label=label,
                     state=CheckState.SKIPPED,
@@ -278,13 +352,17 @@ class _ChecklistBuilder:
                 )
             else:
                 # A check returns (state, message, blocking) with an optional
-                # trailing CheckLink
+                # trailing CheckLink — or a dict of HealthCheck kwargs
                 result = getattr(self, f"_check_{check_id}")()
-                state, message, blocking = result[:3]
-                link = result[3] if len(result) > 3 else None
-                check = HealthCheck(id=check_id, layer=layer, label=label,
-                                    state=state, message=message, blocking=blocking,
-                                    link=link)
+                if isinstance(result, dict):
+                    check = HealthCheck(id=check_id, layer=layer, label=label,
+                                        **result)
+                else:
+                    state, message, blocking = result[:3]
+                    link = result[3] if len(result) > 3 else None
+                    check = HealthCheck(id=check_id, layer=layer, label=label,
+                                        state=state, message=message, blocking=blocking,
+                                        link=link)
                 if check.blocking and check.state == CheckState.FAILED:
                     self.failed = True
             checks.append(check)
@@ -499,10 +577,16 @@ class _ChecklistBuilder:
                   "their own TTL.") % counts,
                 True)
 
-    # -- Layers 4-5: the external layers, read from stored on-demand probe
-    # results only. Never probed here — evaluation must be free of side
-    # effects on partner hosts — so "not recently checked" (STALE) is the
-    # resting state, and STALE never reaches the headline.
+    # -- Layers 4-5: the external layers. Each holds ONE evidence slot fed
+    # from three producers — the on-demand probe (PROBE), core's own trusted
+    # run record (INTERNAL: successes, and write-time-stamped failures), and
+    # the read-time text classification of unstamped failure rows
+    # (LOG_CLASSIFICATION). Disagreement resolves on the freshest
+    # observation, ties to the probe; the superseded observation is retained
+    # on the slot. Nothing here performs I/O against the partner's host —
+    # a successful scheduled run is real DNS, TCP, auth and bytes, strictly
+    # better than a synthetic probe, and it is what lets the diagnostic go
+    # green again after a fix instead of only red after a fault.
 
     @property
     def source_endpoint(self):
@@ -515,69 +599,272 @@ class _ChecklistBuilder:
                 self._source_endpoint = None
         return self._source_endpoint
 
-    def _latest_probe(self, check_id):
-        # Connection-scope rows only: station-scope checks carry a station
-        # link and are excluded from the connection's verdict by
-        # construction, not by discipline
-        return (SourceProbeResult.objects
-                .filter(connection=self.connection, station_link__isnull=True,
-                        check_id=check_id)
-                .order_by("-at")
-                .first())
+    @property
+    def drifted_link_ids(self):
+        """Enabled station links whose stored configuration no longer passes
+        validation — excluded from layer-5 evidence, or a fault in our own
+        configuration would be attributed to the partner's server."""
+        if self._drifted_ids is None:
+            self._drifted_ids = {
+                link.id
+                for link in self.connection.station_links.filter(enabled=True)
+                if station_link_drifted(link)
+            }
+        return self._drifted_ids
 
-    def _probe_backed_check(self, check_id, supported, unsupported_message):
-        row = self._latest_probe(check_id)
-        if row is None:
-            if not supported:
-                return CheckState.UNSUPPORTED, unsupported_message, False
-            return (CheckState.STALE,
-                    _("Not recently checked — no probe has run. External "
-                      "layers are probed on demand only."),
-                    False)
+    def _log_freshness_seconds(self):
+        return self.connection.interval * 60 * LOG_EVIDENCE_INTERVAL_MULTIPLIER
 
-        age_minutes = probe_age_minutes(self.now, row.at)
-        if (self.now - row.at).total_seconds() > PROBE_FRESHNESS_SECONDS:
-            return (CheckState.STALE,
-                    _("Not recently checked — the last on-demand probe ran "
-                      "%(minutes)d minute(s) ago, outside the 15-minute "
-                      "freshness window.") % {"minutes": age_minutes},
-                    False)
+    def _terminal_pull_logs(self, since):
+        """Terminal pull rows that constitute evidence: COMPLETED and
+        FAILED. SKIPPED rows merely look like evidence and are excluded by
+        the status filter."""
+        return (StationLinkActivityLog.objects
+                .filter(station_link__network_connection=self.connection,
+                        station_link__enabled=True,
+                        direction="pull",
+                        status__in=_TERMINAL_LOG_STATUSES,
+                        time__gte=since)
+                .order_by("-time"))
 
-        message = _("%(message)s (on-demand probe, %(minutes)d minute(s) ago)") % {
-            "message": row.message, "minutes": age_minutes,
+    def _render_evidence(self, evidence):
+        return _("%(message)s (%(origin)s, %(minutes)d minute(s) ago)") % {
+            "message": evidence.message,
+            "origin": PROVENANCE_LABELS[evidence.provenance],
+            "minutes": probe_age_minutes(self.now, evidence.at),
         }
-        if row.status == SourceCheckStatus.OK:
-            return CheckState.OK, message, True
-        if row.status == SourceCheckStatus.FAILED:
-            return CheckState.FAILED, message, True
-        if row.status == SourceCheckStatus.MALFORMED:
-            return (CheckState.UNSUPPORTED,
-                    _("The plugin returned a malformed result, which core "
-                      "does not trust: %(message)s") % {"message": row.message},
-                    False)
-        # An UNSUPPORTED probe row: the plugin declined at probe time
-        return CheckState.UNSUPPORTED, message, False
 
-    def _check_dns_resolution(self):
-        return self._probe_backed_check(
-            CHECK_DNS,
-            supported=self.source_endpoint is not None,
-            unsupported_message=_("This plugin does not name its source "
-                                  "endpoint, so core cannot probe DNS."),
+    # Probe evidence -------------------------------------------------------
+
+    def _probe_slot_row(self, layer_id):
+        """The decisive stored probe row for one external layer —
+        connection-scope rows only: station-scope checks carry a station
+        link and are excluded from the connection's verdict by
+        construction, not by discipline."""
+        check_ids = (CHECK_DNS, CHECK_TCP) if layer_id == 4 else (CHECK_SOURCE,)
+        rows = list(SourceProbeResult.objects
+                    .filter(connection=self.connection, station_link__isnull=True,
+                            check_id__in=check_ids)
+                    .order_by("-at")[:len(check_ids)])
+        if not rows:
+            return None
+        # Steps of one probe share their `at`; the decisive row of the
+        # newest probe is its failure if it has one, else its last step
+        batch = [row for row in rows if row.at == rows[0].at]
+        for row in batch:
+            if row.status == SourceCheckStatus.FAILED:
+                return row
+        for row in batch:
+            if row.check_id == CHECK_TCP:
+                return row
+        return batch[0]
+
+    def _probe_evidence(self, probe_row):
+        """A fresh OK/FAILED probe row as slot evidence; anything else
+        (stale, malformed, plugin-declined) is not evidence."""
+        if probe_row is None:
+            return None
+        if (self.now - probe_row.at).total_seconds() > PROBE_FRESHNESS_SECONDS:
+            return None
+        if probe_row.status == SourceCheckStatus.OK:
+            state = CheckState.OK
+        elif probe_row.status == SourceCheckStatus.FAILED:
+            state = CheckState.FAILED
+        else:
+            return None
+        # Probe messages are core-authored step summaries, already normalised
+        return Evidence(PROVENANCE_PROBE, state, probe_row.message, probe_row.at)
+
+    # Log evidence ---------------------------------------------------------
+
+    def _log_evidence(self, layer_id):
+        """The freshest activity-log observation bearing on one external
+        layer, within 2x the connection's interval."""
+        window_start = self.now - timedelta(seconds=self._log_freshness_seconds())
+        for log in self._terminal_pull_logs(window_start):
+            evidence = self._evidence_from_log(log, layer_id)
+            if evidence is not None:
+                return evidence
+        return None
+
+    def _evidence_from_log(self, log, layer_id):
+        succeeded = (log.status == StationLinkActivityLog.ActivityStatus.COMPLETED
+                     and log.success)
+        if succeeded:
+            if layer_id == 4:
+                # The strongest layer-4 evidence in the system: real DNS,
+                # TCP and a completed exchange — even a zero-sources run
+                return Evidence(
+                    PROVENANCE_INTERNAL, CheckState.OK,
+                    _("A scheduled run reached the source host over the "
+                      "network and completed."),
+                    log.time,
+                )
+            if log.station_link_id in self.drifted_link_ids:
+                return None
+            if log.sources_count == 0:
+                # The one thing a zero-sources success did not do is
+                # transfer bytes — no layer-5 OK from it
+                return None
+            return Evidence(
+                PROVENANCE_INTERNAL, CheckState.OK,
+                _("A scheduled run authenticated against the source and "
+                  "completed."),
+                log.time,
+            )
+
+        # A terminal failure row. The write-time stamp is the trusted tier;
+        # the read-time text rules run only on rows the writer did not stamp
+        if log.error_category is not None:
+            category = log.error_category
+            layer = log.error_layer
+            provenance = PROVENANCE_INTERNAL
+            message = category_message(category)
+        else:
+            outcome = classify_failure_text(log.message)
+            if outcome is None:
+                # Genuinely ambiguous: no classification rather than a guess
+                return None
+            layer = outcome.layer
+            provenance = PROVENANCE_LOG_CLASSIFICATION
+            message = outcome.message
+
+        # The layer belongs to the rule/stamp; no layer means the failure
+        # stays layer-6 detail and feeds no external slot
+        if layer != layer_id:
+            return None
+        if layer_id == 5 and log.station_link_id in self.drifted_link_ids:
+            return None
+        return Evidence(provenance, CheckState.FAILED, message, log.time)
+
+    # The sources count ----------------------------------------------------
+
+    def _sources_count_evidence(self):
+        """The sources count qualifies layer 5 **only when layer 6 is
+        already red**: every station's data stale and every terminal log in
+        layer 6's own window resolved zero source items → FAILED; any
+        non-zero → OK, the fault is downstream. A count nobody reported
+        (NULL) is silence, and silence is never read as a fault."""
+        data_check = self._data_freshness()[0]
+        if data_check[0] != CheckState.FAILED:
+            # Layer 6 green or merely partial: no standalone alarm — a
+            # quiet interval on a healthy connection raises nothing
+            return None
+
+        thresholds = connection_thresholds(self.connection)
+        logs = (self._terminal_pull_logs(self.now - thresholds.freshness_error_limit)
+                .exclude(station_link_id__in=self.drifted_link_ids))
+        counts = logs.aggregate(
+            total=Count("id"),
+            offered=Count("id", filter=Q(sources_count__gt=0)),
+            unknown=Count("id", filter=Q(sources_count__isnull=True)),
+            newest=Max("time"),
+            newest_offered=Max("time", filter=Q(sources_count__gt=0)),
+        )
+        if not counts["total"]:
+            return None
+        if counts["offered"]:
+            return Evidence(
+                PROVENANCE_INTERNAL, CheckState.OK,
+                _("Runs within the data-freshness window found source data "
+                  "on offer — the fault is downstream of the source."),
+                counts["newest_offered"],
+            )
+        if counts["unknown"]:
+            return None
+        return Evidence(
+            PROVENANCE_INTERNAL, CheckState.FAILED,
+            _("Data is stale and every run within the data-freshness "
+              "window resolved zero source items — the source is offering "
+              "no data."),
+            counts["newest"],
         )
 
-    def _check_tcp_connect(self):
-        return self._probe_backed_check(
-            CHECK_TCP,
+    # The slot -------------------------------------------------------------
+
+    def _external_slot(self, layer_id, supported, unsupported_message):
+        probe_row = self._probe_slot_row(layer_id)
+
+        candidates = []
+        probe_evidence = self._probe_evidence(probe_row)
+        if probe_evidence is not None:
+            candidates.append(probe_evidence)
+        log_evidence = self._log_evidence(layer_id)
+        if log_evidence is not None:
+            candidates.append(log_evidence)
+        if layer_id == 5:
+            sources_evidence = self._sources_count_evidence()
+            if sources_evidence is not None:
+                candidates.append(sources_evidence)
+
+        if candidates:
+            # Freshest observation wins; ties go to the probe
+            winner = max(candidates,
+                         key=lambda e: (e.at, e.provenance == PROVENANCE_PROBE))
+            losers = [c for c in candidates if c is not winner]
+            superseded = max(losers, key=lambda e: e.at) if losers else None
+            return {
+                "state": winner.state,
+                "message": self._render_evidence(winner),
+                "blocking": True,
+                "provenance": winner.provenance,
+                "superseded": superseded,
+                "superseded_message": (self._render_evidence(superseded)
+                                       if superseded else None),
+            }
+
+        # No usable evidence: rest at STALE (or surface a fresh
+        # malformed/declined probe row), never at FAILED
+        if probe_row is not None:
+            fresh = (self.now - probe_row.at).total_seconds() <= PROBE_FRESHNESS_SECONDS
+            if fresh and probe_row.status == SourceCheckStatus.MALFORMED:
+                return {
+                    "state": CheckState.UNSUPPORTED,
+                    "message": _("The plugin returned a malformed result, "
+                                 "which core does not trust: %(message)s")
+                               % {"message": probe_row.message},
+                    "blocking": False,
+                }
+            if fresh and probe_row.status == SourceCheckStatus.UNSUPPORTED:
+                return {
+                    "state": CheckState.UNSUPPORTED,
+                    "message": _("%(message)s (on-demand probe, %(minutes)d "
+                                 "minute(s) ago)")
+                               % {"message": probe_row.message,
+                                  "minutes": probe_age_minutes(self.now, probe_row.at)},
+                    "blocking": False,
+                }
+            return {
+                "state": CheckState.STALE,
+                "message": _("Not recently checked — the last on-demand probe "
+                             "ran %(minutes)d minute(s) ago, outside the "
+                             "15-minute freshness window.")
+                           % {"minutes": probe_age_minutes(self.now, probe_row.at)},
+                "blocking": False,
+            }
+        if supported:
+            return {
+                "state": CheckState.STALE,
+                "message": _("Not recently checked — no probe has run and no "
+                             "recent run left usable evidence. External "
+                             "layers are probed on demand only."),
+                "blocking": False,
+            }
+        return {"state": CheckState.UNSUPPORTED, "message": unsupported_message,
+                "blocking": False}
+
+    def _check_network_path(self):
+        return self._external_slot(
+            4,
             supported=self.source_endpoint is not None,
             unsupported_message=_("This plugin does not name its source "
-                                  "endpoint, so core cannot probe a TCP "
-                                  "connection."),
+                                  "endpoint, so core cannot probe the "
+                                  "network path."),
         )
 
     def _check_source_check(self):
-        return self._probe_backed_check(
-            CHECK_SOURCE,
+        return self._external_slot(
+            5,
             supported=connection_implements_check_source(self.connection),
             unsupported_message=_("This plugin does not implement the source "
                                   "check."),
@@ -588,7 +875,18 @@ class _ChecklistBuilder:
     # none -> OK — one misconfigured station cannot turn a healthy
     # connection red.
 
+    def _data_freshness(self):
+        """Memoized ``(check_result, stale_count)`` — computed once whether
+        reached from the ladder or consulted early by the sources-count
+        qualification of layer 5."""
+        if self._data is None:
+            self._data = self._compute_data_freshness()
+        return self._data
+
     def _check_data_freshness(self):
+        return self._data_freshness()[0]
+
+    def _compute_data_freshness(self):
         links = annotate_station_pull_activity(
             self.connection.station_links.filter(enabled=True)
         )
@@ -612,9 +910,10 @@ class _ChecklistBuilder:
                 aging += 1
 
         if not total:
-            return (CheckState.OK,
-                    _("This connection has no enabled station links."),
-                    True)
+            return ((CheckState.OK,
+                     _("This connection has no enabled station links."),
+                     True),
+                    0)
 
         link = CheckLink(
             url=reverse("network_connection_monitoring", args=(self.connection.id,)),
@@ -632,18 +931,20 @@ class _ChecklistBuilder:
             else:
                 message = _("Data is current on all %(total)d enabled "
                             "station(s).") % counts
-            return CheckState.OK, message, True, link
+            return (CheckState.OK, message, True, link), 0
         if stale == total:
-            return (CheckState.FAILED,
-                    _("All %(total)d enabled station(s) have stale data — no "
-                      "recent observations within the connection's freshness "
-                      "limit.") % counts,
-                    True, link)
-        return (CheckState.WARNING,
-                _("%(stale)d of %(total)d enabled stations have stale data — "
-                  "no recent observations within the connection's freshness "
-                  "limit.") % counts,
-                True, link)
+            return ((CheckState.FAILED,
+                     _("All %(total)d enabled station(s) have stale data — no "
+                       "recent observations within the connection's freshness "
+                       "limit.") % counts,
+                     True, link),
+                    stale)
+        return ((CheckState.WARNING,
+                 _("%(stale)d of %(total)d enabled stations have stale data — "
+                   "no recent observations within the connection's freshness "
+                   "limit.") % counts,
+                 True, link),
+                stale)
 
 
 def store_connection_health(connection, checklist, now=None):

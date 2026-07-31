@@ -25,12 +25,18 @@ from adl.core.tests.factories import (
 from adl.monitoring.constants import (
     LAYER_DATA,
     LAYER_LOCKS,
+    LAYER_NETWORK,
     LAYER_SCHEDULER,
+    LAYER_SOURCE,
     LAYER_WORKER,
+    PROVENANCE_INTERNAL,
+    PROVENANCE_LOG_CLASSIFICATION,
+    PROVENANCE_PROBE,
     CheckState,
 )
 from adl.monitoring.health import (
     evaluate_connection_health,
+    station_link_drifted,
     store_connection_health,
 )
 from adl.monitoring.models import (
@@ -87,7 +93,8 @@ class HealthEvaluatorTestCase(TestCase):
         return matches[0]
 
 
-PROBE_CHECK_IDS = ("dns_resolution", "tcp_connect", "source_check")
+# One evidence slot per external layer
+PROBE_CHECK_IDS = ("network_path", "source_check")
 
 
 class HealthyConnectionTests(HealthEvaluatorTestCase):
@@ -340,10 +347,10 @@ class LocksLayerTests(HealthEvaluatorTestCase):
         self.assertFalse(check.blocking)
 
 
-class SourceProbeLayerTests(HealthEvaluatorTestCase):
-    """Layers 4-5 are external and on-demand: the evaluator only ever reads
-    stored probe rows, rests at STALE (or UNSUPPORTED where the plugin has
-    no contract), and STALE never reaches the headline."""
+class ExternalLayerTestCase(HealthEvaluatorTestCase):
+    """Shared fixtures for the external layers 4-5: stored probe rows and
+    terminal activity-log rows, the two producers their evidence slots
+    resolve between."""
 
     def probe_row(self, check_id, status, age=None, layer="network",
                   station_link=None, message="probe message", category=None):
@@ -360,6 +367,26 @@ class SourceProbeLayerTests(HealthEvaluatorTestCase):
             at=dj_tz.now() - (age or timedelta(0)),
         )
 
+    def log_row(self, age=None, station_link=None, status=None, success=True,
+                message="", sources_count=None, error_category=None,
+                error_layer=None):
+        from adl.monitoring.models import StationLinkActivityLog
+
+        if status is None:
+            status = (StationLinkActivityLog.ActivityStatus.COMPLETED
+                      if success else StationLinkActivityLog.ActivityStatus.FAILED)
+        return StationLinkActivityLog.objects.create(
+            station_link=station_link or self.link,
+            direction="pull",
+            status=status,
+            success=success,
+            message=message,
+            sources_count=sources_count,
+            error_category=error_category,
+            error_layer=error_layer,
+            time=dj_tz.now() - (age or timedelta(0)),
+        )
+
     def with_supported_contract(self):
         """A connection whose plugin implements the whole contract, without
         needing a polymorphic subclass: the endpoint via an instance
@@ -372,6 +399,12 @@ class SourceProbeLayerTests(HealthEvaluatorTestCase):
         )
         patcher.start()
         self.addCleanup(patcher.stop)
+
+
+class SourceProbeLayerTests(ExternalLayerTestCase):
+    """The on-demand probe as slot evidence: the evaluator only ever reads
+    stored probe rows, rests at STALE (or UNSUPPORTED where the plugin has
+    no contract), and STALE never reaches the headline."""
 
     def test_unsupported_contract_reports_unsupported_never_stale(self):
         self.make_healthy()
@@ -403,7 +436,7 @@ class SourceProbeLayerTests(HealthEvaluatorTestCase):
 
         checklist = self.evaluate()
 
-        self.assertEqual(self.check(checklist, "dns_resolution").state, CheckState.STALE)
+        self.assertEqual(self.check(checklist, "network_path").state, CheckState.STALE)
         self.assertEqual(checklist.status, CheckState.OK)
 
     def test_result_inside_fifteen_minutes_is_fresh(self):
@@ -413,10 +446,11 @@ class SourceProbeLayerTests(HealthEvaluatorTestCase):
 
         checklist = self.evaluate()
 
-        check = self.check(checklist, "dns_resolution")
+        check = self.check(checklist, "network_path")
         self.assertEqual(check.state, CheckState.OK)
         # The rendered message carries the result's age and origin
         self.assertIn("on-demand probe", check.message)
+        self.assertEqual(check.provenance, PROVENANCE_PROBE)
 
     def test_fresh_failed_dns_leads_the_headline_and_skips_below(self):
         from adl.monitoring.constants import LAYER_NETWORK
@@ -430,8 +464,8 @@ class SourceProbeLayerTests(HealthEvaluatorTestCase):
 
         self.assertEqual(checklist.status, CheckState.FAILED)
         self.assertEqual(checklist.first_failing_layer, LAYER_NETWORK)
-        self.assertEqual(checklist.headline_check_id, "dns_resolution")
-        for check_id in ("tcp_connect", "source_check", "data_freshness"):
+        self.assertEqual(checklist.headline_check_id, "network_path")
+        for check_id in ("source_check", "data_freshness"):
             self.assertEqual(self.check(checklist, check_id).state,
                              CheckState.SKIPPED, check_id)
 
@@ -462,7 +496,7 @@ class SourceProbeLayerTests(HealthEvaluatorTestCase):
 
         checklist = self.evaluate()
 
-        self.assertEqual(self.check(checklist, "dns_resolution").state, CheckState.STALE)
+        self.assertEqual(self.check(checklist, "network_path").state, CheckState.STALE)
         self.assertEqual(checklist.status, CheckState.OK)
 
     def test_malformed_probe_row_reports_unsupported_not_a_verdict(self):
@@ -487,6 +521,343 @@ class SourceProbeLayerTests(HealthEvaluatorTestCase):
         for check_id in PROBE_CHECK_IDS:
             self.assertEqual(self.check(checklist, check_id).state,
                              CheckState.SKIPPED, check_id)
+
+
+class LogEvidenceTests(ExternalLayerTestCase):
+    """What already happened counts as evidence about layers 4-5: successes
+    are OK evidence, write-time-stamped failures are trusted, unstamped
+    failures fall back to the read-time text rules — and rows that merely
+    look like evidence (SKIPPED, drifted links) are excluded."""
+
+    def test_successful_run_contributes_ok_evidence_to_both_external_layers(self):
+        self.make_healthy()
+        self.log_row(age=timedelta(minutes=5), sources_count=3)
+
+        checklist = self.evaluate()
+
+        for check_id in PROBE_CHECK_IDS:
+            check = self.check(checklist, check_id)
+            self.assertEqual(check.state, CheckState.OK, check_id)
+            self.assertEqual(check.provenance, PROVENANCE_INTERNAL, check_id)
+
+    def test_log_evidence_needs_no_probe_contract(self):
+        # The stub plugin implements no source-check contract, yet a real
+        # run is still evidence — the ratchet can go green after a fix
+        self.make_healthy()
+        self.log_row(age=timedelta(minutes=5), sources_count=3)
+
+        checklist = self.evaluate()
+
+        self.assertEqual(self.check(checklist, "network_path").state, CheckState.OK)
+
+    def test_zero_sources_success_is_layer_four_ok_but_no_layer_five_ok(self):
+        self.make_healthy()
+        self.log_row(age=timedelta(minutes=5), sources_count=0)
+
+        checklist = self.evaluate()
+
+        self.assertEqual(self.check(checklist, "network_path").state, CheckState.OK)
+        # The one thing the run did not do is transfer bytes
+        self.assertNotEqual(self.check(checklist, "source_check").state, CheckState.OK)
+
+    def test_skipped_rows_are_not_evidence(self):
+        # A lock collision must not manufacture fake layer-4 OK evidence
+        from adl.monitoring.models import StationLinkActivityLog
+
+        self.make_healthy()
+        self.log_row(age=timedelta(minutes=5), success=False,
+                     status=StationLinkActivityLog.ActivityStatus.SKIPPED)
+
+        checklist = self.evaluate()
+
+        for check_id in PROBE_CHECK_IDS:
+            self.assertNotEqual(self.check(checklist, check_id).state,
+                                CheckState.OK, check_id)
+
+    def test_write_time_stamped_failure_is_trusted_and_renders_normalised_text(self):
+        self.make_healthy()
+        raw = "530 Login incorrect: password 'hunter2'"
+        self.log_row(age=timedelta(minutes=5), success=False, message=raw,
+                     error_category="AUTH_FAILED", error_layer=5)
+
+        checklist = self.evaluate()
+
+        check = self.check(checklist, "source_check")
+        self.assertEqual(check.state, CheckState.FAILED)
+        self.assertEqual(check.provenance, PROVENANCE_INTERNAL)
+        self.assertNotIn("hunter2", check.message)
+        self.assertEqual(checklist.first_failing_layer, LAYER_SOURCE)
+
+    def test_unstamped_failure_falls_back_to_read_time_classification(self):
+        self.make_healthy()
+        self.log_row(age=timedelta(minutes=5), success=False,
+                     message="[Errno -2] Name or service not known")
+
+        checklist = self.evaluate()
+
+        check = self.check(checklist, "network_path")
+        self.assertEqual(check.state, CheckState.FAILED)
+        self.assertEqual(check.provenance, PROVENANCE_LOG_CLASSIFICATION)
+        self.assertNotIn("Errno", check.message)
+        self.assertEqual(checklist.first_failing_layer, LAYER_NETWORK)
+
+    def test_ambiguous_failure_text_yields_no_classification(self):
+        self.make_healthy()
+        self.log_row(age=timedelta(minutes=5), success=False,
+                     message="Something went wrong")
+
+        checklist = self.evaluate()
+
+        for check_id in PROBE_CHECK_IDS:
+            self.assertEqual(self.check(checklist, check_id).state,
+                             CheckState.UNSUPPORTED, check_id)
+        self.assertEqual(checklist.status, CheckState.OK)
+
+    def test_rule_without_a_layer_creates_no_external_slot(self):
+        # "timed out" cannot tell a connect timeout from a read timeout;
+        # the rule claims the category but declines the layer, so the row
+        # stays layer-6 detail
+        self.make_healthy()
+        self.log_row(age=timedelta(minutes=5), success=False,
+                     message="Connection timed out")
+
+        checklist = self.evaluate()
+
+        for check_id in PROBE_CHECK_IDS:
+            self.assertNotEqual(self.check(checklist, check_id).state,
+                                CheckState.FAILED, check_id)
+        self.assertEqual(checklist.status, CheckState.OK)
+
+    def test_log_older_than_twice_the_interval_is_not_evidence(self):
+        # Interval is 15 minutes, so the log freshness window is 30
+        self.make_healthy()
+        self.log_row(age=timedelta(minutes=35), sources_count=3)
+
+        checklist = self.evaluate()
+
+        for check_id in PROBE_CHECK_IDS:
+            self.assertNotEqual(self.check(checklist, check_id).state,
+                                CheckState.OK, check_id)
+
+    def test_drifted_station_link_is_excluded_from_layer_five_evidence_only(self):
+        self.make_healthy()
+        self.log_row(age=timedelta(minutes=5), success=False,
+                     message="530 Login incorrect",
+                     error_category="AUTH_FAILED", error_layer=5)
+
+        with patch("adl.monitoring.health.station_link_drifted", return_value=True):
+            checklist = self.evaluate()
+
+        # Our own configuration fault is not attributed to the partner
+        self.assertNotEqual(self.check(checklist, "source_check").state,
+                            CheckState.FAILED)
+        self.assertEqual(checklist.status, CheckState.OK)
+
+    def test_drifted_station_link_success_still_feeds_layer_four(self):
+        self.make_healthy()
+        self.log_row(age=timedelta(minutes=5), sources_count=3)
+
+        with patch("adl.monitoring.health.station_link_drifted", return_value=True):
+            checklist = self.evaluate()
+
+        self.assertEqual(self.check(checklist, "network_path").state, CheckState.OK)
+        self.assertNotEqual(self.check(checklist, "source_check").state, CheckState.OK)
+
+
+class SlotResolutionTests(ExternalLayerTestCase):
+    """One slot per external layer: freshest observation wins, ties go to
+    the probe, and the superseded observation is retained with its
+    provenance."""
+
+    def test_fresher_log_beats_an_older_probe_and_retains_it(self):
+        self.make_healthy()
+        self.with_supported_contract()
+        self.probe_row("dns_resolution", "FAILED", age=timedelta(minutes=10),
+                       category="DNS_FAILURE")
+        self.log_row(age=timedelta(minutes=2), sources_count=3)
+
+        checklist = self.evaluate()
+
+        check = self.check(checklist, "network_path")
+        self.assertEqual(check.state, CheckState.OK)
+        self.assertEqual(check.provenance, PROVENANCE_INTERNAL)
+        self.assertIsNotNone(check.superseded)
+        self.assertEqual(check.superseded.provenance, PROVENANCE_PROBE)
+        self.assertEqual(check.superseded.state, CheckState.FAILED)
+        self.assertIsNotNone(check.superseded_message)
+
+    def test_fresher_probe_beats_an_older_log(self):
+        self.make_healthy()
+        self.with_supported_contract()
+        self.log_row(age=timedelta(minutes=10), success=False,
+                     message="[Errno 111] Connection refused")
+        self.probe_row("dns_resolution", "OK", age=timedelta(minutes=2))
+        self.probe_row("tcp_connect", "OK", age=timedelta(minutes=2))
+
+        checklist = self.evaluate()
+
+        check = self.check(checklist, "network_path")
+        self.assertEqual(check.state, CheckState.OK)
+        self.assertEqual(check.provenance, PROVENANCE_PROBE)
+        self.assertEqual(check.superseded.provenance, PROVENANCE_LOG_CLASSIFICATION)
+
+    def test_a_tie_resolves_to_the_probe(self):
+        self.make_healthy()
+        self.with_supported_contract()
+        at = dj_tz.now() - timedelta(minutes=5)
+        row = self.probe_row("dns_resolution", "OK")
+        row.at = at
+        row.save()
+        log = self.log_row(success=False, message="Connection refused")
+        log.time = at
+        log.save()
+
+        checklist = self.evaluate()
+
+        self.assertEqual(self.check(checklist, "network_path").provenance, PROVENANCE_PROBE)
+
+
+class SourcesCountTests(ExternalLayerTestCase):
+    """The sources count qualifies layer 5 only when layer 6 is already
+    red — no standalone alarm, and silence (NULL) is never read as fault.
+    The window is layer 6's own freshness-error limit (12x the 15-minute
+    interval = 180 minutes)."""
+
+    def stale_data(self):
+        ObservationRecordFactory(
+            station=self.link.station,
+            connection=self.connection,
+            time=dj_tz.now() - timedelta(hours=6),
+        )
+
+    def test_data_stale_and_every_terminal_log_at_zero_fails_layer_five(self):
+        self.make_healthy()
+        self.stale_data()
+        # Old enough to be outside the 30-minute plain-evidence window, so
+        # only the sources-count rule speaks for layer 5
+        self.log_row(age=timedelta(minutes=100), sources_count=0)
+        self.log_row(age=timedelta(minutes=60), sources_count=0)
+
+        checklist = self.evaluate()
+
+        self.assertEqual(checklist.status, CheckState.FAILED)
+        self.assertEqual(checklist.first_failing_layer, LAYER_SOURCE)
+        check = self.check(checklist, "source_check")
+        self.assertEqual(check.state, CheckState.FAILED)
+        self.assertEqual(check.provenance, PROVENANCE_INTERNAL)
+
+    def test_layer_six_still_reports_its_observed_verdict_below_the_sources_verdict(self):
+        self.make_healthy()
+        self.stale_data()
+        self.log_row(age=timedelta(minutes=60), sources_count=0)
+
+        checklist = self.evaluate()
+
+        # The data row triggered the layer-5 verdict; hiding it as SKIPPED
+        # would misreport a genuinely observed fact
+        self.assertEqual(self.check(checklist, "data_freshness").state,
+                         CheckState.FAILED)
+
+    def test_any_non_zero_count_reports_layer_five_ok_and_anchors_to_data(self):
+        self.make_healthy()
+        self.stale_data()
+        self.log_row(age=timedelta(minutes=100), sources_count=0)
+        self.log_row(age=timedelta(minutes=60), sources_count=4)
+
+        checklist = self.evaluate()
+
+        self.assertEqual(self.check(checklist, "source_check").state, CheckState.OK)
+        self.assertEqual(checklist.status, CheckState.FAILED)
+        self.assertEqual(checklist.first_failing_layer, LAYER_DATA)
+
+    def test_with_data_green_the_sources_count_changes_nothing(self):
+        # The date-rollover false alarm, dissolved: zero sources on a
+        # healthy connection raises no alarm
+        self.make_healthy()
+        ObservationRecordFactory(
+            station=self.link.station, connection=self.connection,
+            time=dj_tz.now() - timedelta(minutes=10),
+        )
+        self.log_row(age=timedelta(minutes=60), sources_count=0)
+
+        checklist = self.evaluate()
+
+        self.assertEqual(checklist.status, CheckState.OK)
+        self.assertNotEqual(self.check(checklist, "source_check").state,
+                            CheckState.FAILED)
+
+    def test_partial_staleness_is_not_red_so_the_count_stays_silent(self):
+        # One of two stations stale rolls layer 6 up to WARNING, not
+        # FAILED — the count qualifies layer 5 only when layer 6 is red
+        fresh_link = StationLinkFactory(network_connection=self.connection)
+        self.make_healthy()
+        self.stale_data()
+        ObservationRecordFactory(
+            station=fresh_link.station, connection=self.connection,
+            time=dj_tz.now() - timedelta(minutes=10),
+        )
+        self.log_row(age=timedelta(minutes=60), sources_count=0)
+        self.log_row(age=timedelta(minutes=60), station_link=fresh_link,
+                     sources_count=0)
+
+        checklist = self.evaluate()
+
+        self.assertNotEqual(self.check(checklist, "source_check").state,
+                            CheckState.FAILED)
+        self.assertEqual(checklist.status, CheckState.WARNING)
+        self.assertEqual(checklist.first_failing_layer, LAYER_DATA)
+
+    def test_a_null_count_disqualifies_the_zero_sources_claim(self):
+        # NULL means "did not look" — not every terminal log is at 0, so
+        # the diagnostic declines rather than reading silence as fault
+        self.make_healthy()
+        self.stale_data()
+        self.log_row(age=timedelta(minutes=100), sources_count=0)
+        self.log_row(age=timedelta(minutes=60), sources_count=None)
+
+        checklist = self.evaluate()
+
+        self.assertNotEqual(self.check(checklist, "source_check").state,
+                            CheckState.FAILED)
+        self.assertEqual(checklist.first_failing_layer, LAYER_DATA)
+
+    def test_drifted_links_are_excluded_from_the_sources_count(self):
+        # The only zero-sources logs belong to a drifted link; a fault in
+        # our configuration must not indict the partner's server
+        self.make_healthy()
+        self.stale_data()
+        self.log_row(age=timedelta(minutes=60), sources_count=0)
+
+        with patch("adl.monitoring.health.station_link_drifted", return_value=True):
+            checklist = self.evaluate()
+
+        self.assertNotEqual(self.check(checklist, "source_check").state,
+                            CheckState.FAILED)
+        self.assertEqual(checklist.first_failing_layer, LAYER_DATA)
+
+
+class StationLinkDriftedTests(TestCase):
+    """The drift predicate is full_clean() and nothing more; only
+    ValidationError means drift — a crash in a validator is not evidence
+    the configuration is wrong."""
+
+    def test_a_valid_stored_link_is_not_drifted(self):
+        self.assertFalse(station_link_drifted(StationLinkFactory()))
+
+    def test_a_link_failing_validation_is_drifted(self):
+        from adl.core.models import StationLink
+
+        # Required fields missing: full_clean raises ValidationError
+        self.assertTrue(station_link_drifted(StationLink()))
+
+    def test_a_crashing_validator_makes_no_drift_claim(self):
+        class ExplodingLink:
+            id = 99
+
+            def full_clean(self, validate_unique=True):
+                raise RuntimeError("boom")
+
+        self.assertFalse(station_link_drifted(ExplodingLink()))
 
 
 class StoredVerdictTests(HealthEvaluatorTestCase):

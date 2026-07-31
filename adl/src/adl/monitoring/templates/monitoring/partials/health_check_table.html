@@ -3,6 +3,7 @@ One band of diagnostic checks. Colour carries the verdict axis only —
 epistemic states (skipped, stale, unsupported, disabled, misconfigured)
 render grey via --muted and are distinguished by wording.
 {% endcomment %}
+{% load i18n %}
 <table class="listing">
     <tbody>
     {% for check in checks %}
@@ -17,6 +18,12 @@ render grey via --muted and are distinguished by wording.
                 {{ check.message }}
                 {% if check.link %}
                     <a href="{{ check.link.url }}">{{ check.link.label }}</a>
+                {% endif %}
+                {% if check.superseded_message %}
+                    {# The slot retains the observation the winner displaced #}
+                    <p class="health-check__superseded">
+                        {% blocktrans with observation=check.superseded_message %}Superseded: {{ observation }}{% endblocktrans %}
+                    </p>
                 {% endif %}
             </td>
         </tr>
