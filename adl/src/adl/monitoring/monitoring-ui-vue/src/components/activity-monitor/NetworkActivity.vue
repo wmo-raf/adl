@@ -64,6 +64,36 @@ const getSeverityClass = (status) => {
   return map[status] || "info"
 }
 
+// The stored ingestion-diagnostic verdict, read as-is from the API. Only
+// OK/WARNING/FAILED carry colour — every other state (including "no verdict
+// yet") renders grey and is distinguished by wording.
+const health = computed(() => connection.value?.health || null)
+
+const healthBadgeClass = computed(() => {
+  const map = {
+    OK: "health-badge--ok",
+    WARNING: "health-badge--warning",
+    FAILED: "health-badge--failed"
+  }
+  return map[health.value?.status] || "health-badge--muted"
+})
+
+const healthLayerLabels = {
+  scheduler: "Scheduler",
+  worker: "Worker & queue",
+  locks: "Station locks",
+  network: "Network path",
+  source: "Source",
+  data: "Data"
+}
+
+const healthLabel = computed(() => {
+  const status = health.value?.status
+  if (!status) return "No verdict yet"
+  const layer = healthLayerLabels[health.value?.first_failing_layer]
+  return layer ? `${status} · ${layer}` : status
+})
+
 const filteredStations = computed(() => {
   let list = stations.value || []
 
@@ -107,6 +137,15 @@ const filteredStations = computed(() => {
         <div class="header-title-group">
           <h1 class="connection-name">{{ connection?.name || 'Station Monitor' }}</h1>
           <div class="header-badges">
+            <a
+                v-if="health?.diagnostic_url"
+                class="meta-badge health-badge"
+                :class="healthBadgeClass"
+                :href="health.diagnostic_url"
+                :title="health?.since_human ? `In this state since ${health.since_human} — open the ingestion diagnostic` : 'Open the ingestion diagnostic'"
+            >
+              <i class="pi pi-heart"></i> {{ healthLabel }}
+            </a>
                 <span class="meta-badge" v-if="connection?.enabled">
                     <i class="pi pi-check-circle" style="color: #16a34a"></i> Enabled
                 </span>
@@ -336,6 +375,31 @@ const filteredStations = computed(() => {
   padding: 4px 10px;
   border-radius: 4px;
   border: 1px solid #e2e8f0;
+}
+
+.health-badge {
+  text-decoration: none;
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.health-badge--ok {
+  color: #15803d;
+  border-color: #15803d;
+}
+
+.health-badge--warning {
+  color: #b45309;
+  border-color: #b45309;
+}
+
+.health-badge--failed {
+  color: #b91c1c;
+  border-color: #b91c1c;
+}
+
+.health-badge--muted {
+  color: #64748b;
 }
 
 /* SUMMARY CARDS */

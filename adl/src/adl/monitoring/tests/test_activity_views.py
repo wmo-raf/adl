@@ -90,6 +90,46 @@ class NetworkConnectionActivityViewTests(ActivityViewStatusTestCase):
 
         self.assertEqual(data["stations"][0]["pipeline_status"], "active")
 
+    def test_connection_payload_carries_a_health_verdict_before_the_first_sweep(self):
+        # No health row yet — the day-one state. The panel still renders a
+        # verdict slot, with the diagnostic link always present.
+        data = self.get()
+
+        health = data["connection"]["health"]
+        self.assertIsNone(health["status"])
+        self.assertEqual(
+            health["diagnostic_url"],
+            reverse("connection_health", args=(self.connection.id,)),
+        )
+
+    def test_connection_payload_reports_the_stored_verdict(self):
+        from adl.monitoring.models import NetworkConnectionHealth
+
+        NetworkConnectionHealth.objects.create(
+            connection=self.connection,
+            status="FAILED",
+            first_failing_layer="scheduler",
+            headline_message="No schedule entry runs this connection.",
+            since=self.ago(hours=3),
+            evaluated_at=self.now,
+        )
+
+        data = self.get()
+
+        health = data["connection"]["health"]
+        self.assertEqual(health["status"], "FAILED")
+        self.assertEqual(health["first_failing_layer"], "scheduler")
+        self.assertIsNotNone(health["since"])
+
+    def test_the_panel_read_never_triggers_an_evaluation(self):
+        # The panel reads the stored verdict; evaluating belongs to the sweep
+        from unittest.mock import patch
+
+        with patch("adl.monitoring.health.evaluate_connection_health") as evaluate:
+            self.get()
+
+        evaluate.assert_not_called()
+
 
 class DispatchChannelMonitoringViewTests(ActivityViewStatusTestCase):
     def setUp(self):

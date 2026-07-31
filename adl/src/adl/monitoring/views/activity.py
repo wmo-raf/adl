@@ -82,6 +82,11 @@ class NetworkConnectionActivityView(APIView):
                 "data_viewer_url": data_viewer_url_base,  # You might want to append params here usually
             })
         
+        # The stored ingestion-diagnostic verdict — the sweep's row, read
+        # as-is. The panel must never trigger an evaluation cascade; before
+        # the first sweep there is no row and the status is simply null.
+        health = getattr(connection, "health", None)
+
         return Response({
             "connection": {
                 "id": connection.id,
@@ -90,6 +95,13 @@ class NetworkConnectionActivityView(APIView):
                 "interval_minutes": connection.interval,
                 "plugin": connection.plugin_name,
                 "stations_count": stations_count,
+                "health": {
+                    "status": health.status if health else None,
+                    "first_failing_layer": health.first_failing_layer if health else None,
+                    "since": health.since if health else None,
+                    "since_human": naturaltime(health.since) if health else None,
+                    "diagnostic_url": reverse("connection_health", args=(connection.id,)),
+                },
             },
             "summary": summary,
             "stations": stations_output,

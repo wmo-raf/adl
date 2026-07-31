@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 
 import logging
 
@@ -9,6 +9,7 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone as dj_timezone
 from django.utils.translation import gettext as _
+from wagtail.admin.paginator import WagtailPaginator
 
 from adl.core.broker import get_ingestion_queue_health
 from adl.core.models import NetworkConnection, StationLink
@@ -21,7 +22,11 @@ from adl.core.source_checks import (
 
 from ..constants import LAYER_LABELS, LAYER_SOURCE, PROBE_LAYER_IDS
 from ..health import EVALUATED_LAYERS, evaluate_connection_health, probe_age_minutes
-from ..models import NetworkConnectionHealth, SourceProbeResult
+from ..models import (
+    NetworkConnectionHealth,
+    NetworkConnectionHealthTransition,
+    SourceProbeResult,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -146,6 +151,31 @@ def connection_health(request, connection_id):
         for layer in EVALUATED_LAYERS
     ]
 
+    # Transitions at the bottom of the same page, paginated in place, read
+    # from the append-only log. Flapping surfaces as a count of verdict
+    # changes over the retained window — the creation row (no prior verdict)
+    # is a starting point, not a flap, and rows past retention are excluded
+    # even when the daily cleanup has not pruned them yet.
+    now = dj_timezone.now()
+    retention_days = NetworkConnectionHealthTransition.RETENTION_DAYS
+    transitions = connection.health_transitions.order_by("-at")
+    verdict_changes = transitions.filter(
+        at__gte=now - timedelta(days=retention_days),
+        from_status__isnull=False,
+    ).count()
+    paginator = WagtailPaginator(transitions, 20)
+    transitions_page = paginator.get_page(request.GET.get("p", 1))
+    transition_rows = [
+        {
+            "at": transition.at,
+            "from_status": transition.from_status,
+            "from_layer_label": LAYER_LABELS.get(transition.from_first_failing_layer),
+            "to_status": transition.to_status,
+            "to_layer_label": LAYER_LABELS.get(transition.to_first_failing_layer),
+        }
+        for transition in transitions_page
+    ]
+
     context = {
         "breadcrumbs_items": [
             {"url": reverse("wagtailadmin_home"), "label": _("Home")},
@@ -165,6 +195,11 @@ def connection_health(request, connection_id):
                             and connection.enabled),
         "latest_run_was_manual": latest_run_was_manual(heartbeat),
         "heartbeat": heartbeat,
+        "transitions_page": transitions_page,
+        "transition_rows": transition_rows,
+        "elided_page_range": paginator.get_elided_page_range(transitions_page.number),
+        "verdict_changes": verdict_changes,
+        "transitions_retention_days": retention_days,
     }
     return render(request, "monitoring/connection_health.html", context=context)
 

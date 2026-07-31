@@ -3,12 +3,19 @@ Seam-3 tests for the per-connection diagnostic page, following the pattern
 of ``core/tests/test_dispatch_admin_actions.py``.
 """
 
+from datetime import timedelta
+from unittest.mock import patch
+
 from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.urls import reverse
+from django.utils import timezone as dj_timezone
 
 from adl.core.tests.factories import StationLinkFactory
-from adl.monitoring.models import NetworkConnectionHealth
+from adl.monitoring.models import (
+    NetworkConnectionHealth,
+    NetworkConnectionHealthTransition,
+)
 
 
 class HealthPageTestCase(TestCase):
@@ -87,6 +94,128 @@ class ConnectionsListingLinkTests(HealthPageTestCase):
         buttons = get_connection_list_more_buttons(self.connection)
 
         self.assertIn(self.url, [button.url for button in buttons])
+
+
+class ListingHealthColumnTests(HealthPageTestCase):
+    """The Connections listing surfaces the stored headline verdict. Both
+    listing views render a base-class-safe cell through this one column; the
+    polymorphic listing itself cannot render a base-class NetworkConnection
+    (no viewset registers the base model), so the column is the testable
+    seam — the same seam ``ConnectionsListingLinkTests`` uses."""
+
+    def render_cell(self):
+        from adl.core.table import ConnectionHealthColumn
+
+        column = ConnectionHealthColumn("health", label="Health")
+        return column.render_cell_html(
+            self.connection, {"request": None, "table": None, "row": None}
+        )
+
+    def test_a_connection_with_no_health_row_yet_renders_a_verdict_cell(self):
+        html = self.render_cell()
+
+        self.assertIn("status-badge--muted", html)
+        self.assertIn("No verdict yet", html)
+        self.assertIn(self.url, html)
+
+    def test_a_stored_verdict_renders_as_the_shared_badge(self):
+        NetworkConnectionHealth.objects.create(
+            connection=self.connection,
+            status="FAILED",
+            first_failing_layer="scheduler",
+            headline_message="No schedule entry runs this connection.",
+            since=dj_timezone.now(),
+            evaluated_at=dj_timezone.now(),
+        )
+        self.connection.refresh_from_db()
+
+        html = self.render_cell()
+
+        self.assertIn("status-badge--failed", html)
+        self.assertIn("FAILED", html)
+        self.assertIn(self.url, html)
+
+    def test_the_listing_cell_reads_the_stored_verdict_and_never_evaluates(self):
+        with patch("adl.monitoring.health.evaluate_connection_health") as evaluate:
+            self.render_cell()
+
+        evaluate.assert_not_called()
+
+
+class TransitionHistoryTests(HealthPageTestCase):
+    """Transitions render at the bottom of the diagnostic page, paginated in
+    place, read from the append-only log — never recomputed on read."""
+
+    def transition(self, at, from_status="OK", to_status="FAILED",
+                   from_layer=None, to_layer="scheduler"):
+        return NetworkConnectionHealthTransition.objects.create(
+            connection=self.connection,
+            at=at,
+            from_status=from_status,
+            from_first_failing_layer=from_layer,
+            to_status=to_status,
+            to_first_failing_layer=to_layer,
+        )
+
+    def test_page_renders_with_no_transitions_at_all(self):
+        # Day one: the sweep has never moved the verdict
+        response = self.client.get(self.url)
+
+        self.assertContains(response, "Verdict history")
+        self.assertContains(response, "No verdict changes recorded yet")
+
+    def test_transitions_render_with_both_verdicts_and_the_layer(self):
+        self.transition(dj_timezone.now())
+
+        response = self.client.get(self.url)
+
+        self.assertContains(response, "health-transition")
+        self.assertContains(response, "status-badge--failed")
+        self.assertContains(response, "Scheduler")
+
+    def test_the_first_recorded_verdict_row_says_so(self):
+        # The row the sweep writes on creation has no prior verdict — it is
+        # a starting point, not a change
+        NetworkConnectionHealthTransition.objects.create(
+            connection=self.connection,
+            at=dj_timezone.now(),
+            from_status=None,
+            to_status="OK",
+        )
+
+        response = self.client.get(self.url)
+
+        self.assertContains(response, "First recorded verdict")
+
+    def test_transitions_paginate_in_place(self):
+        now = dj_timezone.now()
+        for i in range(25):
+            self.transition(now - timedelta(minutes=i))
+
+        page_one = self.client.get(self.url)
+        page_two = self.client.get(self.url + "?p=2")
+
+        self.assertEqual(page_one.content.decode().count('class="health-transition"'), 20)
+        self.assertEqual(page_two.content.decode().count('class="health-transition"'), 5)
+        self.assertContains(page_one, "Page 1 of 2")
+
+    def test_flapping_is_a_count_of_changes_over_the_retained_window(self):
+        now = dj_timezone.now()
+        # The creation row is a starting point, not a flap
+        NetworkConnectionHealthTransition.objects.create(
+            connection=self.connection, at=now - timedelta(days=5),
+            from_status=None, to_status="OK",
+        )
+        for i in range(3):
+            self.transition(now - timedelta(days=i + 1))
+        # Older than the 90-day retention window: not counted even if the
+        # daily cleanup has not pruned it yet
+        self.transition(now - timedelta(days=120))
+
+        response = self.client.get(self.url)
+
+        self.assertContains(response, "3 verdict changes")
+        self.assertContains(response, "90 days")
 
 
 class StationLinkDriftBannerTests(HealthPageTestCase):
