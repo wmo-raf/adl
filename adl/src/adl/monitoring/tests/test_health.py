@@ -35,6 +35,7 @@ from adl.monitoring.constants import (
     CheckState,
 )
 from adl.monitoring.health import (
+    configuration_drift,
     evaluate_connection_health,
     station_link_drifted,
     store_connection_health,
@@ -858,6 +859,141 @@ class StationLinkDriftedTests(TestCase):
                 raise RuntimeError("boom")
 
         self.assertFalse(station_link_drifted(ExplodingLink()))
+
+    def test_drift_names_the_offending_fields_from_message_dict(self):
+        from adl.core.models import StationLink
+
+        drift = configuration_drift(StationLink())
+
+        self.assertTrue(drift.drifted)
+        self.assertTrue(drift.evaluated)
+        self.assertIn("station", drift.fields)
+        self.assertTrue(any("station" in message for message in drift.messages))
+
+
+class ConnectionConfigurationDriftTests(HealthEvaluatorTestCase):
+    """Connection-scope drift: full_clean(validate_unique=False) and nothing
+    more. A drifted connection is MISCONFIGURED in the precondition band and
+    short-circuits every layer below; DISABLED still outranks it; a plugin
+    with no clean() override reports UNSUPPORTED, never clean."""
+
+    def configuration_check(self, checklist):
+        matches = [c for c in checklist.precondition if c.id == "configuration_valid"]
+        self.assertEqual(len(matches), 1)
+        return matches[0]
+
+    def test_misconfigured_connection_short_circuits_the_ladder(self):
+        self.make_healthy()
+        # A stored value the admin form would now reject: below the
+        # MinValueValidator(1) bound on the interval
+        self.connection.plugin_processing_interval = 0
+
+        checklist = self.evaluate()
+
+        self.assertEqual(checklist.status, CheckState.MISCONFIGURED)
+        self.assertIsNone(checklist.first_failing_layer)
+        self.assertEqual(checklist.headline_check_id, "configuration_valid")
+        self.assertIn("plugin_processing_interval", checklist.headline_message)
+        for check in checklist.checks:
+            self.assertEqual(check.state, CheckState.SKIPPED, check.id)
+
+    def test_misconfigured_row_names_the_field_in_the_precondition_band(self):
+        self.make_healthy()
+        self.connection.plugin_processing_interval = 0
+
+        check = self.configuration_check(self.evaluate())
+
+        self.assertEqual(check.state, CheckState.MISCONFIGURED)
+        self.assertIn("plugin_processing_interval", check.message)
+
+    def test_misconfigured_connection_never_dials_the_broker(self):
+        self.make_healthy()
+        self.connection.plugin_processing_interval = 0
+
+        with patch("adl.monitoring.health.get_ingestion_queue_health") as mock_broker:
+            evaluate_connection_health(self.connection)
+
+        mock_broker.assert_not_called()
+
+    def test_disabled_outranks_misconfigured(self):
+        self.connection.plugin_processing_enabled = False
+        self.connection.plugin_processing_interval = 0
+
+        checklist = self.evaluate()
+
+        self.assertEqual(checklist.status, CheckState.DISABLED)
+        self.assertEqual(len(checklist.precondition), 1)
+
+    def test_plugin_without_clean_override_reports_unsupported_not_clean(self):
+        self.make_healthy()
+
+        checklist = self.evaluate()
+
+        check = self.configuration_check(checklist)
+        # Silence must not read as validation — but it is advisory, so the
+        # connection's verdict is untouched
+        self.assertEqual(check.state, CheckState.UNSUPPORTED)
+        self.assertFalse(check.blocking)
+        self.assertEqual(checklist.status, CheckState.OK)
+
+    def test_plugin_with_a_passing_clean_override_reports_ok(self):
+        self.make_healthy()
+
+        with patch("adl.monitoring.health.connection_declares_validation_rules",
+                   return_value=True):
+            check = self.configuration_check(self.evaluate())
+
+        self.assertEqual(check.state, CheckState.OK)
+
+    def test_a_crashing_validator_makes_no_drift_claim(self):
+        from adl.core.models import NetworkConnection
+
+        self.make_healthy()
+
+        with patch.object(NetworkConnection, "full_clean",
+                          side_effect=RuntimeError("boom")):
+            checklist = self.evaluate()
+
+        check = self.configuration_check(checklist)
+        self.assertEqual(check.state, CheckState.UNSUPPORTED)
+        self.assertFalse(check.blocking)
+        # Not evidence of drift: the ladder is still evaluated and the
+        # connection's verdict is whatever the ladder says
+        self.assertEqual(checklist.status, CheckState.OK)
+
+    def test_every_offending_field_is_named(self):
+        # Ordinary field validation catches drift with no clean() override
+        # needed — and a multi-field drift names each field
+        self.make_healthy()
+        self.connection.plugin_processing_interval = 0
+        self.connection.ingest_timeout_seconds = 5
+
+        checklist = self.evaluate()
+
+        self.assertEqual(checklist.status, CheckState.MISCONFIGURED)
+        self.assertIn("plugin_processing_interval", checklist.headline_message)
+        self.assertIn("ingest_timeout_seconds", checklist.headline_message)
+
+    def test_one_drifted_station_link_does_not_turn_a_healthy_connection_red(self):
+        self.make_healthy()
+
+        with patch("adl.monitoring.health.station_link_drifted", return_value=True):
+            checklist = self.evaluate()
+
+        self.assertEqual(checklist.status, CheckState.OK)
+        self.assertNotEqual(checklist.status, CheckState.MISCONFIGURED)
+
+    def test_misconfigured_verdict_is_stored_with_null_layer(self):
+        self.make_healthy()
+        self.connection.plugin_processing_interval = 0
+
+        checklist = self.evaluate()
+        health = store_connection_health(self.connection, checklist)
+
+        self.assertEqual(health.status, CheckState.MISCONFIGURED)
+        self.assertIsNone(health.first_failing_layer)
+        transition = NetworkConnectionHealthTransition.objects.get()
+        self.assertEqual(transition.to_status, CheckState.MISCONFIGURED)
 
 
 class StoredVerdictTests(HealthEvaluatorTestCase):

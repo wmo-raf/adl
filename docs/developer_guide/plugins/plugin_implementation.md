@@ -153,6 +153,27 @@ you omit it, station links will not appear in the admin and data collection
 will silently do nothing.
 ```
 
+#### Validation rules: `clean()` must not perform I/O
+
+Any `clean()` override you add to your `NetworkConnection` or `StationLink`
+subclass does double duty. Besides validating the admin form at save time, the
+ingestion diagnostic re-runs `full_clean()` against **stored** rows to detect
+configuration drift — a row that was valid when written but no longer passes
+today's rules. Every rule you add improves both the form and the diagnostic in
+one edit, retroactively, with no new contract to implement.
+
+Because of this, `clean()` is called **outside the request cycle** (from the
+periodic health sweep and the diagnostic page). It must therefore be a pure
+check over the model's own fields:
+
+- **No I/O** — never open a network connection, hit the source's API, touch
+  the filesystem, or perform slow queries inside `clean()`.
+- Raise `django.core.exceptions.ValidationError` keyed by field name — the
+  diagnostic reports exactly those field names to the operator.
+- Drift detection is **report-only**: a failing `clean()` never stops or
+  alters an ingestion run. A plugin with no `clean()` override is reported as
+  declaring no configuration rules (`UNSUPPORTED`), not as validated.
+
 ### 4.2 `StationLink` Subclass
 
 Subclass `adl.core.models.StationLink` to store per-station configuration —

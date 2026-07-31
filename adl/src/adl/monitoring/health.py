@@ -25,7 +25,7 @@ from datetime import datetime, timedelta
 from typing import Optional, Tuple
 
 from django.core.cache import cache
-from django.core.exceptions import ValidationError
+from django.core.exceptions import NON_FIELD_ERRORS, ValidationError
 from django.db.models import Count, Max, Q
 from django.urls import reverse
 from django.utils import timezone as dj_timezone
@@ -127,25 +127,68 @@ class Evidence:
     at: datetime
 
 
-def station_link_drifted(station_link) -> bool:
+@dataclass(frozen=True)
+class ConfigurationDrift:
     """
-    Whether a stored station link no longer passes its own validation
-    rules — ``full_clean()`` and nothing more, so every rule a plugin adds
-    to ``clean()`` improves this check retroactively.
+    Outcome of re-running a stored row's own validation.
 
-    Only ``ValidationError`` means drift: a crash in a validator is not
-    evidence the configuration is wrong, and unhandled it would blind the
-    diagnostic from one bad plugin.
+    ``drifted`` is the claim; ``evaluated`` is whether the claim could be
+    made at all — a crashed validator leaves ``evaluated`` False and
+    ``drifted`` False, because a crash is not evidence the configuration
+    is wrong. ``fields`` and ``messages`` come straight from
+    ``ValidationError.message_dict``: the field name is what the operator
+    needs to go and fix.
+    """
+
+    drifted: bool
+    evaluated: bool
+    fields: Tuple[str, ...] = ()
+    messages: Tuple[str, ...] = ()
+
+
+def configuration_drift(instance) -> ConfigurationDrift:
+    """
+    Whether a stored row no longer passes its own validation rules —
+    ``full_clean(validate_unique=False)`` and nothing more, so every rule a
+    plugin adds to ``clean()`` improves this check retroactively, and a
+    uniqueness collision (which cannot exist in a stored row) is never
+    re-litigated.
+
+    Only ``ValidationError`` means drift. Any other exception is caught and
+    makes no drift claim: a crash in a validator is not evidence the
+    configuration is wrong, and unhandled it would blind the diagnostic
+    from one bad plugin.
     """
     try:
-        station_link.full_clean(validate_unique=False)
-    except ValidationError:
-        return True
+        instance.full_clean(validate_unique=False)
+    except ValidationError as error:
+        message_dict = getattr(error, "message_dict", {NON_FIELD_ERRORS: [str(error)]})
+        fields = tuple(sorted(message_dict))
+        messages = tuple(
+            "%s: %s" % (field, " ".join(field_messages))
+            for field, field_messages in sorted(message_dict.items())
+        )
+        return ConfigurationDrift(drifted=True, evaluated=True,
+                                  fields=fields, messages=messages)
     except Exception:
-        logger.exception("[HEALTH] full_clean crashed for station link %s",
-                         station_link.id)
-        return False
-    return False
+        logger.exception("[HEALTH] full_clean crashed for %s %s",
+                         type(instance).__name__, getattr(instance, "id", None))
+        return ConfigurationDrift(drifted=False, evaluated=False)
+    return ConfigurationDrift(drifted=False, evaluated=True)
+
+
+def station_link_drifted(station_link) -> bool:
+    """Whether a stored station link's configuration has drifted — the
+    station-scope predicate layer-5 evidence filters on."""
+    return configuration_drift(station_link).drifted
+
+
+def connection_declares_validation_rules(connection) -> bool:
+    """True when the plugin's ``NetworkConnection`` subclass overrides
+    ``clean()`` — the no-I/O implemented-ness seam, mirroring
+    ``source_probe_supported``. A plugin that declares no rules must report
+    ``UNSUPPORTED``, never clean: silence is not validation."""
+    return type(connection).clean is not NetworkConnection.clean
 
 
 def probe_age_minutes(now, at):
@@ -232,14 +275,33 @@ def evaluate_connection_health(connection, queue_health=None, queue_health_provi
             checks=_all_skipped(_ladder_plan(), _("The connection is disabled.")),
         )
 
-    precondition = (HealthCheck(
+    enabled_check = HealthCheck(
         id="connection_enabled",
         layer=None,
         label=_("Connection enabled"),
         state=CheckState.OK,
         message=_("The connection is enabled and scheduled every %(interval)s minutes.")
                 % {"interval": connection.interval},
-    ),)
+    )
+
+    drift = configuration_drift(connection)
+    precondition = (enabled_check, _configuration_precondition(connection, drift))
+
+    if drift.drifted:
+        # Connection-scope drift short-circuits every layer below — the
+        # operator is sent to a field on their own form, never to the
+        # partner's server. Report-only: ingestion itself still runs.
+        return ConnectionHealthChecklist(
+            status=CheckState.MISCONFIGURED,
+            first_failing_layer=None,
+            headline_check_id="configuration_valid",
+            headline_message=_("The stored configuration is no longer valid — "
+                               "check field(s): %(fields)s.")
+                             % {"fields": ", ".join(drift.fields)},
+            precondition=precondition,
+            checks=_all_skipped(_ladder_plan(),
+                                _("the stored configuration is invalid.")),
+        )
 
     if queue_health is not None:
         provider = lambda: queue_health  # noqa: E731
@@ -277,6 +339,49 @@ def _headline(checks):
         if check.blocking and check.state == CheckState.WARNING:
             return CheckState.WARNING, check.layer, check
     return CheckState.OK, None, None
+
+
+def _configuration_precondition(connection, drift):
+    """
+    The configuration row of the precondition band, from an already-computed
+    :class:`ConfigurationDrift`. ``MISCONFIGURED`` is the only blocking
+    outcome; the two ``UNSUPPORTED`` shapes (no rules declared, validator
+    crashed) are epistemic and advisory.
+    """
+    def row(state, message, blocking=True):
+        return HealthCheck(id="configuration_valid", layer=None,
+                           label=_("Configuration valid"), state=state,
+                           message=message, blocking=blocking)
+
+    if drift.drifted:
+        return row(
+            CheckState.MISCONFIGURED,
+            _("The stored configuration no longer passes validation — "
+              "%(details)s. Fix the named field(s) on the connection's "
+              "edit form. Nothing below is evaluated; ingestion itself "
+              "is not stopped by this finding.")
+            % {"details": "; ".join(drift.messages)},
+        )
+    if not drift.evaluated:
+        return row(
+            CheckState.UNSUPPORTED,
+            _("The plugin's validation rules crashed, so configuration "
+              "drift could not be evaluated. This is not evidence the "
+              "configuration is wrong; see the application logs."),
+            blocking=False,
+        )
+    if not connection_declares_validation_rules(connection):
+        return row(
+            CheckState.UNSUPPORTED,
+            _("This plugin declares no connection-level configuration rules "
+              "of its own, so only core's field validation ran — silence is "
+              "not validation."),
+            blocking=False,
+        )
+    return row(
+        CheckState.OK,
+        _("The stored configuration passes the plugin's validation rules."),
+    )
 
 
 def _ladder_plan():

@@ -16,6 +16,7 @@ from wagtail.admin.paginator import WagtailPaginator
 from adl.core.models import NetworkConnection, DispatchChannel, StationLink
 from adl.core.utils import get_object_or_none
 from ..constants import NETWORK_PLUGIN_TASK_NAME
+from ..health import configuration_drift
 from ..models import StationLinkActivityLog
 from ..serializers import TaskResultSerializer, StationLinkActivityLogSerializer
 
@@ -274,13 +275,18 @@ def station_link_monitoring(request, link_id):
     page_obj = paginator.get_page(page_number)
     elided_page_range = paginator.get_elided_page_range(page_number)
     
+    # Station-scope configuration drift is advisory: it renders here, beside
+    # this station's own timeline, and never touches the connection's verdict
+    drift = configuration_drift(link)
+
     context = {
         "breadcrumbs_items": breadcrumbs_items,
         "page_obj": page_obj,
         "paginator": paginator,
         "elided_page_range": elided_page_range,
         "direction": direction,
-        "station_link": link
+        "station_link": link,
+        "configuration_drift": drift if drift.drifted else None,
     }
     return render(request, "monitoring/station_link_monitoring.html", context)
 

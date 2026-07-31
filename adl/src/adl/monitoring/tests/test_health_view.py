@@ -87,3 +87,43 @@ class ConnectionsListingLinkTests(HealthPageTestCase):
         buttons = get_connection_list_more_buttons(self.connection)
 
         self.assertIn(self.url, [button.url for button in buttons])
+
+
+class StationLinkDriftBannerTests(HealthPageTestCase):
+    """Station-scope drift is advisory: it renders on the station link's own
+    monitoring page and nowhere near the connection's headline."""
+
+    def setUp(self):
+        super().setUp()
+        self.station_page_url = reverse("station_link_monitoring", args=[self.link.id])
+
+    def test_a_valid_link_shows_no_drift_banner(self):
+        response = self.client.get(self.station_page_url)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, "Configuration drift")
+
+    def test_a_drifted_link_names_the_field_on_its_own_page(self):
+        from unittest.mock import patch
+
+        from adl.monitoring.health import ConfigurationDrift
+
+        drift = ConfigurationDrift(
+            drifted=True, evaluated=True,
+            fields=("timezone_info",),
+            messages=("timezone_info: This field cannot be blank.",),
+        )
+        with patch("adl.monitoring.views.configuration_drift", return_value=drift):
+            response = self.client.get(self.station_page_url)
+
+        self.assertContains(response, "Configuration drift")
+        self.assertContains(response, "timezone_info")
+
+    def test_the_misconfigured_precondition_row_renders_on_the_diagnostic_page(self):
+        self.connection.plugin_processing_interval = 0
+        self.connection.save()
+
+        response = self.client.get(self.url)
+
+        self.assertContains(response, "MISCONFIGURED")
+        self.assertContains(response, "plugin_processing_interval")
