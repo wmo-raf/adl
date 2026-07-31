@@ -11,6 +11,7 @@ from adl.core.models import (
     DispatchChannel,
     StationChannelDispatchStatus
 )
+from adl.monitoring.constants import LAYER_LABELS
 from adl.monitoring.models import StationLinkActivityLog
 from adl.monitoring.status import (
     annotate_station_pull_activity,
@@ -98,6 +99,10 @@ class NetworkConnectionActivityView(APIView):
                 "health": {
                     "status": health.status if health else None,
                     "first_failing_layer": health.first_failing_layer if health else None,
+                    "first_failing_layer_label": (
+                        str(LAYER_LABELS.get(health.first_failing_layer, ""))
+                        if health and health.first_failing_layer else None
+                    ),
                     "since": health.since if health else None,
                     "since_human": naturaltime(health.since) if health else None,
                     "diagnostic_url": reverse("connection_health", args=(connection.id,)),

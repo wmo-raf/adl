@@ -64,33 +64,20 @@ const getSeverityClass = (status) => {
   return map[status] || "info"
 }
 
-// The stored ingestion-diagnostic verdict, read as-is from the API. Only
-// OK/WARNING/FAILED carry colour — every other state (including "no verdict
-// yet") renders grey and is distinguished by wording.
+// The stored ingestion-diagnostic verdict, read as-is from the API. The
+// badge reuses the shared status-badge classes loaded admin-wide, so the
+// colour rule (only OK/WARNING/FAILED coloured) lives in one stylesheet.
 const health = computed(() => connection.value?.health || null)
 
 const healthBadgeClass = computed(() => {
-  const map = {
-    OK: "health-badge--ok",
-    WARNING: "health-badge--warning",
-    FAILED: "health-badge--failed"
-  }
-  return map[health.value?.status] || "health-badge--muted"
+  const status = health.value?.status
+  return status ? `status-badge--${status.toLowerCase()}` : "status-badge--muted"
 })
-
-const healthLayerLabels = {
-  scheduler: "Scheduler",
-  worker: "Worker & queue",
-  locks: "Station locks",
-  network: "Network path",
-  source: "Source",
-  data: "Data"
-}
 
 const healthLabel = computed(() => {
   const status = health.value?.status
   if (!status) return "No verdict yet"
-  const layer = healthLayerLabels[health.value?.first_failing_layer]
+  const layer = health.value?.first_failing_layer_label
   return layer ? `${status} · ${layer}` : status
 })
 
@@ -139,12 +126,12 @@ const filteredStations = computed(() => {
           <div class="header-badges">
             <a
                 v-if="health?.diagnostic_url"
-                class="meta-badge health-badge"
+                class="status-badge health-badge"
                 :class="healthBadgeClass"
                 :href="health.diagnostic_url"
                 :title="health?.since_human ? `In this state since ${health.since_human} — open the ingestion diagnostic` : 'Open the ingestion diagnostic'"
             >
-              <i class="pi pi-heart"></i> {{ healthLabel }}
+              {{ healthLabel }}
             </a>
                 <span class="meta-badge" v-if="connection?.enabled">
                     <i class="pi pi-check-circle" style="color: #16a34a"></i> Enabled
@@ -377,29 +364,12 @@ const filteredStations = computed(() => {
   border: 1px solid #e2e8f0;
 }
 
+/* Colour and shape come from the shared status_badges.css loaded by the
+   admin shell; this only makes the badge behave as a link in the row. */
 .health-badge {
   text-decoration: none;
   cursor: pointer;
-  font-weight: 600;
-}
-
-.health-badge--ok {
-  color: #15803d;
-  border-color: #15803d;
-}
-
-.health-badge--warning {
-  color: #b45309;
-  border-color: #b45309;
-}
-
-.health-badge--failed {
-  color: #b91c1c;
-  border-color: #b91c1c;
-}
-
-.health-badge--muted {
-  color: #64748b;
+  align-self: center;
 }
 
 /* SUMMARY CARDS */
