@@ -101,11 +101,10 @@ def manual_run_cooldown_seconds(connection):
     return min(connection.interval * 60, MANUAL_RUN_COOLDOWN_CAP_SECONDS)
 
 
-def latest_run_was_manual(connection):
+def latest_run_was_manual(heartbeat):
     """Whether the connection's most recent coordinator run was an operator
     press — the caption predicate: green that came from a manual run must
     say so, or the press reads as evidence of a working schedule."""
-    heartbeat = getattr(connection, "heartbeat", None)
     if heartbeat is None or heartbeat.last_manual_run_at is None:
         return False
     return (heartbeat.last_run_at is None
@@ -125,6 +124,7 @@ def connection_health(request, connection_id):
 
     checklist = evaluate_connection_health(connection)
     health = NetworkConnectionHealth.objects.filter(connection=connection).first()
+    heartbeat = getattr(connection, "heartbeat", None)
 
     # Hidden rather than disabled when unpermitted or unsupported — and
     # enabled during cooldown: the shared result is the limit, and a
@@ -163,8 +163,8 @@ def connection_health(request, connection_id):
         # a disabled connection: there is nothing to run
         "show_run_button": (request.user.has_perm(PROBE_PERMISSION)
                             and connection.enabled),
-        "latest_run_was_manual": latest_run_was_manual(connection),
-        "heartbeat": getattr(connection, "heartbeat", None),
+        "latest_run_was_manual": latest_run_was_manual(heartbeat),
+        "heartbeat": heartbeat,
     }
     return render(request, "monitoring/connection_health.html", context=context)
 
@@ -277,7 +277,12 @@ def _running_ingestion_tasks_for(connection):
     """Ingestion tasks the workers report as currently executing for this
     connection, or ``()`` when none — including when the broker did not
     answer: unknown must not block the press, the cooldown still protects
-    the source."""
+    the source.
+
+    Matching on ``args[0]`` requires that both ingestion task signatures
+    (``run_network_plugin`` and ``process_station_link_batch``) keep the
+    connection id as their first argument; a batch still executing counts
+    as a run in flight."""
     observation = get_ingestion_queue_health()
     tasks = observation.running_tasks or ()
     return tuple(task for task in tasks
