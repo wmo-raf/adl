@@ -51,6 +51,20 @@
             color: var(--w-color-text-meta);
             margin-top: 0.5rem;
         }
+
+        .health-headline__manual {
+            color: var(--w-color-text-meta);
+            margin: -1rem 0 1.5rem;
+        }
+
+        .health-run-form {
+            margin: 0 0 1.5rem;
+        }
+
+        .health-run-form__hint {
+            color: var(--w-color-text-meta);
+            margin-top: 0.5rem;
+        }
     </style>
 {% endblock %}
 
@@ -75,6 +89,30 @@
                 {% trans "No verdict recorded yet — the periodic sweep has not run since this connection was created." %}
             {% endif %}
         </p>
+
+        {% if latest_run_was_manual %}
+            {# Green from a press must say so: the most recent run proves the
+               workers, not the schedule. #}
+            <p class="health-headline__manual">
+                {% blocktrans with at=heartbeat.last_manual_run_at|date:"Y-m-d H:i:s" %}The most recent ingestion run was triggered manually at {{ at }} — it is not evidence that the schedule is working.{% endblocktrans %}
+            </p>
+        {% endif %}
+
+        {% if show_run_button %}
+            {# Page-level and connection-wide: the run spans layers 1-6.
+               Hidden rather than disabled when unpermitted, and enabled
+               during cooldown: a press inside it answers with the last
+               run's age, not a refusal. #}
+            <form method="post"
+                  action="{% url 'connection_run_now' connection.id %}"
+                  class="health-run-form">
+                {% csrf_token %}
+                <button type="submit" class="button">{% trans "Run ingestion now" %}</button>
+                <p class="health-run-form__hint">
+                    {% trans "Enqueues a run identical to a scheduled tick, through the real queue and workers. It stamps the manual-run slot, never the scheduler heartbeat." %}
+                </p>
+            </form>
+        {% endif %}
 
         {# Precondition band: assertions about configuration, above the ladder #}
         <h2 class="w-text-h3">{% trans "Preconditions" %}</h2>
