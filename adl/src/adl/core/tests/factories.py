@@ -1,5 +1,6 @@
 import factory
 from django.contrib.gis.geos import Point
+from django.utils import timezone as dj_timezone
 
 from adl.core import models
 
@@ -30,7 +31,10 @@ class StationFactory(factory.django.DjangoModelFactory):
 class UnitFactory(factory.django.DjangoModelFactory):
     class Meta:
         model = models.Unit
-    
+        # Named units (Celsius, Kelvin) are effectively fixtures — reuse the
+        # row instead of violating the unique name constraint
+        django_get_or_create = ("name",)
+
     name = factory.Sequence(lambda n: f"Unit {n}")
     symbol = factory.Sequence(lambda n: f"U{n}")
 
@@ -85,3 +89,14 @@ class Wis2BoxUploadFactory(factory.django.DjangoModelFactory):
     storage_password = "minio123"
     secure = False
     dataset_id = "urn:wmo:md:test:dataset"
+
+
+class ObservationRecordFactory(factory.django.DjangoModelFactory):
+    class Meta:
+        model = models.ObservationRecord
+
+    station = factory.SubFactory(StationFactory)
+    connection = factory.SubFactory(NetworkConnectionFactory)
+    parameter = factory.SubFactory(DataParameterFactory)
+    value = 1.0
+    time = factory.LazyFunction(dj_timezone.now)

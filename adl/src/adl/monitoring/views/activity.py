@@ -8,12 +8,12 @@ from rest_framework.views import APIView
 
 from adl.core.models import (
     NetworkConnection,
-    ObservationRecord,
     DispatchChannel,
     StationChannelDispatchStatus
 )
 from adl.monitoring.models import StationLinkActivityLog
 from adl.monitoring.status import (
+    annotate_station_pull_activity,
     compute_station_status,
     connection_thresholds,
     dispatch_channel_thresholds,
@@ -25,29 +25,10 @@ class NetworkConnectionActivityView(APIView):
         # 1. Fetch the Connection
         connection = get_object_or_404(NetworkConnection, id=connection_id)
         
-        # --- PREPARE QUERIES ---
-        
-        # Subquery 1: Latest Activity Log (Pipeline Status)
-        # Uses Index: ['station_link', '-time']
-        latest_log_sq = StationLinkActivityLog.objects.filter(
-            station_link=OuterRef('pk'),
-            direction='pull'  # Explicitly looking for PULL activities
-        ).order_by('-time')
-        
-        # Subquery 2: Latest Observation (Data Status)
-        # Uses Index: ['connection', 'station', '-time']
-        # We must filter by 'connection' to utilize the composite index effectively
-        latest_obs_sq = ObservationRecord.objects.filter(
-            station=OuterRef('station'),
-            connection=connection
-        ).order_by('-time')
-        
-        # Main Query: Fetch StationLinks and annotate with latest timestamps/status
-        # This executes ONE main SQL query instead of N+1
-        station_links = connection.station_links.select_related("station").annotate(
-            last_check=Subquery(latest_log_sq.values('time')[:1]),
-            last_log_success=Subquery(latest_log_sq.values('success')[:1]),
-            last_collected=Subquery(latest_obs_sq.values('time')[:1])
+        # Main Query: Fetch StationLinks annotated with the latest
+        # timestamps via the shared helper — ONE main SQL query, no N+1
+        station_links = annotate_station_pull_activity(
+            connection.station_links.select_related("station")
         )
         
         # --- SETUP THRESHOLDS ---

@@ -5,7 +5,8 @@ holds. Core records what happened (heartbeat, schedule, locks, activity
 logs); this module decides what it means.
 
 :func:`evaluate_connection_health` returns the full checklist for the
-precondition band and the internal layers 1-3 (scheduler, worker, locks).
+precondition band and the internal layers: 1-3 (scheduler, worker, locks)
+and 6 (data freshness, rolled up per station).
 :func:`store_connection_health` persists only change — one overwritten
 headline row per connection plus an append-only transitions log.
 
@@ -23,6 +24,7 @@ from dataclasses import dataclass
 from typing import Optional, Tuple
 
 from django.core.cache import cache
+from django.urls import reverse
 from django.utils import timezone as dj_timezone
 from django.utils.translation import gettext as _
 from django_celery_beat.models import IntervalSchedule
@@ -40,19 +42,26 @@ from adl.core.models import (
 from adl.core.tasks import find_connection_schedule_entries, ingest_station_lock_key
 
 from .constants import (
+    LAYER_DATA,
     LAYER_LOCKS,
     LAYER_SCHEDULER,
     LAYER_WORKER,
     CheckState,
 )
 from .models import NetworkConnectionHealth, NetworkConnectionHealthTransition
+from .status import (
+    ERROR as STATION_DATA_ERROR,
+    annotate_station_pull_activity,
+    compute_station_status,
+    connection_thresholds,
+)
 
 logger = logging.getLogger(__name__)
 
-# The ladder this ticket evaluates. Layers 4-6 (network, source, data) join
-# as their evidence sources land; appending here must not renumber anything,
-# which is why layers are identifiers and never ordinals.
-EVALUATED_LAYERS = (LAYER_SCHEDULER, LAYER_WORKER, LAYER_LOCKS)
+# The evaluated ladder. Layers 4-5 (network, source) join as their evidence
+# sources land; inserting there must not renumber anything, which is why
+# layers are identifiers and never ordinals.
+EVALUATED_LAYERS = (LAYER_SCHEDULER, LAYER_WORKER, LAYER_LOCKS, LAYER_DATA)
 
 
 @dataclass(frozen=True)
@@ -66,6 +75,10 @@ class HealthCheck:
     message: str
     # Advisory checks are shown but never seize the headline
     blocking: bool = True
+    # Optional link rendered after the message (e.g. the data layer links
+    # through to the affected stations)
+    link_url: Optional[str] = None
+    link_label: Optional[str] = None
 
     @property
     def coloured(self):
@@ -178,6 +191,7 @@ def _ladder_plan():
         ("running_tasks", LAYER_WORKER, _("Running ingestion tasks")),
         ("tick_consumed", LAYER_WORKER, _("Tick reached a worker")),
         ("station_locks", LAYER_LOCKS, _("Station locks")),
+        ("data_freshness", LAYER_DATA, _("Data freshness")),
     )
 
 
@@ -223,9 +237,11 @@ class _ChecklistBuilder:
                               "check meaningless."),
                 )
             else:
-                state, message, blocking = getattr(self, f"_check_{check_id}")()
+                state, message, blocking, *rest = getattr(self, f"_check_{check_id}")()
+                extra = rest[0] if rest else {}
                 check = HealthCheck(id=check_id, layer=layer, label=label,
-                                    state=state, message=message, blocking=blocking)
+                                    state=state, message=message, blocking=blocking,
+                                    **extra)
                 if check.blocking and check.state == CheckState.FAILED:
                     self.failed = True
             checks.append(check)
@@ -439,6 +455,59 @@ class _ChecklistBuilder:
                   "no task behind them — a worker died mid-run. They expire on "
                   "their own TTL.") % counts,
                 True)
+
+    # -- Layer 6: data freshness, rolled up per station from the shared
+    # status helper. All stations affected -> FAILED, some -> WARNING,
+    # none -> OK — one misconfigured station cannot turn a healthy
+    # connection red.
+
+    def _check_data_freshness(self):
+        links = annotate_station_pull_activity(
+            self.connection.station_links.filter(enabled=True)
+        )
+        thresholds = connection_thresholds(self.connection)
+
+        total = 0
+        stale = 0
+        for link in links:
+            total += 1
+            status = compute_station_status(
+                last_check=link.last_check,
+                last_check_success=link.last_log_success,
+                last_data_time=link.last_collected,
+                thresholds=thresholds,
+                now=self.now,
+            )
+            if status.data_status == STATION_DATA_ERROR:
+                stale += 1
+
+        if not total:
+            return (CheckState.OK,
+                    _("This connection has no enabled station links."),
+                    True)
+
+        extra = {
+            "link_url": reverse("network_connection_monitoring",
+                                args=(self.connection.id,)),
+            "link_label": _("View stations"),
+        }
+        counts = {"stale": stale, "total": total}
+        if not stale:
+            return (CheckState.OK,
+                    _("Data is current on all %(total)d enabled station(s), "
+                      "within the connection's freshness limits.") % counts,
+                    True, extra)
+        if stale == total:
+            return (CheckState.FAILED,
+                    _("All %(total)d enabled station(s) have stale data — no "
+                      "recent observations within the connection's freshness "
+                      "limit.") % counts,
+                    True, extra)
+        return (CheckState.WARNING,
+                _("%(stale)d of %(total)d enabled stations have stale data — "
+                  "no recent observations within the connection's freshness "
+                  "limit.") % counts,
+                True, extra)
 
 
 def store_connection_health(connection, checklist, now=None):

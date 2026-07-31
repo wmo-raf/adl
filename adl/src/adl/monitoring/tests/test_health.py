@@ -17,8 +17,13 @@ from django_celery_beat.models import IntervalSchedule, PeriodicTask
 from adl.core.broker import IngestionQueueHealth, RunningIngestionTask
 from adl.core.models import NetworkConnectionHeartbeat
 from adl.core.tasks import INGESTION_TASK_NAME, ingest_station_lock_key
-from adl.core.tests.factories import NetworkConnectionFactory, StationLinkFactory
+from adl.core.tests.factories import (
+    NetworkConnectionFactory,
+    ObservationRecordFactory,
+    StationLinkFactory,
+)
 from adl.monitoring.constants import (
+    LAYER_DATA,
     LAYER_LOCKS,
     LAYER_SCHEDULER,
     LAYER_WORKER,
@@ -401,3 +406,99 @@ class StoredVerdictTests(HealthEvaluatorTestCase):
         self.assertEqual(health.headline_check_id, "schedule_entry")
         self.assertEqual(health.since, first)
         self.assertEqual(NetworkConnectionHealthTransition.objects.count(), 1)
+
+
+class DataLayerTests(HealthEvaluatorTestCase):
+    """Layer 6 rolls up per-station data freshness: all stations affected
+    FAILED, some WARNING, none OK — driven by the shared per-station
+    status helper, never a second implementation."""
+
+    def observe(self, station_link, age):
+        return ObservationRecordFactory(
+            station=station_link.station,
+            connection=self.connection,
+            time=dj_tz.now() - age,
+        )
+
+    def test_fresh_data_on_every_station_reports_ok(self):
+        self.make_healthy()
+        self.observe(self.link, timedelta(minutes=10))
+
+        checklist = self.evaluate()
+
+        self.assertEqual(checklist.status, CheckState.OK)
+        self.assertEqual(self.check(checklist, "data_freshness").state, CheckState.OK)
+
+    def test_stale_data_on_all_stations_fails_the_data_layer(self):
+        self.make_healthy()
+        # Well past the error limit of 12x the 15-minute interval
+        self.observe(self.link, timedelta(hours=6))
+
+        checklist = self.evaluate()
+
+        self.assertEqual(checklist.status, CheckState.FAILED)
+        self.assertEqual(checklist.first_failing_layer, LAYER_DATA)
+        self.assertEqual(checklist.headline_check_id, "data_freshness")
+
+    def test_one_stale_station_of_two_warns_not_fails(self):
+        fresh_link = StationLinkFactory(network_connection=self.connection)
+        self.make_healthy()
+        self.observe(self.link, timedelta(hours=6))
+        self.observe(fresh_link, timedelta(minutes=10))
+
+        checklist = self.evaluate()
+
+        self.assertEqual(checklist.status, CheckState.WARNING)
+        self.assertEqual(checklist.first_failing_layer, LAYER_DATA)
+        check = self.check(checklist, "data_freshness")
+        self.assertEqual(check.state, CheckState.WARNING)
+
+    def test_rendered_content_is_the_counts_with_a_station_link(self):
+        StationLinkFactory(network_connection=self.connection)
+        self.make_healthy()
+        self.observe(self.link, timedelta(hours=6))
+
+        checklist = self.evaluate()
+
+        check = self.check(checklist, "data_freshness")
+        self.assertIn("1 of 2", check.message)
+        self.assertTrue(check.link_url)
+
+    def test_headline_anchors_to_data_when_layers_one_to_three_are_green(self):
+        self.make_healthy()
+        self.observe(self.link, timedelta(hours=6))
+
+        checklist = self.evaluate()
+
+        for check in checklist.checks:
+            if check.layer != LAYER_DATA:
+                self.assertNotEqual(check.state, CheckState.FAILED, check.id)
+        self.assertEqual(checklist.first_failing_layer, LAYER_DATA)
+
+    def test_station_that_never_produced_data_is_not_reported_stale(self):
+        # The day-one state on every deployment: no observations at all
+        self.make_healthy()
+
+        checklist = self.evaluate()
+
+        self.assertEqual(checklist.status, CheckState.OK)
+        self.assertEqual(self.check(checklist, "data_freshness").state, CheckState.OK)
+
+    def test_disabled_station_links_are_excluded_from_the_roll_up(self):
+        stale_link = StationLinkFactory(network_connection=self.connection, enabled=False)
+        self.make_healthy()
+        self.observe(self.link, timedelta(minutes=10))
+        self.observe(stale_link, timedelta(hours=6))
+
+        checklist = self.evaluate()
+
+        self.assertEqual(checklist.status, CheckState.OK)
+
+    def test_data_check_is_skipped_below_an_upper_failure(self):
+        # No schedule entry: the scheduler fails first
+        self.observe(self.link, timedelta(hours=6))
+
+        checklist = self.evaluate()
+
+        self.assertEqual(checklist.first_failing_layer, LAYER_SCHEDULER)
+        self.assertEqual(self.check(checklist, "data_freshness").state, CheckState.SKIPPED)

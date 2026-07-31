@@ -13,7 +13,12 @@ render grey via --muted and are distinguished by wording.
                     {{ check.state }}
                 </span>
             </td>
-            <td>{{ check.message }}</td>
+            <td>
+                {{ check.message }}
+                {% if check.link_url %}
+                    <a href="{{ check.link_url }}">{{ check.link_label }}</a>
+                {% endif %}
+            </td>
         </tr>
     {% endfor %}
     </tbody>
