@@ -88,6 +88,12 @@ EVALUATED_LAYERS = (LAYER_SCHEDULER, LAYER_WORKER, LAYER_LOCKS,
 PROBE_FRESHNESS_SECONDS = 15 * 60
 
 
+def probe_age_minutes(now, at):
+    """Whole minutes since a probe observation — the one age computation
+    behind every 'N minute(s) ago' the diagnostic renders."""
+    return int(max((now - at).total_seconds(), 0) // 60)
+
+
 @dataclass(frozen=True)
 class CheckLink:
     """A link rendered after a check's message (e.g. the data layer links
@@ -529,7 +535,7 @@ class _ChecklistBuilder:
                       "layers are probed on demand only."),
                     False)
 
-        age_minutes = int((self.now - row.at).total_seconds() // 60)
+        age_minutes = probe_age_minutes(self.now, row.at)
         if (self.now - row.at).total_seconds() > PROBE_FRESHNESS_SECONDS:
             return (CheckState.STALE,
                     _("Not recently checked — the last on-demand probe ran "

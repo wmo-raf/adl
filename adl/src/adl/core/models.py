@@ -645,9 +645,10 @@ class NetworkConnection(PolymorphicModel, ClusterableModel):
         """True when this connection's plugin implements any part of the
         source-check contract — what decides whether the probe button exists
         at all, without performing any I/O."""
+        from adl.core.source_checks import connection_implements_check_source
         return (
             type(self).get_source_endpoint is not NetworkConnection.get_source_endpoint
-            or type(self).check_source is not NetworkConnection.check_source
+            or connection_implements_check_source(self)
         )
 
     @property

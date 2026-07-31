@@ -161,7 +161,7 @@ def _probe(connection, executor, deadline, timeout_seconds) -> Tuple[ProbeStep, 
         if dns_step.result.status != SourceCheckStatus.OK:
             return tuple(steps)
 
-        tcp_step = _tcp_step(host, port, deadline)
+        tcp_step = _tcp_step(executor, host, port, deadline)
         steps.append(tcp_step)
         if tcp_step.result.status != SourceCheckStatus.OK:
             return tuple(steps)
@@ -200,14 +200,22 @@ def _dns_step(executor, host, port, deadline) -> ProbeStep:
     return ProbeStep(CHECK_DNS, 4, result)
 
 
-def _tcp_step(host, port, deadline) -> ProbeStep:
+def _tcp_step(executor, host, port, deadline) -> ProbeStep:
     started = time.monotonic()
     context = {"host": host, "port": port}
-    try:
+
+    def connect():
+        # The socket timeout alone is not the wall-clock bound:
+        # create_connection applies it per resolved address, so a
+        # multi-homed host that black-holes SYNs could consume it once per
+        # address. The executor bound below caps the whole step regardless.
         conn = socket.create_connection(
             (host, port), timeout=max(deadline - time.monotonic(), 0.001)
         )
         conn.close()
+
+    try:
+        _bounded_call(executor, connect, deadline - time.monotonic())
     except ConnectionRefusedError:
         result = SourceCheckResult(
             status=SourceCheckStatus.FAILED,
@@ -215,7 +223,7 @@ def _tcp_step(host, port, deadline) -> ProbeStep:
             message=_("%(host)s refused a TCP connection on port %(port)s.") % context,
             latency_ms=_elapsed_ms(started),
         )
-    except (socket.timeout, TimeoutError):
+    except (socket.timeout, TimeoutError, FutureTimeoutError):
         result = SourceCheckResult(
             status=SourceCheckStatus.FAILED,
             category="TCP_TIMEOUT",

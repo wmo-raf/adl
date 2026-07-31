@@ -89,7 +89,7 @@ class ProbePermissionTests(ProbeViewTestCase):
         self.assertEqual(response.status_code, 200)
         # Hidden means absent: no probe form, no disabled variant of it
         self.assertNotContains(response, "Probe source now")
-        self.assertNotContains(response, "health-probe-form")
+        self.assertNotContains(response, self.url)
 
     def test_button_is_hidden_when_the_plugin_has_no_contract(self):
         # Undo the class-level patch for this one test
@@ -157,7 +157,7 @@ class ProbeCooldownTests(ProbeViewTestCase):
             response = self.probe()
 
         probe.assert_not_called()
-        self.assertContains(response, "already running")
+        self.assertContains(response, "has not recorded a result yet")
 
     def test_a_raising_probe_does_not_release_the_cooldown(self):
         with patch("adl.monitoring.views.health.run_source_probe",
@@ -169,21 +169,28 @@ class ProbeCooldownTests(ProbeViewTestCase):
         # answered from the claim, not by a fresh probe
         self.assertEqual(probe.call_count, 1)
         self.assertEqual(first.status_code, 200)
-        self.assertContains(second, "already running")
+        self.assertContains(second, "has not recorded a result yet")
 
     def test_completion_does_not_extend_the_cooldown_ttl(self):
-        # The claim value (the press timestamp) is written once, before the
-        # probe fires, and never touched again
+        # The claim is written once, with `add`, before the probe fires and
+        # is never touched again: no set/touch/delete may follow, which is
+        # what would extend (or release) the TTL
         key = source_probe_cooldown_key(self.connection)
 
         with patch("adl.monitoring.views.health.run_source_probe",
-                   return_value=OK_STEPS):
+                   return_value=OK_STEPS), \
+                patch.object(cache, "set") as cache_set, \
+                patch.object(cache, "touch", create=True) as cache_touch, \
+                patch.object(cache, "delete") as cache_delete:
             self.probe()
             claim_after_first = cache.get(key)
             self.probe()
 
         self.assertIsNotNone(claim_after_first)
         self.assertEqual(cache.get(key), claim_after_first)
+        cache_set.assert_not_called()
+        cache_touch.assert_not_called()
+        cache_delete.assert_not_called()
 
 
 class CooldownKeyTests(ProbeViewTestCase):
@@ -202,6 +209,16 @@ class CooldownKeyTests(ProbeViewTestCase):
 
         self.assertEqual(source_probe_cooldown_key(self.connection),
                          source_probe_cooldown_key(other))
+
+    def test_a_raising_endpoint_falls_back_instead_of_erroring(self):
+        def boom():
+            raise RuntimeError("bad endpoint config")
+
+        self.connection.get_source_endpoint = boom
+
+        key = source_probe_cooldown_key(self.connection)
+
+        self.assertIn(str(self.connection.id), key)
 
     def test_unimplemented_endpoint_falls_back_to_the_connection_id(self):
         other = NetworkConnectionFactory()

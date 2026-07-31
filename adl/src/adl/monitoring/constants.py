@@ -42,6 +42,13 @@ LAYER_NETWORK = "network"
 LAYER_SOURCE = "source"
 LAYER_DATA = "data"
 
+# Probe steps stamp their layer as the classification ints (4 = network
+# path, 5 = source); stored rows carry the stable string identifiers
+PROBE_LAYER_IDS = {
+    4: LAYER_NETWORK,
+    5: LAYER_SOURCE,
+}
+
 LAYER_LABELS = {
     LAYER_SCHEDULER: _("Scheduler"),
     LAYER_WORKER: _("Worker & queue"),

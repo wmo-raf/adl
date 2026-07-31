@@ -13,8 +13,8 @@ from django.utils.translation import gettext as _
 from adl.core.models import NetworkConnection
 from adl.core.source_checks import SourceCheckStatus, run_source_probe
 
-from ..constants import LAYER_LABELS, LAYER_NETWORK, LAYER_SOURCE
-from ..health import EVALUATED_LAYERS, evaluate_connection_health
+from ..constants import LAYER_LABELS, LAYER_SOURCE, PROBE_LAYER_IDS
+from ..health import EVALUATED_LAYERS, evaluate_connection_health, probe_age_minutes
 from ..models import NetworkConnectionHealth, SourceProbeResult
 
 logger = logging.getLogger(__name__)
@@ -24,10 +24,6 @@ logger = logging.getLogger(__name__)
 # evaluator's 15-minute freshness window: equalising them would make an
 # operator wait 15 minutes to verify a password fix.
 PROBE_COOLDOWN_SECONDS = 60
-
-# The probe's diagnostic layers, stamped by the producer as 4/5 ints,
-# stored as the stable string identifiers
-_PROBE_LAYERS = {4: LAYER_NETWORK, 5: LAYER_SOURCE}
 
 # The permission that gates the probe: someone who can edit a host and its
 # credentials can already make the runtime dial them, and a new permission
@@ -42,7 +38,14 @@ def source_probe_cooldown_key(connection):
     share one budget. Falls back to the connection id where the endpoint is
     unimplemented.
     """
-    endpoint = connection.get_source_endpoint()
+    try:
+        endpoint = connection.get_source_endpoint()
+    except Exception:
+        # A plugin's endpoint lookup is never trusted to succeed — a raising
+        # override must not turn the probe POST into a server error
+        logger.exception("[SOURCE PROBE] get_source_endpoint raised for connection %s",
+                         connection.id)
+        endpoint = None
     if endpoint is not None:
         host, _port = endpoint
         return f"adl_source_probe_cooldown:{host}"
@@ -98,10 +101,6 @@ def connection_health(request, connection_id):
         "layer_groups": layer_groups,
     }
     return render(request, "monitoring/connection_health.html", context=context)
-
-
-def _probe_age_minutes(now, at):
-    return int(max((now - at).total_seconds(), 0) // 60)
 
 
 def _parse_claim(value):
@@ -165,7 +164,7 @@ def connection_probe_source(request, connection_id):
             connection=connection,
             station_link=None,
             check_id=step.check_id,
-            layer=_PROBE_LAYERS[step.layer],
+            layer=PROBE_LAYER_IDS[step.layer],
             status=step.result.status,
             category=step.result.category,
             message=step.result.message,
@@ -193,14 +192,18 @@ def _report_existing_probe(request, connection, claim, now):
             _("Probed %(minutes)d minute(s) ago (on-demand probe): "
               "%(message)s — one probe per source host per minute; this "
               "shared result is the limit.")
-            % {"minutes": _probe_age_minutes(now, newest.at),
+            % {"minutes": probe_age_minutes(now, newest.at),
                "message": newest.message},
         )
     else:
+        # Claimed but no result yet. Usually a probe is still running; a
+        # crashed probe leaves this same state until the claim expires, so
+        # the message promises a retry window, never a result
         messages.info(
             request,
-            _("A probe for this source is already running. Its result will "
-              "appear on this page when it completes."),
+            _("A probe for this source was started less than a minute ago "
+              "and has not recorded a result yet. Refresh shortly, or try "
+              "again in a minute."),
         )
 
 
