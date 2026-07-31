@@ -6,18 +6,53 @@ is the one computation both consume — and the seam anything else that needs
 the same verdict (the per-connection diagnostic) should read from, so they
 cannot disagree about the same station.
 
-Everything here works on plain domain objects and timestamps — no view, no
-request — so it is callable from tasks, management commands and templates.
+Nothing here touches a view or a request, so it is callable from tasks,
+management commands and templates. The status computation itself works on
+plain timestamps; :func:`annotate_station_pull_activity` is the one queryset
+helper, supplying those timestamps the same way to every consumer.
 """
 
 from dataclasses import dataclass
 from datetime import timedelta
 
+from django.db.models import OuterRef, Subquery
 from django.utils import timezone as dj_timezone
 
 ACTIVE = "active"
 WARNING = "warning"
 ERROR = "error"
+
+
+def annotate_station_pull_activity(station_links):
+    """Annotate a StationLink queryset with the three timestamps
+    :func:`compute_station_status` consumes on the pull side: ``last_check``
+    and ``last_log_success`` from the latest pull activity log, and
+    ``last_collected`` from the latest stored observation.
+
+    The activity view and the connection diagnostic both read from here, so
+    they cannot disagree about the same station.
+    """
+    from adl.core.models import ObservationRecord
+
+    from .models import StationLinkActivityLog
+
+    latest_log_sq = StationLinkActivityLog.objects.filter(
+        station_link=OuterRef('pk'),
+        direction='pull'
+    ).order_by('-time')
+
+    # Filtering by connection utilises the composite index on
+    # ObservationRecord ['connection', 'station', '-time']
+    latest_obs_sq = ObservationRecord.objects.filter(
+        station=OuterRef('station'),
+        connection=OuterRef('network_connection')
+    ).order_by('-time')
+
+    return station_links.annotate(
+        last_check=Subquery(latest_log_sq.values('time')[:1]),
+        last_log_success=Subquery(latest_log_sq.values('success')[:1]),
+        last_collected=Subquery(latest_obs_sq.values('time')[:1])
+    )
 
 
 @dataclass(frozen=True)
