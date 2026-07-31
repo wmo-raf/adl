@@ -753,6 +753,35 @@ class StationLink(PolymorphicModel, ClusterableModel):
     
     def get_extra_model_admin_buttons(self, classname=None):
         return []
+
+    def check_station_source(self):
+        """
+        Ask whether the source offers data for **this** station link
+        (layer 5 of the ingestion diagnostic, station-scoped). Strictly
+        **read-only**, run **on demand only**, one station at a time.
+
+        Deliberately a distinct method rather than a parameterised
+        ``check_source()``: ``UNSUPPORTED`` must be independently
+        answerable, or the one-line opt-in dies for the other plugins.
+        Zero matches is ``OK`` — a date-structured directory is
+        legitimately empty at every rollover — with the resolved path and
+        the match count in the message, so the operator sees a typo rather
+        than infers one. The return is normalised by core and never
+        trusted as-is.
+        """
+        from adl.core.source_checks import SourceCheckResult, SourceCheckStatus
+        return SourceCheckResult(
+            status=SourceCheckStatus.UNSUPPORTED,
+            message=_("This plugin does not implement the station source check."),
+        )
+
+    @property
+    def station_source_check_supported(self):
+        """True when this station link's plugin implements the station-scope
+        source check — what decides whether the check button exists at all,
+        without performing any I/O."""
+        from adl.core.source_checks import station_link_implements_check_station_source
+        return station_link_implements_check_station_source(self)
     
     def fetch_latest_data(self):
         """

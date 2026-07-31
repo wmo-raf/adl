@@ -394,6 +394,17 @@ def get_url_for_connection(connection, view_name, takes_args=False):
     return reverse(viewset.get_url_name(view_name))
 
 
+def get_url_for_station_link(station_link, view_name, takes_args=False):
+    from adl.core.models import StationLink
+    model_cls = get_child_model_by_name(StationLink, station_link._meta.model_name)
+    viewset = station_link_viewset_registry.get(model_cls._meta.model_name)
+
+    if takes_args:
+        return reverse(viewset.get_url_name(view_name), kwargs={"pk": station_link.pk})
+
+    return reverse(viewset.get_url_name(view_name))
+
+
 def get_url_for_dispatch_channel(dispatch_channel, view_name, takes_args=False):
     from adl.core.models import DispatchChannel
     model_cls = get_child_model_by_name(DispatchChannel, dispatch_channel._meta.model_name)

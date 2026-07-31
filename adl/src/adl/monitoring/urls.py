@@ -9,7 +9,11 @@ from .views import (
 )
 
 from .views.activity import NetworkConnectionActivityView, DispatchChannelMonitoringView
-from .views.health import connection_health, connection_probe_source
+from .views.health import (
+    connection_health,
+    connection_probe_source,
+    station_link_check_source,
+)
 
 urlpatterns = [
     path('connection/<int:connection_id>/health/', connection_health,
@@ -34,5 +38,7 @@ urlpatterns = [
     path('dispatch-channel/<int:channel_id>/', dispatch_channel_monitoring,
          name='dispatch_channel_monitoring'),
     path('station-link/<int:link_id>/', station_link_monitoring,
-         name='station_link_monitoring')
+         name='station_link_monitoring'),
+    path('station-link/<int:link_id>/check-source/', station_link_check_source,
+         name='station_link_check_source')
 ]

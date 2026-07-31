@@ -15,13 +15,16 @@ from django.test import TestCase
 from adl.core.source_checks import (
     CHECK_DNS,
     CHECK_SOURCE,
+    CHECK_STATION_SOURCE,
     CHECK_TCP,
     SourceCheckResult,
     SourceCheckStatus,
     normalise_source_check_result,
     run_source_probe,
+    run_station_source_check,
+    station_link_implements_check_station_source,
 )
-from adl.core.tests.factories import NetworkConnectionFactory
+from adl.core.tests.factories import NetworkConnectionFactory, StationLinkFactory
 
 
 class BaseContractDefaultTests(TestCase):
@@ -210,3 +213,102 @@ class ProbeOrchestrationTests(ProbeTestCase):
 
         self.assertEqual(steps[CHECK_SOURCE].result.status, SourceCheckStatus.FAILED)
         self.assertIn("did not complete", steps[CHECK_SOURCE].result.message)
+
+
+class StationCheckContractTests(TestCase):
+    """The station-scope contract is a distinct method, not a parameterised
+    check_source: UNSUPPORTED must be independently answerable, or the
+    one-line opt-in dies for the other 20 plugins."""
+
+    def setUp(self):
+        self.link = StationLinkFactory()
+
+    def test_base_check_station_source_reports_unsupported(self):
+        result = self.link.check_station_source()
+
+        self.assertEqual(result.status, SourceCheckStatus.UNSUPPORTED)
+
+    def test_base_station_link_does_not_support_the_check(self):
+        self.assertFalse(self.link.station_source_check_supported)
+
+    def test_connection_scope_check_source_does_not_answer_for_the_station(self):
+        # A plugin implementing the connection-scope contract has said
+        # nothing about the station-scope one
+        self.link.network_connection.check_source = lambda: SourceCheckResult(
+            status=SourceCheckStatus.OK)
+
+        self.assertFalse(
+            station_link_implements_check_station_source(self.link))
+
+    def test_an_overriding_subclass_supports_the_check(self):
+        class _ImplementingLink:
+            def check_station_source(self):
+                return SourceCheckResult(status=SourceCheckStatus.OK)
+
+        self.assertTrue(
+            station_link_implements_check_station_source(_ImplementingLink()))
+
+
+class StationCheckRunTests(TestCase):
+    """run_station_source_check: one step, one station, no fan-out — the
+    plugin's return passes through the same normaliser as the probe."""
+
+    def setUp(self):
+        self.link = StationLinkFactory()
+
+    def run_check(self, **kwargs):
+        return run_station_source_check(self.link, **kwargs)
+
+    def test_zero_matches_is_ok_with_the_resolved_path_in_the_message(self):
+        # Date-structured directories are legitimately empty at every
+        # rollover; the operator reads the resolved path and match count
+        # and judges better than a rule can
+        self.link.check_station_source = lambda: SourceCheckResult(
+            status=SourceCheckStatus.OK,
+            message="Resolved /data/2026/07/31; 0 file(s) matched.",
+        )
+
+        step = self.run_check()
+
+        self.assertEqual(step.check_id, CHECK_STATION_SOURCE)
+        self.assertEqual(step.layer, 5)
+        self.assertEqual(step.result.status, SourceCheckStatus.OK)
+        self.assertIn("/data/2026/07/31", step.result.message)
+        self.assertIn("0 file(s) matched", step.result.message)
+
+    def test_base_station_link_reports_unsupported(self):
+        step = self.run_check()
+
+        self.assertEqual(step.result.status, SourceCheckStatus.UNSUPPORTED)
+
+    def test_malformed_return_degrades_to_malformed(self):
+        self.link.check_station_source = lambda: {"status": "OK"}
+
+        step = self.run_check()
+
+        self.assertEqual(step.result.status, SourceCheckStatus.MALFORMED)
+
+    def test_a_raising_check_reports_failed_not_a_crash(self):
+        def boom():
+            raise RuntimeError("listing exploded")
+
+        self.link.check_station_source = boom
+
+        step = self.run_check()
+
+        self.assertEqual(step.result.status, SourceCheckStatus.FAILED)
+        self.assertIn("listing exploded", step.result.message)
+
+    def test_check_is_bounded_by_wall_clock(self):
+        import time
+
+        def slow():
+            time.sleep(0.5)
+            return SourceCheckResult(status=SourceCheckStatus.OK)
+
+        self.link.check_station_source = slow
+
+        step = self.run_check(timeout_seconds=0.05)
+
+        self.assertEqual(step.result.status, SourceCheckStatus.FAILED)
+        self.assertIn("did not complete", step.result.message)

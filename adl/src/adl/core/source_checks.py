@@ -36,11 +36,15 @@ logger = logging.getLogger(__name__)
 # plugin's own source check together
 PROBE_WALL_CLOCK_SECONDS = 15
 
-# Stable identifiers for the three probe steps — these become stored
+# Stable identifiers for the probe steps — these become stored
 # `SourceProbeResult.check_id` values, so they must never be renamed
 CHECK_DNS = "dns_resolution"
 CHECK_TCP = "tcp_connect"
 CHECK_SOURCE = "source_check"
+# The station-scope check is its own stored identifier, not a reuse of
+# `source_check`: the evaluator's connection-scope filter and the stored
+# history both stay unambiguous
+CHECK_STATION_SOURCE = "station_source_check"
 
 
 class SourceCheckStatus:
@@ -113,6 +117,16 @@ def connection_implements_check_source(connection) -> bool:
     distinguish "not recently checked" from "not checkable at all"."""
     from adl.core.models import NetworkConnection
     return type(connection).check_source is not NetworkConnection.check_source
+
+
+def station_link_implements_check_station_source(station_link) -> bool:
+    """True when the station link's plugin overrides
+    ``check_station_source()``. Deliberately independent of the
+    connection-scope contract: a plugin implementing ``check_source()`` has
+    said nothing about the station-scope check, so ``UNSUPPORTED`` stays
+    independently answerable."""
+    from adl.core.models import StationLink
+    return type(station_link).check_station_source is not StationLink.check_station_source
 
 
 def _elapsed_ms(started: float) -> int:
@@ -248,21 +262,30 @@ def _tcp_step(executor, host, port, deadline) -> ProbeStep:
 
 
 def _source_step(connection, executor, deadline, timeout_seconds) -> ProbeStep:
+    return _plugin_check_step(
+        CHECK_SOURCE, connection.check_source, executor, deadline, timeout_seconds,
+        log_context="connection %s" % connection.id,
+    )
+
+
+def _plugin_check_step(check_id, check, executor, deadline, timeout_seconds,
+                       log_context) -> ProbeStep:
+    """Run one plugin-implemented layer-5 check under the wall-clock bound
+    and pass its return through the normaliser — shared by the connection
+    probe's source step and the station-scope check."""
     started = time.monotonic()
     try:
-        raw = _bounded_call(executor, connection.check_source,
-                            deadline - time.monotonic())
+        raw = _bounded_call(executor, check, deadline - time.monotonic())
     except FutureTimeoutError:
-        return ProbeStep(CHECK_SOURCE, 5, SourceCheckResult(
+        return ProbeStep(check_id, 5, SourceCheckResult(
             status=SourceCheckStatus.FAILED,
             message=_("The source check did not complete within the probe's "
                       "%(seconds)s-second budget.") % {"seconds": timeout_seconds},
             latency_ms=_elapsed_ms(started),
         ))
     except Exception as e:
-        logger.exception("[SOURCE PROBE] check_source raised for connection %s",
-                         connection.id)
-        return ProbeStep(CHECK_SOURCE, 5, SourceCheckResult(
+        logger.exception("[SOURCE PROBE] %s raised for %s", check_id, log_context)
+        return ProbeStep(check_id, 5, SourceCheckResult(
             status=SourceCheckStatus.FAILED,
             message=_("The source check raised %(type)s: %(error)s")
                     % {"type": type(e).__name__, "error": e},
@@ -272,4 +295,31 @@ def _source_step(connection, executor, deadline, timeout_seconds) -> ProbeStep:
     result = normalise_source_check_result(raw)
     if result.latency_ms is None and result.status != SourceCheckStatus.UNSUPPORTED:
         result = replace(result, latency_ms=_elapsed_ms(started))
-    return ProbeStep(CHECK_SOURCE, 5, result)
+    return ProbeStep(check_id, 5, result)
+
+
+def run_station_source_check(station_link,
+                             timeout_seconds=PROBE_WALL_CLOCK_SECONDS) -> ProbeStep:
+    """
+    Run one station link's ``check_station_source()`` on demand: a single
+    step, one station at a time, with no fan-out anywhere — a burst of
+    failed authentications is what actually trips a ban.
+
+    No DNS or TCP step is run here; the connection-scope probe owns the
+    network path. The plugin's return passes through the same normaliser as
+    the probe, under the same wall-clock bound.
+    """
+    deadline = time.monotonic() + timeout_seconds
+
+    # Not a context manager, for the same reason as run_source_probe: `with`
+    # would join an abandoned worker on exit, letting a stuck plugin call
+    # outlive the wall-clock bound this function promises
+    executor = ThreadPoolExecutor(max_workers=1)
+    try:
+        return _plugin_check_step(
+            CHECK_STATION_SOURCE, station_link.check_station_source,
+            executor, deadline, timeout_seconds,
+            log_context="station link %s" % station_link.id,
+        )
+    finally:
+        executor.shutdown(wait=False)
