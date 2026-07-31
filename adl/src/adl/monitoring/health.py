@@ -36,10 +36,12 @@ from adl.core.broker import (
     get_ingestion_queue_health,
     running_task_stuck_after_seconds,
     running_task_warn_after_seconds,
+    worker_stack_guard_message,
 )
 from adl.core.models import (
     NetworkConnection,
     heartbeat_last_run_at,
+    heartbeat_worker_versions,
     is_coordinator_overdue,
 )
 from adl.core.source_checks import (
@@ -331,13 +333,23 @@ def evaluate_connection_health(connection, queue_health=None, queue_health_provi
 
 def _headline(checks):
     """The first failing blocking check leads; blocking warnings lead only
-    when nothing failed; advisory findings never lead."""
+    when nothing failed; advisory findings never lead.
+
+    One sanctioned exception to "epistemic states never lead": a *blocking*
+    ``UNSUPPORTED`` — only the worker-consuming signal emits one — reaches
+    the headline as information when nothing genuinely failed or warned. It
+    is the signal layer 2 exists for, and silently degrading it would be
+    worse than being loud; but a real verdict always outranks information,
+    and (unlike ``FAILED``) it never short-circuits the layers below."""
     for check in checks:
         if check.blocking and check.state == CheckState.FAILED:
             return CheckState.FAILED, check.layer, check
     for check in checks:
         if check.blocking and check.state == CheckState.WARNING:
             return CheckState.WARNING, check.layer, check
+    for check in checks:
+        if check.blocking and check.state == CheckState.UNSUPPORTED:
+            return CheckState.UNSUPPORTED, check.layer, check
     return CheckState.OK, None, None
 
 
@@ -549,6 +561,15 @@ class _ChecklistBuilder:
     # None always means unknown, never down
 
     def _check_worker_consuming(self):
+        unsupported = self.queue_health.unsupported_message("worker_consuming")
+        if unsupported:
+            # The one blocking UNSUPPORTED in the system: this is the signal
+            # layer 2 exists for — the one beat-said-yes hands its failure
+            # to — so an untested stack here reaches the headline as
+            # information. Blocking-but-not-FAILED means it never
+            # short-circuits the layers below to SKIPPED.
+            return {"state": CheckState.UNSUPPORTED, "message": unsupported,
+                    "blocking": True}
         consuming = self.queue_health.worker_consuming
         if consuming is None:
             # Unknown, not down: an unanswering broker must not manufacture a
@@ -565,6 +586,10 @@ class _ChecklistBuilder:
         return CheckState.OK, _("A worker is consuming the ingestion queue."), True
 
     def _check_queue_depth(self):
+        unsupported = self.queue_health.unsupported_message("queue_depth")
+        if unsupported:
+            return {"state": CheckState.UNSUPPORTED, "message": unsupported,
+                    "blocking": False}
         depth = self.queue_health.queue_depth
         if depth is None:
             return (CheckState.WARNING,
@@ -580,6 +605,17 @@ class _ChecklistBuilder:
                 False)
 
     def _check_running_tasks(self):
+        # Task ages are computed from time_start, which the *worker* stamps —
+        # so this signal is judged against the worker's own reported stack,
+        # cached on the heartbeat, not this process's. An unreported stack
+        # makes no claim: suppressing the stuck-task signal on silence would
+        # blind the very check this layer leans on.
+        unsupported = worker_stack_guard_message(
+            heartbeat_worker_versions(self.connection)
+        )
+        if unsupported:
+            return {"state": CheckState.UNSUPPORTED, "message": unsupported,
+                    "blocking": False}
         tasks = self.queue_health.running_tasks
         if tasks is None:
             return (CheckState.WARNING,

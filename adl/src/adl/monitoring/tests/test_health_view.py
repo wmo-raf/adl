@@ -83,6 +83,45 @@ class HealthPageRenderTests(HealthPageTestCase):
         # Manifest storage may hash the filename, so match the basename only
         self.assertContains(response, "status_badges")
 
+    def test_broker_library_versions_render_always_even_on_day_one(self):
+        # Nothing else reports which broker stack an installation runs, so
+        # the table renders whatever the ladder concluded — here with no
+        # heartbeat at all, the worker column simply says so
+        from adl.core.broker import local_library_versions
+
+        response = self.client.get(self.url)
+
+        self.assertContains(response, "Broker libraries")
+        for name, version in local_library_versions().items():
+            self.assertContains(response, name)
+            if version:
+                self.assertContains(response, version)
+        self.assertContains(response, "not yet reported")
+
+    def test_broker_library_versions_render_on_a_disabled_connection(self):
+        # "Always" includes a short-circuited ladder — the stack question is
+        # answerable regardless of what the checks concluded
+        self.connection.plugin_processing_enabled = False
+        self.connection.save()
+
+        response = self.client.get(self.url)
+
+        self.assertContains(response, "Broker libraries")
+
+    def test_worker_column_shows_the_heartbeat_cached_stack(self):
+        from adl.core.models import NetworkConnectionHeartbeat
+
+        NetworkConnectionHeartbeat.objects.create(
+            connection=self.connection,
+            last_run_at=dj_timezone.now(),
+            worker_versions={"celery": "5.6.99-worker", "kombu": "5.6.2",
+                             "redis": "8.0.1"},
+        )
+
+        response = self.client.get(self.url)
+
+        self.assertContains(response, "5.6.99-worker")
+
 
 class ConnectionsListingLinkTests(HealthPageTestCase):
     def test_listing_dots_menu_links_to_the_diagnostic_page(self):

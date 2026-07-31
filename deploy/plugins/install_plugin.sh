@@ -231,10 +231,20 @@ if [[ -d "$folder" ]]; then
 
       VENV_PIP="/adl/venv/bin/pip"
 
+      # Constrain plugin installs to core's pinned broker stack so a plugin's
+      # own requirements cannot silently resolve celery/kombu/redis away from
+      # the tested set. Guarded: images built before the file existed still
+      # install unconstrained.
+      CONSTRAINTS_FILE="/adl/app/constraints.txt"
+      constraint_args=()
+      if [[ -f "$CONSTRAINTS_FILE" ]]; then
+          constraint_args=(-c "$CONSTRAINTS_FILE")
+      fi
+
       if [[ "$dev" == true ]]; then
-          run_as_docker_user "$VENV_PIP" install -e "$folder"
+          run_as_docker_user "$VENV_PIP" install -e "$folder" "${constraint_args[@]}"
       else
-          run_as_docker_user "$VENV_PIP" install "$folder"
+          run_as_docker_user "$VENV_PIP" install "$folder" "${constraint_args[@]}"
       fi
 
       check_and_run_script "$folder" build.sh

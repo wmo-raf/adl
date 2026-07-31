@@ -14,7 +14,11 @@ from django.test import TestCase
 from django.utils import timezone as dj_tz
 from django_celery_beat.models import IntervalSchedule, PeriodicTask
 
-from adl.core.broker import IngestionQueueHealth, RunningIngestionTask
+from adl.core.broker import (
+    IngestionQueueHealth,
+    RunningIngestionTask,
+    UnsupportedSignal,
+)
 from adl.core.models import NetworkConnectionHeartbeat
 from adl.core.tasks import INGESTION_TASK_NAME, ingest_station_lock_key
 from adl.core.tests.factories import (
@@ -1213,3 +1217,131 @@ class DataLayerTests(HealthEvaluatorTestCase):
 
         self.assertEqual(checklist.first_failing_layer, LAYER_SCHEDULER)
         self.assertEqual(self.check(checklist, "data_freshness").state, CheckState.SKIPPED)
+
+
+def _unsupported_broker(signal, message="not the tested broker stack"):
+    """A broker observation with one signal degraded by its version guard."""
+    return IngestionQueueHealth(
+        queue_depth=0, worker_consuming=True, running_tasks=(),
+        unsupported=(UnsupportedSignal(signal, message),),
+    )
+
+
+class VersionGuardEvaluatorTests(HealthEvaluatorTestCase):
+    """
+    UNSUPPORTED from a version guard is advisory for every signal except
+    worker-consuming — the signal layer 2 exists for — which reaches the
+    headline as information, and pointedly does not short-circuit the
+    layers below to SKIPPED.
+    """
+
+    def fresh_data(self):
+        ObservationRecordFactory(
+            station=self.link.station, connection=self.connection,
+            time=dj_tz.now() - timedelta(minutes=10),
+        )
+
+    def test_unsupported_worker_consuming_reaches_the_headline_as_information(self):
+        self.make_healthy()
+        self.fresh_data()
+
+        checklist = self.evaluate(
+            queue_health=IngestionQueueHealth(
+                queue_depth=0, worker_consuming=None, running_tasks=(),
+                unsupported=(UnsupportedSignal(
+                    "worker_consuming", "not the tested broker stack"),),
+            )
+        )
+
+        self.assertEqual(checklist.status, CheckState.UNSUPPORTED)
+        self.assertEqual(checklist.first_failing_layer, LAYER_WORKER)
+        self.assertEqual(checklist.headline_check_id, "worker_consuming")
+        check = self.check(checklist, "worker_consuming")
+        self.assertEqual(check.state, CheckState.UNSUPPORTED)
+        self.assertIn("not the tested broker stack", check.message)
+
+    def test_unsupported_worker_consuming_does_not_short_circuit_layers_below(self):
+        self.make_healthy()
+        self.fresh_data()
+
+        checklist = self.evaluate(
+            queue_health=_unsupported_broker("worker_consuming")
+        )
+
+        # Unlike FAILED or DISABLED, information leaves everything below
+        # evaluated on its own evidence
+        self.assertEqual(self.check(checklist, "station_locks").state, CheckState.OK)
+        self.assertEqual(self.check(checklist, "data_freshness").state, CheckState.OK)
+
+    def test_a_real_failure_outranks_unsupported_information(self):
+        self.make_healthy()
+        ObservationRecordFactory(
+            station=self.link.station, connection=self.connection,
+            time=dj_tz.now() - timedelta(hours=6),
+        )
+
+        checklist = self.evaluate(
+            queue_health=_unsupported_broker("worker_consuming")
+        )
+
+        self.assertEqual(checklist.status, CheckState.FAILED)
+        self.assertEqual(checklist.first_failing_layer, LAYER_DATA)
+        # The information stays visible on its own row
+        self.assertEqual(self.check(checklist, "worker_consuming").state,
+                         CheckState.UNSUPPORTED)
+
+    def test_unsupported_queue_depth_is_advisory_and_never_leads(self):
+        self.make_healthy()
+        self.fresh_data()
+
+        checklist = self.evaluate(queue_health=_unsupported_broker("queue_depth"))
+
+        self.assertEqual(checklist.status, CheckState.OK)
+        check = self.check(checklist, "queue_depth")
+        self.assertEqual(check.state, CheckState.UNSUPPORTED)
+        self.assertFalse(check.blocking)
+
+    def test_out_of_range_worker_stack_degrades_running_tasks_to_unsupported(self):
+        # Task ages come from time_start, which the worker stamps — so the
+        # guard judges the worker's cached stack, not this process's
+        self.make_schedule_entry(last_run_at=dj_tz.now())
+        NetworkConnectionHeartbeat.objects.create(
+            connection=self.connection, last_run_at=dj_tz.now(),
+            worker_versions={"celery": "9.9.9", "kombu": "5.6.2", "redis": "8.0.1"},
+        )
+        self.fresh_data()
+
+        checklist = self.evaluate()
+
+        check = self.check(checklist, "running_tasks")
+        self.assertEqual(check.state, CheckState.UNSUPPORTED)
+        self.assertFalse(check.blocking)
+        self.assertIn("celery 9.9.9", check.message)
+        self.assertEqual(checklist.status, CheckState.OK)
+
+    def test_unreported_worker_stack_leaves_running_tasks_evaluated(self):
+        # A heartbeat that never reported versions is "never asked", not
+        # evidence of drift — the stuck-task signal must keep working
+        self.make_healthy()
+        self.fresh_data()
+
+        checklist = self.evaluate()
+
+        self.assertEqual(self.check(checklist, "running_tasks").state, CheckState.OK)
+
+    def test_unsupported_verdict_is_persistable(self):
+        self.make_healthy()
+        self.fresh_data()
+
+        checklist = evaluate_connection_health(
+            self.connection,
+            queue_health=IngestionQueueHealth(
+                queue_depth=0, worker_consuming=None, running_tasks=(),
+                unsupported=(UnsupportedSignal(
+                    "worker_consuming", "not the tested broker stack"),),
+            ),
+        )
+        health = store_connection_health(self.connection, checklist)
+
+        self.assertEqual(health.status, CheckState.UNSUPPORTED)
+        self.assertEqual(health.first_failing_layer, LAYER_WORKER)

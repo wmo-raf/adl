@@ -501,6 +501,13 @@ def heartbeat_last_run_at(instance):
     return heartbeat.last_run_at if heartbeat else None
 
 
+def heartbeat_worker_versions(instance):
+    """The worker's cached broker-stack versions from ``instance``'s
+    heartbeat row, or ``None`` if the worker has never reported them."""
+    heartbeat = getattr(instance, "heartbeat", None)
+    return heartbeat.worker_versions if heartbeat else None
+
+
 class NetworkConnection(PolymorphicModel, ClusterableModel):
     """
     Configuration for one upstream data integration — credentials, schedule,
@@ -1374,6 +1381,13 @@ class NetworkConnectionHeartbeat(models.Model):
     schedule working: the log records what happened, the heartbeat records
     who asked. A manual run stamps only its own slot — which is why
     ``last_run_at`` is nullable: a manual press can be the row's first write.
+
+    ``worker_versions`` caches the broker-stack versions
+    (celery/kombu/redis) of the worker that ran the coordinator. Containers
+    can genuinely diverge — plugin setup pip-installs per container at every
+    entrypoint — and the running-task-age signal is computed from a value the
+    *worker* stamps, so its version guard must judge the worker's stack, not
+    the evaluating process's (see ``adl.core.broker``).
     """
     connection = models.OneToOneField(NetworkConnection, on_delete=models.CASCADE,
                                       related_name="heartbeat", verbose_name=_("Connection"))
@@ -1382,6 +1396,7 @@ class NetworkConnectionHeartbeat(models.Model):
     batches_spawned = models.PositiveIntegerField(default=0, verbose_name=_("Batches Spawned"))
     task_id = models.CharField(max_length=255, blank=True, null=True, verbose_name=_("Task ID"))
     last_manual_run_at = models.DateTimeField(blank=True, null=True, verbose_name=_("Last Manual Run At"))
+    worker_versions = models.JSONField(blank=True, null=True, verbose_name=_("Worker Library Versions"))
 
     class Meta:
         verbose_name = _("Network Connection Heartbeat")
