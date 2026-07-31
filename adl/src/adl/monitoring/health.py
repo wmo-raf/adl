@@ -39,16 +39,29 @@ from adl.core.models import (
     heartbeat_last_run_at,
     is_coordinator_overdue,
 )
+from adl.core.source_checks import (
+    CHECK_DNS,
+    CHECK_SOURCE,
+    CHECK_TCP,
+    SourceCheckStatus,
+    connection_implements_check_source,
+)
 from adl.core.tasks import find_connection_schedule_entries, ingest_station_lock_key
 
 from .constants import (
     LAYER_DATA,
     LAYER_LOCKS,
+    LAYER_NETWORK,
     LAYER_SCHEDULER,
+    LAYER_SOURCE,
     LAYER_WORKER,
     CheckState,
 )
-from .models import NetworkConnectionHealth, NetworkConnectionHealthTransition
+from .models import (
+    NetworkConnectionHealth,
+    NetworkConnectionHealthTransition,
+    SourceProbeResult,
+)
 from .status import (
     ERROR as STATION_DATA_ERROR,
     WARNING as STATION_DATA_WARNING,
@@ -59,10 +72,26 @@ from .status import (
 
 logger = logging.getLogger(__name__)
 
-# The evaluated ladder. Layers 4-5 (network, source) join as their evidence
-# sources land; inserting there must not renumber anything, which is why
-# layers are identifiers and never ordinals.
-EVALUATED_LAYERS = (LAYER_SCHEDULER, LAYER_WORKER, LAYER_LOCKS, LAYER_DATA)
+# Sentinel: "endpoint not looked up yet" — None is a legitimate resolution
+_UNRESOLVED = object()
+
+# The evaluated ladder, in the order a failure propagates. Layers 4-5 are
+# external: their evidence comes from on-demand probes only, so their
+# resting state is STALE, never FAILED.
+EVALUATED_LAYERS = (LAYER_SCHEDULER, LAYER_WORKER, LAYER_LOCKS,
+                    LAYER_NETWORK, LAYER_SOURCE, LAYER_DATA)
+
+# A probe result older than this is STALE — "not recently checked", excluded
+# from the headline. Deliberately different from the probe view's 60-second
+# cooldown: freshness asks "can I still trust this", cooldown asks "may I
+# ask again yet".
+PROBE_FRESHNESS_SECONDS = 15 * 60
+
+
+def probe_age_minutes(now, at):
+    """Whole minutes since a probe observation — the one age computation
+    behind every 'N minute(s) ago' the diagnostic renders."""
+    return int(max((now - at).total_seconds(), 0) // 60)
 
 
 @dataclass(frozen=True)
@@ -198,6 +227,9 @@ def _ladder_plan():
         ("running_tasks", LAYER_WORKER, _("Running ingestion tasks")),
         ("tick_consumed", LAYER_WORKER, _("Tick reached a worker")),
         ("station_locks", LAYER_LOCKS, _("Station locks")),
+        (CHECK_DNS, LAYER_NETWORK, _("Source host resolves (DNS)")),
+        (CHECK_TCP, LAYER_NETWORK, _("TCP connection to the source")),
+        (CHECK_SOURCE, LAYER_SOURCE, _("Source accepts credentials and offers data")),
         ("data_freshness", LAYER_DATA, _("Data freshness")),
     )
 
@@ -225,6 +257,7 @@ class _ChecklistBuilder:
         self._queue_health = None
         self.now = now
         self.failed = False
+        self._source_endpoint = _UNRESOLVED
         self.schedule_entries = find_connection_schedule_entries(connection)
 
     @property
@@ -465,6 +498,90 @@ class _ChecklistBuilder:
                   "no task behind them — a worker died mid-run. They expire on "
                   "their own TTL.") % counts,
                 True)
+
+    # -- Layers 4-5: the external layers, read from stored on-demand probe
+    # results only. Never probed here — evaluation must be free of side
+    # effects on partner hosts — so "not recently checked" (STALE) is the
+    # resting state, and STALE never reaches the headline.
+
+    @property
+    def source_endpoint(self):
+        if self._source_endpoint is _UNRESOLVED:
+            try:
+                self._source_endpoint = self.connection.get_source_endpoint()
+            except Exception:
+                logger.exception("[HEALTH] get_source_endpoint raised for connection %s",
+                                 self.connection.id)
+                self._source_endpoint = None
+        return self._source_endpoint
+
+    def _latest_probe(self, check_id):
+        # Connection-scope rows only: station-scope checks carry a station
+        # link and are excluded from the connection's verdict by
+        # construction, not by discipline
+        return (SourceProbeResult.objects
+                .filter(connection=self.connection, station_link__isnull=True,
+                        check_id=check_id)
+                .order_by("-at")
+                .first())
+
+    def _probe_backed_check(self, check_id, supported, unsupported_message):
+        row = self._latest_probe(check_id)
+        if row is None:
+            if not supported:
+                return CheckState.UNSUPPORTED, unsupported_message, False
+            return (CheckState.STALE,
+                    _("Not recently checked — no probe has run. External "
+                      "layers are probed on demand only."),
+                    False)
+
+        age_minutes = probe_age_minutes(self.now, row.at)
+        if (self.now - row.at).total_seconds() > PROBE_FRESHNESS_SECONDS:
+            return (CheckState.STALE,
+                    _("Not recently checked — the last on-demand probe ran "
+                      "%(minutes)d minute(s) ago, outside the 15-minute "
+                      "freshness window.") % {"minutes": age_minutes},
+                    False)
+
+        message = _("%(message)s (on-demand probe, %(minutes)d minute(s) ago)") % {
+            "message": row.message, "minutes": age_minutes,
+        }
+        if row.status == SourceCheckStatus.OK:
+            return CheckState.OK, message, True
+        if row.status == SourceCheckStatus.FAILED:
+            return CheckState.FAILED, message, True
+        if row.status == SourceCheckStatus.MALFORMED:
+            return (CheckState.UNSUPPORTED,
+                    _("The plugin returned a malformed result, which core "
+                      "does not trust: %(message)s") % {"message": row.message},
+                    False)
+        # An UNSUPPORTED probe row: the plugin declined at probe time
+        return CheckState.UNSUPPORTED, message, False
+
+    def _check_dns_resolution(self):
+        return self._probe_backed_check(
+            CHECK_DNS,
+            supported=self.source_endpoint is not None,
+            unsupported_message=_("This plugin does not name its source "
+                                  "endpoint, so core cannot probe DNS."),
+        )
+
+    def _check_tcp_connect(self):
+        return self._probe_backed_check(
+            CHECK_TCP,
+            supported=self.source_endpoint is not None,
+            unsupported_message=_("This plugin does not name its source "
+                                  "endpoint, so core cannot probe a TCP "
+                                  "connection."),
+        )
+
+    def _check_source_check(self):
+        return self._probe_backed_check(
+            CHECK_SOURCE,
+            supported=connection_implements_check_source(self.connection),
+            unsupported_message=_("This plugin does not implement the source "
+                                  "check."),
+        )
 
     # -- Layer 6: data freshness, rolled up per station from the shared
     # status helper. All stations affected -> FAILED, some -> WARNING,
