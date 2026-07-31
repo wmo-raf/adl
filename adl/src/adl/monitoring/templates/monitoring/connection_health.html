@@ -120,18 +120,22 @@
         </p>
 
         {% if latest_run_was_manual %}
-            {# Green from a press must say so: the most recent run proves the
-               workers, not the schedule. #}
+            {% comment %}
+                Green from a press must say so: the most recent run proves the workers, not the schedule.
+            {% endcomment %}
+
             <p class="health-headline__manual">
                 {% blocktrans with at=heartbeat.last_manual_run_at|date:"Y-m-d H:i:s" %}The most recent ingestion run was triggered manually at {{ at }} — it is not evidence that the schedule is working.{% endblocktrans %}
             </p>
         {% endif %}
 
         {% if show_run_button %}
-            {# Page-level and connection-wide: the run spans layers 1-6.
-               Hidden rather than disabled when unpermitted, and enabled
-               during cooldown: a press inside it answers with the last
-               run's age, not a refusal. #}
+            {% comment %}
+                Page-level and connection-wide: the run spans layers 1-6.
+                Hidden rather than disabled when unpermitted, and enabled
+                during cooldown: a press inside it answers with the last
+                run's age, not a refusal.
+            {% endcomment %}
             <form method="post"
                   action="{% url 'connection_run_now' connection.id %}"
                   class="health-run-form">
@@ -152,30 +156,32 @@
             <h2 class="w-text-h3">{{ group.label }}</h2>
             {% include "monitoring/partials/health_check_table.html" with checks=group.checks %}
             {% if group.broker_stack %}
-                {# Always rendered, whatever the ladder concluded — nothing
-                   else reports which broker stack an installation runs, and
-                   the diagnostic serves operators debugging deployments they
-                   did not build. Two columns because containers pip-install
-                   per entrypoint and genuinely diverge. #}
+                {% comment %}
+                    Always rendered, whatever the ladder concluded — nothing
+                    else reports which broker stack an installation runs, and
+                    the diagnostic serves operators debugging deployments they
+                    did not build. Two columns because containers pip-install
+                    per entrypoint and genuinely diverge.
+                {% endcomment %}
                 <p class="health-broker-stack__title">{% trans "Broker libraries" %}</p>
                 <table class="listing health-broker-stack">
                     <thead>
-                        <tr>
-                            <th>{% trans "Library" %}</th>
-                            <th>{% trans "This process" %}</th>
-                            <th>{% trans "Worker" %}</th>
-                            <th>{% trans "Tested range" %}</th>
-                        </tr>
+                    <tr>
+                        <th>{% trans "Library" %}</th>
+                        <th>{% trans "This process" %}</th>
+                        <th>{% trans "Worker" %}</th>
+                        <th>{% trans "Tested range" %}</th>
+                    </tr>
                     </thead>
                     <tbody>
-                        {% for lib in group.broker_stack %}
-                            <tr>
-                                <td>{{ lib.name }}</td>
-                                <td>{{ lib.local|default:_("unknown") }}</td>
-                                <td>{{ lib.worker|default:_("not yet reported") }}</td>
-                                <td>{{ lib.tested }}</td>
-                            </tr>
-                        {% endfor %}
+                    {% for lib in group.broker_stack %}
+                        <tr>
+                            <td>{{ lib.name }}</td>
+                            <td>{{ lib.local|default:_("unknown") }}</td>
+                            <td>{{ lib.worker|default:_("not yet reported") }}</td>
+                            <td>{{ lib.tested }}</td>
+                        </tr>
+                    {% endfor %}
                     </tbody>
                 </table>
                 <p class="health-broker-stack__hint">
@@ -183,10 +189,12 @@
                 </p>
             {% endif %}
             {% if group.probe_button %}
-                {# One button covers both external layers. Present whenever the
-                   user may probe and the plugin supports it — hidden otherwise,
-                   never disabled, and enabled during cooldown: a press inside
-                   the cooldown answers with the shared result, not a refusal. #}
+                {% comment %}
+                    One button covers both external layers. Present whenever the
+                    user may probe and the plugin supports it — hidden otherwise,
+                    never disabled, and enabled during cooldown: a press inside
+                    the cooldown answers with the shared result, not a refusal.
+                {% endcomment %}
                 <form method="post"
                       action="{% url 'connection_probe_source' connection.id %}"
                       class="health-probe-form">
@@ -199,43 +207,47 @@
             {% endif %}
         {% endfor %}
 
-        {# Verdict history: the append-only transitions log, paginated in
-           place. Flapping is a count, not a chart. #}
-        <h2 class="w-text-h3">{% trans "Verdict history" %}</h2>
+        {% comment %}
+            Verdict history: the append-only transitions log, paginated in
+            place. Flapping is a count, not a chart.
+        {% endcomment %}
+        <h2 class="w-text-h3">
+            {% trans "Verdict history" %}
+        </h2>
         <p class="health-history__flapping">
             {% blocktrans count changes=verdict_changes with days=transitions_retention_days %}{{ changes }} verdict change in the last {{ days }} days.{% plural %}{{ changes }} verdict changes in the last {{ days }} days.{% endblocktrans %}
         </p>
         {% if transition_rows %}
             <table class="listing health-history__table">
                 <thead>
-                    <tr>
-                        <th>{% trans "When" %}</th>
-                        <th>{% trans "From" %}</th>
-                        <th>{% trans "To" %}</th>
-                    </tr>
+                <tr>
+                    <th>{% trans "When" %}</th>
+                    <th>{% trans "From" %}</th>
+                    <th>{% trans "To" %}</th>
+                </tr>
                 </thead>
                 <tbody>
-                    {% for row in transition_rows %}
-                        <tr class="health-transition">
-                            <td class="health-transition__at">{{ row.at|date:"Y-m-d H:i:s" }}</td>
-                            <td>
-                                {% if row.from_status %}
-                                    <span class="status-badge status-badge--{{ row.from_status|lower }}">{{ row.from_status }}</span>
-                                    {% if row.from_layer_label %}
-                                        <span class="health-transition__layer">{{ row.from_layer_label }}</span>
-                                    {% endif %}
-                                {% else %}
-                                    <span class="health-transition__first">{% trans "First recorded verdict" %}</span>
+                {% for row in transition_rows %}
+                    <tr class="health-transition">
+                        <td class="health-transition__at">{{ row.at|date:"Y-m-d H:i:s" }}</td>
+                        <td>
+                            {% if row.from_status %}
+                                <span class="status-badge status-badge--{{ row.from_status|lower }}">{{ row.from_status }}</span>
+                                {% if row.from_layer_label %}
+                                    <span class="health-transition__layer">{{ row.from_layer_label }}</span>
                                 {% endif %}
-                            </td>
-                            <td>
-                                <span class="status-badge status-badge--{{ row.to_status|lower }}">{{ row.to_status }}</span>
-                                {% if row.to_layer_label %}
-                                    <span class="health-transition__layer">{{ row.to_layer_label }}</span>
-                                {% endif %}
-                            </td>
-                        </tr>
-                    {% endfor %}
+                            {% else %}
+                                <span class="health-transition__first">{% trans "First recorded verdict" %}</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <span class="status-badge status-badge--{{ row.to_status|lower }}">{{ row.to_status }}</span>
+                            {% if row.to_layer_label %}
+                                <span class="health-transition__layer">{{ row.to_layer_label }}</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                {% endfor %}
                 </tbody>
             </table>
             {% if transitions_page.paginator.num_pages > 1 %}

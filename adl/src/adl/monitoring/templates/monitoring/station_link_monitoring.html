@@ -22,11 +22,13 @@
     <div style="margin-top: 40px">
 
         {% if configuration_drift %}
-            {# Station-scope drift is advisory: it renders here, beside this
-               station's timeline, and never changes the connection's verdict.
-               Runs from a drifted link are excluded from source-layer
-               evidence, so our own configuration fault is not attributed to
-               the partner. #}
+            {% comment %}
+                Station-scope drift is advisory: it renders here, beside this
+                station's timeline, and never changes the connection's verdict.
+                Runs from a drifted link are excluded from source-layer
+                evidence, so our own configuration fault is not attributed to
+                the partner.
+            {% endcomment %}
             <div class="help-block help-warning">
                 <p>
                     {% trans "Configuration drift — this station link's stored configuration no longer passes validation. Fix the named field(s) on the station link's edit form. Ingestion is not stopped by this finding, but this station's runs are excluded from the connection's source-layer evidence." %}

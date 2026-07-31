@@ -8,6 +8,15 @@ Conventions for all HTML templates in ADL. Referenced from `CLAUDE.md`.
   `{% block extra_css %}<style>…</style>{% endblock %}` block and give elements semantic class names.
   When the same vocabulary is needed on more than one page (status badges, pills), escalate to a
   shared stylesheet loaded by an `insert_global_admin_css` hook rather than copying the block.
+- **Multi-line comments use `{% comment %}`** — the `{# … #}` syntax is for single-line comments only.
+  When a comment spans multiple lines, always use a `{% comment %}…{% endcomment %}` block:
+
+  ```django
+  {% comment %}
+      Always rendered, whatever the ladder concluded — nothing else
+      reports which broker stack an installation runs.
+  {% endcomment %}
+  ```
 - **Modern JS** — use `const` and `let`; never `var`.
 - **JS placement** — all JavaScript goes in `{% block extra_js %}…{% endblock %}` at the bottom of the template. Wrap
   code in `document.addEventListener('DOMContentLoaded', function () { … })` instead of IIFEs `(function(){ … }())`.
