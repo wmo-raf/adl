@@ -348,47 +348,39 @@ def _configuration_precondition(connection, drift):
     outcome; the two ``UNSUPPORTED`` shapes (no rules declared, validator
     crashed) are epistemic and advisory.
     """
-    label = _("Configuration valid")
+    def row(state, message, blocking=True):
+        return HealthCheck(id="configuration_valid", layer=None,
+                           label=_("Configuration valid"), state=state,
+                           message=message, blocking=blocking)
+
     if drift.drifted:
-        return HealthCheck(
-            id="configuration_valid",
-            layer=None,
-            label=label,
-            state=CheckState.MISCONFIGURED,
-            message=_("The stored configuration no longer passes validation — "
-                      "%(details)s. Fix the named field(s) on the connection's "
-                      "edit form. Nothing below is evaluated; ingestion itself "
-                      "is not stopped by this finding.")
-                    % {"details": "; ".join(drift.messages)},
+        return row(
+            CheckState.MISCONFIGURED,
+            _("The stored configuration no longer passes validation — "
+              "%(details)s. Fix the named field(s) on the connection's "
+              "edit form. Nothing below is evaluated; ingestion itself "
+              "is not stopped by this finding.")
+            % {"details": "; ".join(drift.messages)},
         )
     if not drift.evaluated:
-        return HealthCheck(
-            id="configuration_valid",
-            layer=None,
-            label=label,
-            state=CheckState.UNSUPPORTED,
-            message=_("The plugin's validation rules crashed, so configuration "
-                      "drift could not be evaluated. This is not evidence the "
-                      "configuration is wrong; see the application logs."),
+        return row(
+            CheckState.UNSUPPORTED,
+            _("The plugin's validation rules crashed, so configuration "
+              "drift could not be evaluated. This is not evidence the "
+              "configuration is wrong; see the application logs."),
             blocking=False,
         )
     if not connection_declares_validation_rules(connection):
-        return HealthCheck(
-            id="configuration_valid",
-            layer=None,
-            label=label,
-            state=CheckState.UNSUPPORTED,
-            message=_("This plugin declares no configuration rules of its own, "
-                      "so only core's field validation ran — silence is not "
-                      "validation."),
+        return row(
+            CheckState.UNSUPPORTED,
+            _("This plugin declares no connection-level configuration rules "
+              "of its own, so only core's field validation ran — silence is "
+              "not validation."),
             blocking=False,
         )
-    return HealthCheck(
-        id="configuration_valid",
-        layer=None,
-        label=label,
-        state=CheckState.OK,
-        message=_("The stored configuration passes the plugin's validation rules."),
+    return row(
+        CheckState.OK,
+        _("The stored configuration passes the plugin's validation rules."),
     )
 
 

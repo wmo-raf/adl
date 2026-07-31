@@ -46,3 +46,24 @@ class RunnerTests(TestCase):
         # Only enabled link is processed and appears in results
         self.assertIn(sl_enabled.station.id, results)
         self.assertNotIn(sl_disabled.station.id, results)
+
+    def test_a_misconfigured_connection_still_ingests(self):
+        # Configuration-drift detection is report-only: a stored value the
+        # admin form would now reject must never prevent or alter a run
+        plugin = make_test_plugin()
+        connection = NetworkConnectionFactory(plugin_processing_interval=0)
+
+        link = StationLink.objects.create(
+            network_connection=connection, station=StationFactory(), enabled=True,
+            use_connection_timezone=True, timezone_info="UTC"
+        )
+        param_temp = DataParameterFactory(name="air_temperature", unit=CelsiusUnitFactory())
+        link.get_variable_mappings = lambda: [make_mapping(param_temp, KelvinUnitFactory())]
+
+        plugin.records = [
+            {"observation_time": datetime(2025, 1, 1, 0, 0, tzinfo=py_tz.utc), "temp_K": 293.15}
+        ]
+
+        results = plugin.run_process(connection)
+
+        self.assertIn(link.station.id, results)
