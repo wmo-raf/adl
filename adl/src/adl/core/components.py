@@ -3,6 +3,7 @@ from django.urls import reverse
 from django.utils import timezone as dj_timezone
 from wagtail.admin.ui.components import Component
 
+from adl.core.source_checks import CHECK_STATION_SOURCE
 from adl.monitoring.health import configuration_drift, probe_age_minutes
 from adl.monitoring.models import SourceProbeResult, StationLinkActivityLog
 
@@ -64,8 +65,12 @@ class StationLinkSourceCheckPanel(Component):
         station_link = parent_context.get('station_link')
         request = parent_context.get('request')
 
+        # Filtered on the check id as well as the FK, so only a
+        # station-scope check's own row can ever be presented as this
+        # station's answer — by construction, not by convention
         latest = (SourceProbeResult.objects
-                  .filter(station_link=station_link)
+                  .filter(station_link=station_link,
+                          check_id=CHECK_STATION_SOURCE)
                   .order_by('-at')
                   .first())
         if latest is not None:

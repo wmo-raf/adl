@@ -84,7 +84,7 @@ class StationCheckPermissionTests(StationCheckViewTestCase):
         self.assertEqual(xhr_response.status_code, 403)
 
 
-class StationCheckRunTests(StationCheckViewTestCase):
+class StationCheckPostTests(StationCheckViewTestCase):
     def test_zero_matches_reports_ok_with_the_resolved_path(self):
         with patch("adl.monitoring.views.health.run_station_source_check",
                    return_value=ZERO_MATCH_STEP):

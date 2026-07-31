@@ -47,8 +47,8 @@
                 {% endif %}
             </div>
             {% if latest_result.message %}
-                <div class="status-card__item" style="margin-top: 0.5rem;">
-                    <span class="status-card__value">{{ latest_result.message }}</span>
+                <div class="{% if latest_result.status == 'FAILED' %}status-card__error{% else %}status-card__message{% endif %}">
+                    {{ latest_result.message }}
                 </div>
             {% endif %}
         </div>
