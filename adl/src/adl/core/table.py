@@ -1,3 +1,4 @@
+from django.urls import reverse
 from wagtail.admin.ui.tables import TitleColumn, Column
 
 
@@ -20,6 +21,27 @@ class LinkColumnWithIcon(TitleColumn):
             "icon_name": self.icon_name,
         })
         
+        return context
+
+
+class ConnectionHealthColumn(Column):
+    """
+    The connection's stored ingestion-diagnostic verdict, as a badge linking
+    to the diagnostic page. Reads only the row the periodic sweep persisted
+    (the ``health`` reverse relation) — a listing read must never trigger a
+    per-connection evaluation cascade.
+    """
+
+    cell_template_name = "core/tables/connection_health_cell.html"
+
+    def get_value(self, instance):
+        # Reverse one-to-one access raises a DoesNotExist that is also an
+        # AttributeError, so getattr covers the no-verdict-yet state
+        return getattr(instance, "health", None)
+
+    def get_cell_context_data(self, instance, parent_context):
+        context = super().get_cell_context_data(instance, parent_context)
+        context["diagnostic_url"] = reverse("connection_health", args=[instance.pk])
         return context
 
 

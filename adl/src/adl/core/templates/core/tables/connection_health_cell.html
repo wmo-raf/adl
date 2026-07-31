@@ -1,0 +1,10 @@
+{% load i18n %}
+<td {% if column.classname %}class="{{ column.classname }}"{% endif %}>
+    <a href="{{ diagnostic_url }}"{% if value %} title="{{ value.headline_message }}"{% endif %}>
+        {% if value %}
+            <span class="status-badge status-badge--{{ value.status|lower }}">{{ value.status }}</span>
+        {% else %}
+            <span class="status-badge status-badge--muted">{% trans "No verdict yet" %}</span>
+        {% endif %}
+    </a>
+</td>

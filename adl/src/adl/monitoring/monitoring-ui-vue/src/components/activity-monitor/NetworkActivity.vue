@@ -64,6 +64,23 @@ const getSeverityClass = (status) => {
   return map[status] || "info"
 }
 
+// The stored ingestion-diagnostic verdict, read as-is from the API. The
+// badge reuses the shared status-badge classes loaded admin-wide, so the
+// colour rule (only OK/WARNING/FAILED coloured) lives in one stylesheet.
+const health = computed(() => connection.value?.health || null)
+
+const healthBadgeClass = computed(() => {
+  const status = health.value?.status
+  return status ? `status-badge--${status.toLowerCase()}` : "status-badge--muted"
+})
+
+const healthLabel = computed(() => {
+  const status = health.value?.status
+  if (!status) return "No verdict yet"
+  const layer = health.value?.first_failing_layer_label
+  return layer ? `${status} · ${layer}` : status
+})
+
 const filteredStations = computed(() => {
   let list = stations.value || []
 
@@ -107,6 +124,15 @@ const filteredStations = computed(() => {
         <div class="header-title-group">
           <h1 class="connection-name">{{ connection?.name || 'Station Monitor' }}</h1>
           <div class="header-badges">
+            <a
+                v-if="health?.diagnostic_url"
+                class="status-badge health-badge"
+                :class="healthBadgeClass"
+                :href="health.diagnostic_url"
+                :title="health?.since_human ? `In this state since ${health.since_human} — open the ingestion diagnostic` : 'Open the ingestion diagnostic'"
+            >
+              {{ healthLabel }}
+            </a>
                 <span class="meta-badge" v-if="connection?.enabled">
                     <i class="pi pi-check-circle" style="color: #16a34a"></i> Enabled
                 </span>
@@ -336,6 +362,14 @@ const filteredStations = computed(() => {
   padding: 4px 10px;
   border-radius: 4px;
   border: 1px solid #e2e8f0;
+}
+
+/* Colour and shape come from the shared status_badges.css loaded by the
+   admin shell; this only makes the badge behave as a link in the row. */
+.health-badge {
+  text-decoration: none;
+  cursor: pointer;
+  align-self: center;
 }
 
 /* SUMMARY CARDS */

@@ -53,7 +53,7 @@ from .registries import (
     connection_viewset_registry,
     plugin_registry
 )
-from .table import LinkColumnWithIcon
+from .table import ConnectionHealthColumn, LinkColumnWithIcon
 from .tasks import (
     process_station_link_batch,
     perform_channel_dispatch,
@@ -709,6 +709,7 @@ def connections_list(request):
         columns = [
             ConnectionButtonsColumn("name", label=_("Station Link"), get_url=get_url),
             BooleanColumn("plugin_processing_enabled", label=_("Enabled")),
+            ConnectionHealthColumn("health", label=_("Health")),
             LinkColumnWithIcon("stations_link", label=_("Stations Link"), icon_name="map-pin",
                                get_url=get_connection_station_link_url),
         ]
