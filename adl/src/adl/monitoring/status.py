@@ -6,8 +6,10 @@ is the one computation both consume — and the seam anything else that needs
 the same verdict (the per-connection diagnostic) should read from, so they
 cannot disagree about the same station.
 
-Everything here works on plain domain objects and timestamps — no view, no
-request — so it is callable from tasks, management commands and templates.
+Nothing here touches a view or a request, so it is callable from tasks,
+management commands and templates. The status computation itself works on
+plain timestamps; :func:`annotate_station_pull_activity` is the one queryset
+helper, supplying those timestamps the same way to every consumer.
 """
 
 from dataclasses import dataclass

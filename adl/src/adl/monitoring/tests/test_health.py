@@ -462,7 +462,7 @@ class DataLayerTests(HealthEvaluatorTestCase):
 
         check = self.check(checklist, "data_freshness")
         self.assertIn("1 of 2", check.message)
-        self.assertTrue(check.link_url)
+        self.assertIsNotNone(check.link)
 
     def test_headline_anchors_to_data_when_layers_one_to_three_are_green(self):
         self.make_healthy()
@@ -493,6 +493,38 @@ class DataLayerTests(HealthEvaluatorTestCase):
         checklist = self.evaluate()
 
         self.assertEqual(checklist.status, CheckState.OK)
+
+    def test_data_just_inside_the_error_limit_is_not_stale(self):
+        # Error limit is 12x the 15-minute interval = 180 minutes
+        self.make_healthy()
+        self.observe(self.link, timedelta(minutes=170))
+
+        checklist = self.evaluate()
+
+        self.assertEqual(checklist.status, CheckState.OK)
+        self.assertEqual(self.check(checklist, "data_freshness").state, CheckState.OK)
+
+    def test_data_just_past_the_error_limit_is_stale(self):
+        self.make_healthy()
+        self.observe(self.link, timedelta(minutes=190))
+
+        checklist = self.evaluate()
+
+        self.assertEqual(checklist.status, CheckState.FAILED)
+        self.assertEqual(checklist.first_failing_layer, LAYER_DATA)
+
+    def test_aging_stations_are_named_in_an_ok_message(self):
+        # An amber station on the monitoring panel must not read as
+        # "data is current" here — the two surfaces cannot disagree
+        self.make_healthy()
+        self.observe(self.link, timedelta(minutes=100))  # past warning, before error
+
+        checklist = self.evaluate()
+
+        check = self.check(checklist, "data_freshness")
+        self.assertEqual(check.state, CheckState.OK)
+        self.assertIn("1 of 1", check.message)
+        self.assertNotIn("current", check.message)
 
     def test_data_check_is_skipped_below_an_upper_failure(self):
         # No schedule entry: the scheduler fails first

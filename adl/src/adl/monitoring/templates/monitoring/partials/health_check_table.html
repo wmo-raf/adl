@@ -15,8 +15,8 @@ render grey via --muted and are distinguished by wording.
             </td>
             <td>
                 {{ check.message }}
-                {% if check.link_url %}
-                    <a href="{{ check.link_url }}">{{ check.link_label }}</a>
+                {% if check.link %}
+                    <a href="{{ check.link.url }}">{{ check.link.label }}</a>
                 {% endif %}
             </td>
         </tr>

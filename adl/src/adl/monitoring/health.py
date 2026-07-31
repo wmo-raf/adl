@@ -51,6 +51,7 @@ from .constants import (
 from .models import NetworkConnectionHealth, NetworkConnectionHealthTransition
 from .status import (
     ERROR as STATION_DATA_ERROR,
+    WARNING as STATION_DATA_WARNING,
     annotate_station_pull_activity,
     compute_station_status,
     connection_thresholds,
@@ -65,6 +66,15 @@ EVALUATED_LAYERS = (LAYER_SCHEDULER, LAYER_WORKER, LAYER_LOCKS, LAYER_DATA)
 
 
 @dataclass(frozen=True)
+class CheckLink:
+    """A link rendered after a check's message (e.g. the data layer links
+    through to the per-station monitoring page)."""
+
+    url: str
+    label: str
+
+
+@dataclass(frozen=True)
 class HealthCheck:
     """One row of the checklist. ``layer`` is ``None`` for the precondition band."""
 
@@ -75,10 +85,7 @@ class HealthCheck:
     message: str
     # Advisory checks are shown but never seize the headline
     blocking: bool = True
-    # Optional link rendered after the message (e.g. the data layer links
-    # through to the affected stations)
-    link_url: Optional[str] = None
-    link_label: Optional[str] = None
+    link: Optional[CheckLink] = None
 
     @property
     def coloured(self):
@@ -237,11 +244,14 @@ class _ChecklistBuilder:
                               "check meaningless."),
                 )
             else:
-                state, message, blocking, *rest = getattr(self, f"_check_{check_id}")()
-                extra = rest[0] if rest else {}
+                # A check returns (state, message, blocking) with an optional
+                # trailing CheckLink
+                result = getattr(self, f"_check_{check_id}")()
+                state, message, blocking = result[:3]
+                link = result[3] if len(result) > 3 else None
                 check = HealthCheck(id=check_id, layer=layer, label=label,
                                     state=state, message=message, blocking=blocking,
-                                    **extra)
+                                    link=link)
                 if check.blocking and check.state == CheckState.FAILED:
                     self.failed = True
             checks.append(check)
@@ -469,6 +479,7 @@ class _ChecklistBuilder:
 
         total = 0
         stale = 0
+        aging = 0
         for link in links:
             total += 1
             status = compute_station_status(
@@ -480,34 +491,42 @@ class _ChecklistBuilder:
             )
             if status.data_status == STATION_DATA_ERROR:
                 stale += 1
+            elif status.data_status == STATION_DATA_WARNING:
+                aging += 1
 
         if not total:
             return (CheckState.OK,
                     _("This connection has no enabled station links."),
                     True)
 
-        extra = {
-            "link_url": reverse("network_connection_monitoring",
-                                args=(self.connection.id,)),
-            "link_label": _("View stations"),
-        }
-        counts = {"stale": stale, "total": total}
+        link = CheckLink(
+            url=reverse("network_connection_monitoring", args=(self.connection.id,)),
+            label=_("View stations"),
+        )
+        counts = {"stale": stale, "aging": aging, "total": total}
         if not stale:
-            return (CheckState.OK,
-                    _("Data is current on all %(total)d enabled station(s), "
-                      "within the connection's freshness limits.") % counts,
-                    True, extra)
+            # The verdict rolls up stale stations only, but the message must
+            # not claim more than the shared helper reports — aging stations
+            # render amber on the monitoring panel and are named here too
+            if aging:
+                message = _("No station has stale data, but %(aging)d of "
+                            "%(total)d enabled station(s) have no fresh "
+                            "observations within the warning window.") % counts
+            else:
+                message = _("Data is current on all %(total)d enabled "
+                            "station(s).") % counts
+            return CheckState.OK, message, True, link
         if stale == total:
             return (CheckState.FAILED,
                     _("All %(total)d enabled station(s) have stale data — no "
                       "recent observations within the connection's freshness "
                       "limit.") % counts,
-                    True, extra)
+                    True, link)
         return (CheckState.WARNING,
                 _("%(stale)d of %(total)d enabled stations have stale data — "
                   "no recent observations within the connection's freshness "
                   "limit.") % counts,
-                True, extra)
+                True, link)
 
 
 def store_connection_health(connection, checklist, now=None):
