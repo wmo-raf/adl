@@ -371,6 +371,19 @@ class VersionGuardTests(SimpleTestCase):
         # The other inspect signal still works
         self.assertEqual(result.running_tasks, ())
 
+    def test_moved_active_reply_shape_is_unsupported_not_unknown(self):
+        # A reply whose tasks are no longer dicts is API drift, not an
+        # unanswering broker
+        result = self.call(
+            make_connection_mock(),
+            active_queues={"adl-worker@host": [{"name": INGESTION_QUEUE_NAME}]},
+            active={"adl-worker@host": ["not-a-task-dict"]},
+        )
+
+        self.assertIsNotNone(result.unsupported_message("running_tasks"))
+        self.assertIsNone(result.running_tasks)
+        self.assertTrue(result.worker_consuming)
+
 
 class WorkerStackGuardTests(SimpleTestCase):
     """

@@ -610,8 +610,9 @@ class _ChecklistBuilder:
         # cached on the heartbeat, not this process's. An unreported stack
         # makes no claim: suppressing the stuck-task signal on silence would
         # blind the very check this layer leans on.
-        unsupported = worker_stack_guard_message(
-            heartbeat_worker_versions(self.connection)
+        unsupported = (
+            self.queue_health.unsupported_message("running_tasks")
+            or worker_stack_guard_message(heartbeat_worker_versions(self.connection))
         )
         if unsupported:
             return {"state": CheckState.UNSUPPORTED, "message": unsupported,

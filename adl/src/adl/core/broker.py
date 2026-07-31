@@ -36,6 +36,7 @@ from functools import lru_cache
 from typing import Optional, Tuple
 
 from django.conf import settings
+from django.utils.translation import gettext as _
 from kombu import Connection
 from kombu.exceptions import ChannelError
 
@@ -162,22 +163,25 @@ def _version_guard_message(libraries, versions):
     if not drifted:
         return None
     detail = ", ".join(
-        "%s %s is outside the tested range %s"
-        % (name, versions.get(name), tested_range_display(name))
+        _("%(name)s %(version)s is outside the tested range %(tested)s")
+        % {"name": name, "version": versions.get(name),
+           "tested": tested_range_display(name)}
         for name in drifted
     )
     return (
-        "Not evaluated — this is not the tested broker stack: %s. "
-        "The signal cannot vouch for a value measured against a different "
-        "stack; see the pinned versions in requirements.txt." % detail
+        _("Not evaluated — this is not the tested broker stack: %(detail)s. "
+          "The signal cannot vouch for a value measured against a different "
+          "stack; see the pinned versions in requirements.txt.")
+        % {"detail": detail}
     )
 
 
 def _moved_api_message(description):
     return (
-        "Not evaluated — the underlying library API is not the tested one: "
-        "%s. A library outside the pinned set is likely installed; see "
-        "requirements.txt." % description
+        _("Not evaluated — the underlying library API is not the tested one: "
+          "%(description)s. A library outside the pinned set is likely "
+          "installed; see requirements.txt.")
+        % {"description": description}
     )
 
 
@@ -269,8 +273,13 @@ def get_ingestion_queue_health():
     connection. Never raises; each signal degrades on its own — to ``None``
     when the broker did not answer, to ``UNSUPPORTED`` when this process's
     broker stack is outside the tested range or an underlying API moved. A
-    guarded-out signal is never dialled: the guard exists precisely because
-    the call's behaviour off the tested stack is unknown.
+    signal guarded out by a local version predicate is never dialled: the
+    guard exists precisely because the call's behaviour off the tested stack
+    is unknown. The running-task-age signal is the exception — its fragile
+    value (``time_start``) is stamped by the *worker*, so its version
+    predicate is per-connection and applied at the evaluator against the
+    heartbeat-cached worker stack (:func:`worker_stack_guard_message`); here
+    it carries only the structural backstop.
     """
     queue_depth = None
     worker_consuming = None
@@ -299,8 +308,8 @@ def get_ingestion_queue_health():
                 if queue_depth is _MOVED_API:
                     queue_depth = None
                     unsupported["queue_depth"] = _moved_api_message(
-                        "the passive queue declare no longer reports a "
-                        "message count"
+                        _("the passive queue declare no longer reports a "
+                          "message count")
                     )
 
             inspect = app.control.inspect(
@@ -311,10 +320,16 @@ def get_ingestion_queue_health():
                 if worker_consuming is _MOVED_API:
                     worker_consuming = None
                     unsupported["worker_consuming"] = _moved_api_message(
-                        "the control API no longer reports active queues in "
-                        "the expected shape"
+                        _("the control API no longer reports active queues "
+                          "in the expected shape")
                     )
             running_tasks = _running_tasks(inspect)
+            if running_tasks is _MOVED_API:
+                running_tasks = None
+                unsupported["running_tasks"] = _moved_api_message(
+                    _("the control API no longer reports active tasks in "
+                      "the expected shape")
+                )
     except Exception as e:
         logger.warning("[BROKER] Could not observe the ingestion queue: %s", e)
 
@@ -405,6 +420,11 @@ def _worker_consuming(inspect):
 def _running_tasks(inspect):
     try:
         replies = inspect.active()
+    except AttributeError as e:
+        # Structural backstop: the control API moved — API drift, not an
+        # unanswering broker
+        logger.warning("[BROKER] Active-tasks API is not the tested one: %s", e)
+        return _MOVED_API
     except Exception as e:
         logger.warning("[BROKER] Could not inspect active tasks: %s", e)
         return None
@@ -414,17 +434,21 @@ def _running_tasks(inspect):
 
     now = time.time()
     running = []
-    for worker_tasks in replies.values():
-        for task in worker_tasks or []:
-            if task.get("name") not in INGESTION_TASK_NAMES:
-                continue
-            time_start = task.get("time_start")
-            running.append(RunningIngestionTask(
-                task_id=task.get("id"),
-                name=task["name"],
-                args=_freeze(task.get("args") or []),
-                age_seconds=max(0.0, now - time_start) if time_start is not None else None,
-            ))
+    try:
+        for worker_tasks in replies.values():
+            for task in worker_tasks or []:
+                if task.get("name") not in INGESTION_TASK_NAMES:
+                    continue
+                time_start = task.get("time_start")
+                running.append(RunningIngestionTask(
+                    task_id=task.get("id"),
+                    name=task["name"],
+                    args=_freeze(task.get("args") or []),
+                    age_seconds=max(0.0, now - time_start) if time_start is not None else None,
+                ))
+    except (AttributeError, TypeError) as e:
+        logger.warning("[BROKER] Active-tasks reply is not the tested shape: %s", e)
+        return _MOVED_API
     return tuple(running)
 
 
