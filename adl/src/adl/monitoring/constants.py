@@ -49,6 +49,20 @@ PROBE_LAYER_IDS = {
     5: LAYER_SOURCE,
 }
 
+# Provenance of the single evidence slot each external layer holds: who
+# produced the winning observation. INTERNAL is core's own trusted record
+# (a scheduled run, or a write-time-stamped failure); LOG_CLASSIFICATION is
+# the read-time text-rule fallback over unstamped rows.
+PROVENANCE_INTERNAL = "INTERNAL"
+PROVENANCE_PROBE = "PROBE"
+PROVENANCE_LOG_CLASSIFICATION = "LOG_CLASSIFICATION"
+
+PROVENANCE_LABELS = {
+    PROVENANCE_INTERNAL: _("scheduled-run evidence"),
+    PROVENANCE_PROBE: _("on-demand probe"),
+    PROVENANCE_LOG_CLASSIFICATION: _("classified from the run log"),
+}
+
 LAYER_LABELS = {
     LAYER_SCHEDULER: _("Scheduler"),
     LAYER_WORKER: _("Worker & queue"),
