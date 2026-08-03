@@ -125,6 +125,10 @@ class CandidateFilterTests(TestCase):
             "sent Token abcdef123456 upstream",
             "sent Digest abcdef123456 upstream",
             "ftp://alice:hunter2@ftp.example.org/in/",
+            # No user half — the broker URL of a Redis secured with
+            # ``requirepass``, and the shape both the redactor and this
+            # filter used to miss.
+            "Cannot connect to redis://:hunter2@adl_redis:6379/0",
         ]
 
         for shape in shapes:
