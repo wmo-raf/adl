@@ -35,14 +35,15 @@ from dataclasses import dataclass, field
 from functools import lru_cache
 from typing import Optional, Tuple
 
-from django.conf import settings
 from django.utils.translation import gettext as _
-from kombu import Connection
 from kombu.exceptions import ChannelError
 
-from adl.config.celery import app
-
-from .tasks import INGESTION_QUEUE_NAME, INGESTION_TASK_NAME
+from .broker_connection import bounded_broker_connection, bounded_inspect
+from .tasks import (
+    INGESTION_BATCH_TASK_NAME,
+    INGESTION_QUEUE_NAME,
+    INGESTION_TASK_NAME,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -50,16 +51,8 @@ logger = logging.getLogger(__name__)
 # coordinator and the per-station batch it spawns
 INGESTION_TASK_NAMES = frozenset({
     INGESTION_TASK_NAME,
-    "adl.core.tasks.process_station_link_batch",
+    INGESTION_BATCH_TASK_NAME,
 })
-
-# One dedicated short-lived connection, bounded at roughly one second per
-# call with no retries: worst case ~2.1 s healthy, ~1.1 s when the broker is
-# unreachable. These must never go into CELERY_BROKER_TRANSPORT_OPTIONS —
-# that would also reconfigure the workers' own blocking BRPOP loop.
-BROKER_CONNECT_TIMEOUT_SECONDS = 1.0
-BROKER_SOCKET_TIMEOUT_SECONDS = 2.0
-INSPECT_TIMEOUT_SECONDS = 1.0
 
 # A running ingestion task is judged against the connection's own interval —
 # a 5-minutely and a daily connection are both judged fairly. Warn once it
@@ -293,16 +286,7 @@ def get_ingestion_queue_health():
             unsupported[signal] = message
 
     try:
-        with Connection(
-                settings.CELERY_BROKER_URL,
-                connect_timeout=BROKER_CONNECT_TIMEOUT_SECONDS,
-                transport_options={
-                    "socket_connect_timeout": BROKER_CONNECT_TIMEOUT_SECONDS,
-                    "socket_timeout": BROKER_SOCKET_TIMEOUT_SECONDS,
-                    "max_retries": 0,
-                    "retry_on_timeout": False,
-                },
-        ) as connection:
+        with bounded_broker_connection() as connection:
             if "queue_depth" not in unsupported:
                 queue_depth = _queue_depth(connection)
                 if queue_depth is _MOVED_API:
@@ -312,9 +296,7 @@ def get_ingestion_queue_health():
                           "message count")
                     )
 
-            inspect = app.control.inspect(
-                timeout=INSPECT_TIMEOUT_SECONDS, connection=connection
-            )
+            inspect = bounded_inspect(connection)
             if "worker_consuming" not in unsupported:
                 worker_consuming = _worker_consuming(inspect)
                 if worker_consuming is _MOVED_API:

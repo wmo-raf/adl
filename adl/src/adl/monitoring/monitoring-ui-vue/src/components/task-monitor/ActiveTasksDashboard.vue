@@ -49,6 +49,16 @@
       {{ error }}
     </Message>
 
+    <!-- Unknown State — no worker answered, so an empty list proves nothing -->
+    <div v-else-if="!loading && !workersReplied" class="card p-5 text-center">
+      <i class="pi pi-question-circle text-6xl text-gray-400 mb-3"></i>
+      <h3 class="text-gray-600">Worker Status Unknown</h3>
+      <p class="text-gray-500">
+        No worker answered, so it is not known whether tasks are running. The
+        ingestion worker may be down, restarting, or unable to reach the broker.
+      </p>
+    </div>
+
     <!-- No Tasks State -->
     <div v-else-if="!loading && activeTasks.length === 0" class="card p-5 text-center">
       <i class="pi pi-inbox text-6xl text-gray-400 mb-3"></i>
@@ -150,6 +160,9 @@ const props = defineProps({
 })
 
 const activeTasks = ref([])
+// Whether any worker answered the last poll. False means unknown — an empty
+// task list from a silent fleet must never be shown as "nothing is running"
+const workersReplied = ref(true)
 const networkConnections = ref([])
 const selectedNetworkId = ref(null)
 const loading = ref(false)
@@ -208,6 +221,7 @@ const fetchActiveTasks = async () => {
     const previouslyExpanded = expandedPanels.value.slice()
 
     activeTasks.value = data.tasks
+    workersReplied.value = data.workers_replied !== false
 
     // Preserve expanded panels if they still exist
     if (previouslyExpanded.length > 0) {

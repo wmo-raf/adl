@@ -16,6 +16,7 @@ from django.utils import timezone as dj_timezone
 
 from adl.config.celery import app
 from adl.monitoring.models import StationLinkActivityLog
+from .broker_connection import bounded_broker_connection, bounded_inspect
 from .classification import mark_failed, stamp_failure
 from .dispatchers import get_station_dispatch_records
 from .logging import TaskLogger
@@ -36,6 +37,10 @@ INGESTION_QUEUE_NAME = "adl"
 # find_connection_schedule_entries
 INGESTION_TASK_NAME = "adl.core.tasks.run_network_plugin"
 
+# The registered name of the per-batch ingestion task the coordinator spawns.
+# Everything that recognises ingestion work on the queue matches on this
+INGESTION_BATCH_TASK_NAME = "adl.core.tasks.process_station_link_batch"
+
 # Extra time allowed beyond the soft limit before the worker hard-kills a
 # station dispatch task
 DISPATCH_TIME_LIMIT_GRACE_SECONDS = 30
@@ -52,6 +57,12 @@ INGEST_LOCK_TTL_MARGIN_SECONDS = 60
 # Stations per ingestion batch when the connection does not say. Mirrors the
 # model field's own default, for the rows where 0 was saved
 DEFAULT_INGEST_BATCH_SIZE = 10
+
+# Longer than the shared inspect default: what a dispatch worker's silence
+# costs is asymmetric. A slow reply read as silence makes the locks page
+# refuse to clear anything ("no lock can be proven stale"), so this side
+# waits longer for an answer than layer 2's read-only signals do
+DISPATCH_INSPECT_TIMEOUT_SECONDS = 2.0
 
 
 def dispatch_station_lock_key(channel_id, station_link_id):
@@ -142,19 +153,26 @@ def ingest_station_lock_key(station_link_id):
     return f"lock:ingest:station:{station_link_id}"
 
 
-def get_active_dispatch_tasks(timeout=2.0):
+def get_active_dispatch_tasks():
     """
     Map of currently executing station dispatches, keyed by
     ``(channel_id, station_link_id)`` with the task's start timestamp as value.
 
     Returns ``None`` when no worker replied to the inspect broadcast —
     callers must treat that as "unknown", not "idle": the dispatch worker
-    may be down, restarting, or too slow to answer within ``timeout``.
-    (An idle worker replies ``{'worker@host': []}``, never ``{}`` — inspect
-    has no empty-dict reply, so falsy means no reply.) Never raises.
+    may be down, restarting, or too slow to answer in time. (An idle worker
+    replies ``{'worker@host': []}``, never ``{}`` — inspect has no empty-dict
+    reply, so falsy means no reply.) Never raises.
+
+    Runs over a dedicated bounded connection rather than the app's default
+    one, which retries: this is called from request threads, and unbounded it
+    hangs them (see :mod:`adl.core.broker_connection`, issue #166).
     """
     try:
-        active = app.control.inspect(timeout=timeout).active()
+        with bounded_broker_connection() as connection:
+            active = bounded_inspect(
+                connection, timeout=DISPATCH_INSPECT_TIMEOUT_SECONDS
+            ).active()
     except Exception as e:
         logger.warning("[DISPATCH] Could not inspect active dispatch tasks: %s", e)
         return None
@@ -331,7 +349,7 @@ def run_network_plugin(self, network_id, manual=False):
     }
 
 
-@shared_task(bind=True, name='adl.core.tasks.process_station_link_batch')
+@shared_task(bind=True, name=INGESTION_BATCH_TASK_NAME)
 def process_station_link_batch(self, network_id, station_link_ids):
     from adl.core.registries import plugin_registry
     from .models import NetworkConnection
