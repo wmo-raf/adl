@@ -41,8 +41,9 @@ class SweepBothDirectionsTests(ActivityLogSweepTestCase):
         self.assertIn("worker died", log.message)
 
     def test_stale_pull_row_swept_to_failed(self):
-        # default connection ingest timeout 300s + 30s grace + 60s margin = 390s
-        log = self._make_log("pull", age_seconds=500)
+        # default batch bound: 10 × 300s clamped to the 15-minute interval
+        # = 900s, + 30s grace + 60s margin = 990s
+        log = self._make_log("pull", age_seconds=1200)
 
         swept = sweep_stale_activity_logs()
 
@@ -54,7 +55,7 @@ class SweepBothDirectionsTests(ActivityLogSweepTestCase):
 
     def test_one_pass_sweeps_stale_rows_in_both_directions(self):
         push_log = self._make_log("push", age_seconds=500)
-        pull_log = self._make_log("pull", age_seconds=500)
+        pull_log = self._make_log("pull", age_seconds=1200)
 
         swept = sweep_stale_activity_logs()
 
@@ -114,13 +115,16 @@ class SweepThresholdTests(ActivityLogSweepTestCase):
         self.assertEqual(stale_for_short.status, StationLinkActivityLog.ActivityStatus.FAILED)
         self.assertEqual(fresh_for_long.status, StationLinkActivityLog.ActivityStatus.STARTED)
 
-    def test_pull_threshold_is_per_connection_ingest_timeout(self):
-        # same age, different ingest timeouts: stale for the 30s connection
-        # (threshold 120s), still fresh for the 600s connection (threshold 690s)
+    def test_pull_threshold_is_the_connections_batch_bound(self):
+        # same age, different batch bounds: stale for the connection whose
+        # whole batch fits in 60s (threshold 150s), still fresh for the one
+        # allowed 600s (threshold 690s)
         short_link = StationLinkFactory(
-            network_connection=NetworkConnectionFactory(ingest_timeout_seconds=30))
+            network_connection=NetworkConnectionFactory(
+                ingest_timeout_seconds=30, batch_size=2, plugin_processing_interval=15))
         long_link = StationLinkFactory(
-            network_connection=NetworkConnectionFactory(ingest_timeout_seconds=600))
+            network_connection=NetworkConnectionFactory(
+                ingest_timeout_seconds=300, batch_size=2, plugin_processing_interval=10))
         stale_for_short = self._make_log("pull", age_seconds=300, link=short_link)
         fresh_for_long = self._make_log("pull", age_seconds=300, link=long_link)
 
@@ -131,6 +135,24 @@ class SweepThresholdTests(ActivityLogSweepTestCase):
         fresh_for_long.refresh_from_db()
         self.assertEqual(stale_for_short.status, StationLinkActivityLog.ActivityStatus.FAILED)
         self.assertEqual(fresh_for_long.status, StationLinkActivityLog.ActivityStatus.STARTED)
+
+    def test_pull_row_past_the_per_station_budget_is_left_running(self):
+        # Regression for #209: a station may legitimately occupy the whole
+        # batch budget, so a row older than the per-station number but inside
+        # the batch bound is a live run, not a dead one. Rewriting it to
+        # FAILED would falsify audit history and mislead the diagnostic.
+        link = StationLinkFactory(
+            network_connection=NetworkConnectionFactory(
+                ingest_timeout_seconds=300, batch_size=10, plugin_processing_interval=15))
+        # 500s: past the 390s per-station budget, inside the 990s batch bound
+        live = self._make_log("pull", age_seconds=500, link=link)
+
+        swept = sweep_stale_activity_logs()
+
+        self.assertEqual(swept, 0)
+        live.refresh_from_db()
+        self.assertEqual(live.status, StationLinkActivityLog.ActivityStatus.STARTED)
+        self.assertIsNone(live.message)
 
 
 class SweepQueueRoutingTests(TestCase):
@@ -161,7 +183,7 @@ class SweepRunsHealthEvaluatorTests(ActivityLogSweepTestCase):
 
     def test_evaluation_happens_after_sweeping(self):
         # The sweep still reports its own count with the evaluator riding along
-        log = self._make_log("pull", age_seconds=500)
+        log = self._make_log("pull", age_seconds=1200)
 
         swept = sweep_stale_activity_logs()
 

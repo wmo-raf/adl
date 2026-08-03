@@ -48,14 +48,19 @@ DISPATCH_LOCK_TTL_MARGIN_SECONDS = 60
 INGEST_TIME_LIMIT_GRACE_SECONDS = 30
 INGEST_LOCK_TTL_MARGIN_SECONDS = 60
 
+# Stations per ingestion batch when the connection does not say. Mirrors the
+# model field's own default, for the rows where 0 was saved
+DEFAULT_INGEST_BATCH_SIZE = 10
+
 
 def dispatch_station_lock_key(channel_id, station_link_id):
     return f"lock:dispatch:{channel_id}:{station_link_id}"
 
 
-# The two budgets below are shared between each side's station lock TTL and
-# the stale-activity-log sweep: a row older than the budget cannot still be
-# running, precisely because its lock would already have expired
+# Each side has one timeout budget, shared between its station lock TTL and the
+# stale-activity-log sweep: a row older than the budget cannot still be running,
+# precisely because its lock would already have expired. Push's is here; pull's
+# is ingest_batch_budget_seconds below, which needs the batch limit first.
 
 def dispatch_timeout_budget_seconds(channel):
     return (channel.dispatch_timeout_seconds
@@ -63,10 +68,70 @@ def dispatch_timeout_budget_seconds(channel):
             + DISPATCH_LOCK_TTL_MARGIN_SECONDS)
 
 
-def ingest_timeout_budget_seconds(network_connection):
-    return (network_connection.ingest_timeout_seconds
+def effective_ingest_batch_size(network_connection):
+    """
+    The number of stations the coordinator will actually put in a batch.
+
+    ``batch_size`` is a ``PositiveIntegerField``, so 0 is reachable from the
+    admin and means "unset" rather than "no stations". Everything that reasons
+    about batches goes through here, so the timeout arithmetic can never assume
+    a different batch than the one :func:`run_network_plugin` forms.
+    """
+    return network_connection.batch_size or DEFAULT_INGEST_BATCH_SIZE
+
+
+def ingest_batch_soft_limit_seconds(network_connection, station_count):
+    """
+    Soft time limit for one batch of ``station_count`` stations: the per-station
+    budget multiplied out, then clamped to the connection's own beat interval so
+    a batch can never outlive its own tick and overlap the next coordinator run.
+    """
+    return min(
+        station_count * network_connection.ingest_timeout_seconds,
+        network_connection.plugin_processing_interval * 60,
+    )
+
+
+def ingest_batch_budget_seconds(network_connection):
+    """
+    The pull-side twin of :func:`dispatch_timeout_budget_seconds`: the longest
+    a single station's run can legitimately last, shared by its lock TTL and by
+    the stale-activity-log sweep threshold.
+
+    Derived from the **batch** soft limit, not from ``ingest_timeout_seconds``
+    (decision #153 §5). With batching there is no per-station soft limit, so one
+    slow station may legitimately occupy the whole batch budget; bounding either
+    consumer by the per-station number would expire a live station's lock and
+    rewrite its still-running activity row to FAILED (#209).
+
+    The batch soft limit is computed from the *configured* ``batch_size``, since
+    the sweeper only sees a connection and never the batch a row belonged to. A
+    short final batch gets a smaller real limit, so this is an upper bound: it
+    can leave a genuinely killed worker's lock held, and its row in STARTED, for
+    longer than that batch actually had. That is the deliberate trade — erring
+    towards a stuck lock over falsified history.
+    """
+    batch_size = effective_ingest_batch_size(network_connection)
+    return (ingest_batch_soft_limit_seconds(network_connection, batch_size)
             + INGEST_TIME_LIMIT_GRACE_SECONDS
             + INGEST_LOCK_TTL_MARGIN_SECONDS)
+
+
+def effective_ingest_station_seconds(network_connection):
+    """
+    The per-station share a full batch actually gets, once the clamp above is
+    applied. ``ingest_timeout_seconds`` is what operators configure, but a full
+    batch that would outrun the beat interval is cut back to it, and the
+    shortfall is divided across the batch — so the configured number can be
+    silently several times the real one (300s becomes 90s at stock defaults).
+
+    Surfaced in the admin rather than left to be derived from three fields.
+    Note this is the share of a *full* batch: a connection whose last batch is
+    short gives those stations more, and with batching there is no per-station
+    limit enforced anywhere, so this is a budget share and not a cut-off.
+    """
+    batch_size = effective_ingest_batch_size(network_connection)
+    return ingest_batch_soft_limit_seconds(network_connection, batch_size) // batch_size
 
 
 # Namespace deliberately distinct from the legacy "lock:station:" prefix:
@@ -204,8 +269,8 @@ def run_network_plugin(self, network_id, manual=False):
     log.info("Starting network plugin for connection: %s (ID: %d)",
              network_connection.name, network_id)
     
-    batch_size = network_connection.batch_size or 10
-    
+    batch_size = effective_ingest_batch_size(network_connection)
+
     # only process enabled station links
     station_link_ids = list(
         network_connection.station_links.filter(enabled=True).values_list("id", flat=True)
@@ -227,8 +292,6 @@ def run_network_plugin(self, network_id, manual=False):
     batch_count = 0
     spawned_tasks = []
 
-    interval_seconds = network_connection.plugin_processing_interval * 60
-
     for batch in chunked(station_link_ids, batch_size):
         batch_count += 1
         batch_list = list(batch)
@@ -236,12 +299,7 @@ def run_network_plugin(self, network_id, manual=False):
         log.info("Spawning batch %d with %d station links: %s",
                  batch_count, len(batch_list), batch_list)
 
-        # Per-station budget, clamped so a batch can never outlive its own
-        # beat tick and overlap the next coordinator run
-        soft_time_limit = min(
-            len(batch_list) * network_connection.ingest_timeout_seconds,
-            interval_seconds,
-        )
+        soft_time_limit = ingest_batch_soft_limit_seconds(network_connection, len(batch_list))
         task = process_station_link_batch.apply_async(
             args=[network_id, batch_list],
             queue=INGESTION_QUEUE_NAME,
@@ -600,8 +658,13 @@ def sweep_stale_activity_logs():
     never reaches the code that finalizes its activity log, leaving the row
     in STARTED forever. A row older than the timeout budget its own side
     defines — the channel's dispatch timeout for push rows, the connection's
-    ingest timeout for pull rows — plus the same grace + margin used for that
+    batch soft limit for pull rows — plus the same grace + margin used for that
     side's lock TTL cannot still be running, so it is swept to FAILED.
+
+    The pull side uses the batch bound rather than ``ingest_timeout_seconds``
+    (see :func:`ingest_batch_budget_seconds`): a station is allowed to run for
+    the whole batch budget, and sweeping at the per-station number would declare
+    live runs dead — the inverse of this task's purpose.
     """
     from .models import DispatchChannel  # noqa: F401  (FK target must be loaded)
 
@@ -624,7 +687,7 @@ def sweep_stale_activity_logs():
          lambda log: dispatch_timeout_budget_seconds(log.dispatch_channel),
          "Dispatch worker died mid-dispatch (no completion recorded)"),
         (pull_candidates,
-         lambda log: ingest_timeout_budget_seconds(log.station_link.network_connection),
+         lambda log: ingest_batch_budget_seconds(log.station_link.network_connection),
          "Ingestion worker died mid-run (no completion recorded)"),
     )
 

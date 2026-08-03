@@ -766,8 +766,10 @@ class Plugin(Instance):
         path (scheduled batch, manual ``collect_data``, shell invocation) is
         covered, and so a collision can write a visible ``SKIPPED`` activity
         row instead of vanishing into a worker log line. The lock carries a
-        TTL derived from the connection's ``ingest_timeout_seconds``, so a
-        killed worker can never leave a station locked permanently.
+        TTL derived from the connection's batch soft limit — see
+        :func:`~adl.core.tasks.ingest_batch_budget_seconds` — so a killed worker
+        can never leave a station locked permanently, while a station that
+        legitimately runs for the whole batch budget keeps its lock throughout.
 
         Called by :meth:`run_process` for each enabled station link. You do not
         normally need to call or override this method directly.
@@ -789,14 +791,14 @@ class Plugin(Instance):
         from django.core.cache import cache
         from adl.monitoring.models import StationLinkActivityLog
         from adl.core.tasks import (
+            ingest_batch_budget_seconds,
             ingest_station_lock_key,
-            ingest_timeout_budget_seconds,
         )
         log = self.get_logger()
 
         lock_key = ingest_station_lock_key(station_link.id)
         if not bypass_lock:
-            lock_ttl = ingest_timeout_budget_seconds(station_link.network_connection)
+            lock_ttl = ingest_batch_budget_seconds(station_link.network_connection)
             if not cache.add(lock_key, "locked", timeout=lock_ttl):
                 log.warning("Station link %s is still processing. Skipping...", station_link)
                 StationLinkActivityLog.objects.create(

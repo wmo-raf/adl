@@ -28,6 +28,7 @@ from wagtailiconchooser.widgets import IconChooserWidget
 from adl.core.registries import plugin_registry
 from .blocks import QCChecksStreamBlock
 from .dispatchers import get_dispatch_channel_data
+from .panels import IngestTimeoutBudgetPanel
 from .dispatchers.wis2box import upload_to_wis2box, test_wis2box_connection
 from .units import units, validate_unit, TEMPERATURE_UNITS
 from .utils import (
@@ -549,8 +550,11 @@ class NetworkConnection(PolymorphicModel, ClusterableModel):
     ingest_timeout_seconds = models.PositiveIntegerField(default=300,
                                                          verbose_name=_("Ingestion Timeout in Seconds"),
                                                          help_text=_(
-                                                             "Maximum time ingesting a single station may run "
-                                                             "before it is terminated"),
+                                                             "Time budgeted per station. Stations are ingested in "
+                                                             "batches, so this is not enforced on each station "
+                                                             "individually — it sets the batch's time limit, and a "
+                                                             "slow station can consume another's share. See the "
+                                                             "effective figure below."),
                                                          validators=[
                                                              MinValueValidator(30),
                                                              MaxValueValidator(1800)
@@ -570,6 +574,7 @@ class NetworkConnection(PolymorphicModel, ClusterableModel):
             FieldPanel("plugin_processing_interval"),
             FieldPanel("batch_size"),
             FieldPanel("ingest_timeout_seconds"),
+            IngestTimeoutBudgetPanel(),
         ], heading=_("Plugin Configuration")),
         FieldPanel("is_daily_data"),
         FieldPanel("sort_order"),
