@@ -41,6 +41,10 @@ INGESTION_TASK_NAME = "adl.core.tasks.run_network_plugin"
 # Everything that recognises ingestion work on the queue matches on this
 INGESTION_BATCH_TASK_NAME = "adl.core.tasks.process_station_link_batch"
 
+# The registered name of the dispatch task. A channel's beat schedule entries
+# are resolved by this plus their args, exactly as ingestion's are
+DISPATCH_TASK_NAME = "adl.core.tasks.perform_channel_dispatch"
+
 # Extra time allowed beyond the soft limit before the worker hard-kills a
 # station dispatch task
 DISPATCH_TIME_LIMIT_GRACE_SECONDS = 30
@@ -480,57 +484,122 @@ class ConnectionScheduleEntries:
         return self.entries[0] if self.entries else None
 
 
-def find_connection_schedule_entries(network_connection):
+def find_periodic_tasks_for(task_name, object_id):
     """
-    Resolve a connection's ingestion schedule entries by *what they run* — the
-    task name plus its args — never by the generated ``repr(sig)`` name.
+    Every beat schedule entry that runs ``task_name`` for ``object_id``,
+    oldest first.
 
-    Matching on the generated name means a row whose name drifted (a Celery
-    upgrade, a hand edit) reads as absent while it keeps firing, and a second
-    row for the same connection is invisible. Matching on task + args makes
-    both visible. Args are compared parsed, not as strings, so whitespace or
-    an unparseable value cannot masquerade as a miss or raise.
+    Entries are resolved by *what they run* — the task name plus its args —
+    never by the generated ``repr(sig)`` name. Matching on the generated name
+    means a row whose name drifted (a Celery upgrade, a hand edit) reads as
+    absent while it keeps firing, and a second row for the same object is
+    invisible. Matching on task + args makes both visible. Args are compared
+    parsed, not as strings, so whitespace or an unparseable value cannot
+    masquerade as a miss or raise.
     """
-    candidates = PeriodicTask.objects.filter(task=INGESTION_TASK_NAME).order_by("id")
-
     matched = []
-    for candidate in candidates:
+    for candidate in PeriodicTask.objects.filter(task=task_name).order_by("id"):
         try:
             args = json.loads(candidate.args or "[]")
         except (TypeError, ValueError):
             continue
-        if isinstance(args, list) and args and args[0] == network_connection.id:
+        if isinstance(args, list) and args and args[0] == object_id:
             matched.append(candidate)
 
-    return ConnectionScheduleEntries(entries=tuple(matched))
+    return matched
 
 
-def create_or_update_network_plugin_periodic_tasks(network_connection):
-    interval = network_connection.plugin_processing_interval
-    enabled = network_connection.plugin_processing_enabled
-    
-    sig = run_network_plugin.s(network_connection.id)
-    name = repr(sig)
-    
-    # Create or update the periodic task
-    schedule, created = IntervalSchedule.objects.get_or_create(
+def find_connection_schedule_entries(network_connection):
+    """A connection's ingestion schedule entries, with the faults named."""
+    entries = find_periodic_tasks_for(INGESTION_TASK_NAME, network_connection.id)
+
+    return ConnectionScheduleEntries(entries=tuple(entries))
+
+
+def _write_periodic_task(task_name, object_id, name, interval, enabled, queue):
+    """
+    Make the beat schedule hold exactly one entry running ``task_name`` for
+    ``object_id``.
+
+    The existing entry is found by task + args rather than by ``name``, so a
+    row whose generated name drifted is updated in place instead of being
+    shadowed by a second, still-enabled row. Any surplus rows for the same
+    object are removed here — the writer is the one place that can collapse
+    duplicates back to one without guessing which one beat is firing.
+    """
+    schedule, _ = IntervalSchedule.objects.get_or_create(
         every=interval,
         period=IntervalSchedule.MINUTES,
     )
-    PeriodicTask.objects.update_or_create(
-        name=name,
-        defaults={
-            'interval': schedule,
-            'task': sig.name,
-            'args': json.dumps([network_connection.id]),
-            'enabled': enabled,
-            'queue': INGESTION_QUEUE_NAME,
-        }
+    defaults = {
+        'interval': schedule,
+        'task': task_name,
+        'args': json.dumps([object_id]),
+        'enabled': enabled,
+        'queue': queue,
+    }
+
+    existing = find_periodic_tasks_for(task_name, object_id)
+
+    if not existing:
+        # Keyed on name so a row we could not match on args (unreadable args,
+        # say) is rewritten rather than colliding on the unique name
+        PeriodicTask.objects.update_or_create(name=name, defaults=defaults)
+        return
+
+    entry, *duplicates = existing
+    for field, value in defaults.items():
+        setattr(entry, field, value)
+    entry.save()
+
+    if duplicates:
+        logger.warning(
+            "Removing %d duplicate schedule entries for %s(%s)",
+            len(duplicates), task_name, object_id,
+        )
+        PeriodicTask.objects.filter(id__in=[row.id for row in duplicates]).delete()
+
+
+def _delete_periodic_tasks(task_name, object_id):
+    """Drop every schedule entry running ``task_name`` for ``object_id``."""
+    entries = find_periodic_tasks_for(task_name, object_id)
+
+    if not entries:
+        return 0
+
+    PeriodicTask.objects.filter(id__in=[entry.id for entry in entries]).delete()
+
+    return len(entries)
+
+
+def create_or_update_network_plugin_periodic_tasks(network_connection):
+    _write_periodic_task(
+        INGESTION_TASK_NAME,
+        network_connection.id,
+        name=repr(run_network_plugin.s(network_connection.id)),
+        interval=network_connection.plugin_processing_interval,
+        enabled=network_connection.plugin_processing_enabled,
+        queue=INGESTION_QUEUE_NAME,
     )
 
 
 def update_network_plugin_periodic_task(sender, instance, **kwargs):
     create_or_update_network_plugin_periodic_tasks(instance)
+
+
+def delete_network_plugin_periodic_tasks(sender, instance, **kwargs):
+    """
+    A deleted connection must take its schedule with it. Left behind, the
+    entry stays enabled and beat keeps dispatching ingestion for an id nobody
+    can see in the admin.
+    """
+    removed = _delete_periodic_tasks(INGESTION_TASK_NAME, instance.id)
+
+    if removed:
+        logger.info(
+            "Removed %d schedule entries for deleted network connection %s",
+            removed, instance.id,
+        )
 
 
 # Deliberately NOT a Singleton task: a stale singleton lock silently discards
@@ -735,29 +804,67 @@ def sweep_stale_activity_logs():
 
 
 def create_or_update_dispatch_channel_periodic_tasks(dispatch_channel):
-    interval = dispatch_channel.data_check_interval
-    enabled = dispatch_channel.enabled
-    
-    sig = perform_channel_dispatch.s(dispatch_channel.id)
-    name = repr(sig)
-    
-    # Create or update the periodic task
-    schedule, created = IntervalSchedule.objects.get_or_create(
-        every=interval,
-        period=IntervalSchedule.MINUTES,
-    )
-    
-    PeriodicTask.objects.update_or_create(
-        name=name,
-        defaults={
-            'interval': schedule,
-            'task': sig.name,
-            'args': json.dumps([dispatch_channel.id]),
-            'enabled': enabled,
-            'queue': DISPATCH_QUEUE_NAME,
-        }
+    _write_periodic_task(
+        DISPATCH_TASK_NAME,
+        dispatch_channel.id,
+        name=repr(perform_channel_dispatch.s(dispatch_channel.id)),
+        interval=dispatch_channel.data_check_interval,
+        enabled=dispatch_channel.enabled,
+        queue=DISPATCH_QUEUE_NAME,
     )
 
 
 def update_dispatch_channel_periodic_tasks(sender, instance, **kwargs):
     create_or_update_dispatch_channel_periodic_tasks(instance)
+
+
+def delete_dispatch_channel_periodic_tasks(sender, instance, **kwargs):
+    """
+    A deleted channel must take its schedule with it. Unlike ingestion,
+    ``perform_channel_dispatch`` raises on a missing channel, so an orphaned
+    entry is a recurring hard task failure rather than quiet log noise.
+    """
+    removed = _delete_periodic_tasks(DISPATCH_TASK_NAME, instance.id)
+
+    if removed:
+        logger.info(
+            "Removed %d schedule entries for deleted dispatch channel %s",
+            removed, instance.id,
+        )
+
+
+def prune_orphaned_periodic_tasks(dry_run=False):
+    """
+    Drop ingestion and dispatch schedule entries whose object no longer
+    exists — the retrospective counterpart to the post_delete receivers, for
+    deployments that accumulated orphans before those existed.
+
+    Entries whose args cannot be read are left alone: there is no owner to
+    check them against, so deleting them would be a guess. Returns the pruned
+    entries so a dry run can report exactly what a real run would remove.
+    """
+    from .models import DispatchChannel, NetworkConnection
+
+    owners = (
+        (INGESTION_TASK_NAME, NetworkConnection),
+        (DISPATCH_TASK_NAME, DispatchChannel),
+    )
+
+    orphans = []
+    for task_name, model in owners:
+        live_ids = set(model.objects.values_list("id", flat=True))
+
+        for candidate in PeriodicTask.objects.filter(task=task_name).order_by("id"):
+            try:
+                args = json.loads(candidate.args or "[]")
+            except (TypeError, ValueError):
+                continue
+            if not isinstance(args, list) or not args:
+                continue
+            if args[0] not in live_ids:
+                orphans.append(candidate)
+
+    if orphans and not dry_run:
+        PeriodicTask.objects.filter(id__in=[entry.id for entry in orphans]).delete()
+
+    return orphans
