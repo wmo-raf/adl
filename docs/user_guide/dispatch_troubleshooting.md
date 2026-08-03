@@ -123,6 +123,25 @@ Dispatch runs on its own dedicated worker, so restarting it does **not**
 interrupt in-flight data collection (ingestion runs on
 `adl_celery_worker_adl`).
 
+## Schedule entries left behind by a deleted channel
+
+Deleting a dispatch channel (or a network connection) removes its scheduler
+entry along with it. Deployments upgraded from an older version can still be
+carrying entries for channels and connections that were deleted before that
+was true. They keep firing on their interval against an id that no longer
+exists — a recurring task failure in the logs for something you cannot see in
+the admin.
+
+To list them without changing anything:
+
+```bash
+docker compose exec adl adl prune_orphaned_periodic_tasks --dry-run
+```
+
+Drop the `--dry-run` to remove them. The command only ever touches entries
+whose connection or channel is genuinely gone, so it is safe to run on a live
+system; it is worth running once after upgrading.
+
 (tuning-the-per-channel-knobs)=
 ## Tuning the per-channel knobs
 

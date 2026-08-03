@@ -484,10 +484,10 @@ class ConnectionScheduleEntries:
         return self.entries[0] if self.entries else None
 
 
-def find_periodic_tasks_for(task_name, object_id):
+def iter_owned_schedule_entries(task_name):
     """
-    Every beat schedule entry that runs ``task_name`` for ``object_id``,
-    oldest first.
+    Every beat schedule entry running ``task_name`` whose owner can be read,
+    oldest first, as ``(entry, owner_id)``.
 
     Entries are resolved by *what they run* — the task name plus its args —
     never by the generated ``repr(sig)`` name. Matching on the generated name
@@ -496,17 +496,55 @@ def find_periodic_tasks_for(task_name, object_id):
     invisible. Matching on task + args makes both visible. Args are compared
     parsed, not as strings, so whitespace or an unparseable value cannot
     masquerade as a miss or raise.
+
+    Entries whose args cannot be read are skipped rather than yielded with a
+    null owner: there is nothing to match or check them against, so every
+    caller would only have to drop them again.
     """
-    matched = []
-    for candidate in PeriodicTask.objects.filter(task=task_name).order_by("id"):
+    for entry in PeriodicTask.objects.filter(task=task_name).order_by("id"):
         try:
-            args = json.loads(candidate.args or "[]")
+            args = json.loads(entry.args or "[]")
         except (TypeError, ValueError):
             continue
-        if isinstance(args, list) and args and args[0] == object_id:
-            matched.append(candidate)
+        if not isinstance(args, list) or not args:
+            continue
 
-    return matched
+        owner_id = _read_owner_id(args[0])
+        if owner_id is not None:
+            yield entry, owner_id
+
+
+def _read_owner_id(value):
+    """
+    The object id an entry's first arg names, or ``None`` when it names none.
+
+    A hand-written row can carry ``["5"]`` rather than ``[5]``. Compared raw
+    that reads as a different object — the writer would add a duplicate and
+    the prune would delete a live object's entry — so ids are normalised to
+    int here, once, for every caller.
+    """
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, int):
+        return value
+    if isinstance(value, str):
+        try:
+            return int(value)
+        except ValueError:
+            return None
+    return None
+
+
+def find_periodic_tasks_for(task_name, object_id):
+    """
+    Every beat schedule entry that runs ``task_name`` for ``object_id``,
+    oldest first.
+    """
+    return [
+        entry
+        for entry, owner_id in iter_owned_schedule_entries(task_name)
+        if owner_id == object_id
+    ]
 
 
 def find_connection_schedule_entries(network_connection):
@@ -526,6 +564,11 @@ def _write_periodic_task(task_name, object_id, name, interval, enabled, queue):
     shadowed by a second, still-enabled row. Any surplus rows for the same
     object are removed here — the writer is the one place that can collapse
     duplicates back to one without guessing which one beat is firing.
+
+    A drifted ``name`` is deliberately left as it is: ``name`` is what an
+    operator recognises the row by in the beat admin, nothing reads it, and
+    rewriting it could collide with the unique name of an unrelated row.
+    ``name`` is used only when creating.
     """
     schedule, _ = IntervalSchedule.objects.get_or_create(
         every=interval,
@@ -842,6 +885,12 @@ def prune_orphaned_periodic_tasks(dry_run=False):
     Entries whose args cannot be read are left alone: there is no owner to
     check them against, so deleting them would be a guess. Returns the pruned
     entries so a dry run can report exactly what a real run would remove.
+
+    Ownership is re-checked against the database immediately before the
+    delete. Scanning every entry takes long enough for a connection to be
+    created in the meantime, and its brand-new schedule entry would otherwise
+    be judged against a snapshot taken before it existed — the command would
+    delete the schedule of a live connection.
     """
     from .models import DispatchChannel, NetworkConnection
 
@@ -854,15 +903,24 @@ def prune_orphaned_periodic_tasks(dry_run=False):
     for task_name, model in owners:
         live_ids = set(model.objects.values_list("id", flat=True))
 
-        for candidate in PeriodicTask.objects.filter(task=task_name).order_by("id"):
-            try:
-                args = json.loads(candidate.args or "[]")
-            except (TypeError, ValueError):
-                continue
-            if not isinstance(args, list) or not args:
-                continue
-            if args[0] not in live_ids:
-                orphans.append(candidate)
+        candidates = [
+            (entry, owner_id)
+            for entry, owner_id in iter_owned_schedule_entries(task_name)
+            if owner_id not in live_ids
+        ]
+
+        if not candidates:
+            continue
+
+        born_since = set(
+            model.objects.filter(
+                id__in=[owner_id for _, owner_id in candidates]
+            ).values_list("id", flat=True)
+        )
+
+        orphans.extend(
+            entry for entry, owner_id in candidates if owner_id not in born_since
+        )
 
     if orphans and not dry_run:
         PeriodicTask.objects.filter(id__in=[entry.id for entry in orphans]).delete()

@@ -26,6 +26,10 @@ class Command(BaseCommand):
             self.stdout.write(self.style.SUCCESS("No orphaned schedule entries found."))
             return
 
+        # The delete has already happened by this point, so the listing is a
+        # record of what went, not a preview of what will
+        self.stdout.write("Would remove:" if dry_run else "Removed:")
+
         for entry in orphans:
             self.stdout.write(f"  {entry.task} args={entry.args} (name={entry.name})")
 
