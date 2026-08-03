@@ -22,6 +22,30 @@ Paths in citations are relative to the `adl-project/` container. The core repo i
 `adl-plugins/<repo>/plugins/<module>/src/<module>/`, abbreviated below as
 `<repo>:<file>:<line>` after each repo's section header names its full root.
 
+## Amendments
+
+**Amended while resolving [#226](https://github.com/wmo-raf/adl/issues/226)**
+(station-scope contract). Three claims in the original survey were too strong and
+have been corrected in place — finding 4, finding 5, the summary table, the #226
+recommendation, and the earthnetworks and microstep evidence sections:
+
+1. **`adl-pulsoweb-plugin` was listed as having no station-scoped read.** It has a
+   station list — `get_context()["stations"]` (`client.py:31`), already feeding its
+   picker — so a membership scan is available on the same terms as tahmo and
+   polarisweb. (The per-repo evidence section always said this; the cross-cutting
+   finding overstated it.)
+2. **`adl-earthnetworks-plugin` was listed as having nothing short of the real
+   data call.** True, but that call is window-parameterised and returns
+   `Result.Station` independently of the observations, so a minimal window is a
+   usable station check.
+3. **`adl-microstep-db-plugin`'s station-scope cache was missed.**
+   `get_variables_for_station()` is cached 24h *per station*, not just the
+   connection-wide `get_stations()`. Its docstring also misstates the window as
+   2 months where the SQL says 1 year.
+
+Net effect: station-scope support is materially wider than the original finding 5
+concluded, and cache bypass matters more at station scope than at connection scope.
+
 ---
 
 ## Question
@@ -153,10 +177,10 @@ Ingestion plugins (11) — all currently report `UNSUPPORTED` on every contract.
 | `adl-tahmo-plugin` | HTTP/REST (basic auth) | No field — **hard-coded** `client.py:9` | `get_stations()` (`/services/assets/v2/stations`) | none; membership test on `get_stations()` | `values` `client.py:97` | none defined; `requests.HTTPError` escapes | none | none |
 | `adl-weatherlink-plugin` | HTTP/REST (key + secret header) | **Yes — field** `api_base_url` | `get_stations()` (`/stations`) | **`get_station(id)` exists** `client.py:45` | `sensors` `client.py:147` | none defined; `requests.HTTPError` escapes | none | none |
 | `adl-cimawebdrops-plugin` | HTTP/REST (OAuth2 password grant) | **Yes — fields** `token_endpoint`, `api_base_url` | `get_sensor_classes()` (`/sensors/classes/`) | `get_station_parameters()` — returns `[]`, never errors | `sensors_info` `plugins.py:56` | none defined; `requests.HTTPError` escapes | none | none |
-| `adl-earthnetworks-plugin` | HTTP/REST (**no auth at all**) | No field — **hard-coded** `client.py:33` | **none exists** — no credential, no station-independent endpoint | none; `fetch_raw()` is the ingestion call | `hist` `client.py:123` (inside client) | `RuntimeError` `client.py:108` (code in string only) | none | none |
+| `adl-earthnetworks-plugin` | HTTP/REST (**no auth at all**) | No field — **hard-coded** `client.py:33` | **none exists** — no credential, no station-independent endpoint | `fetch_raw()` is the ingestion call, but **window-parameterised**; `Result.Station` is independent of the observations | `hist` `client.py:123` (inside client) | `RuntimeError` `client.py:108` (code in string only) | none | none |
 | `adl-fieldclimate-plugin` | HTTP/REST (OAuth2 password grant) | No field — **hard-coded** `client.py:28-29` | client `__init__` authenticates (`client.py:72`); then `get_user_stations()` | `get_station_sensors(id)` exists, unused | `rows` `client.py:322` | `Exception`/`RuntimeError`, untyped | none | none |
 | `adl-iosnet-plugin` | THREDDS catalog (siphon) — **non-functional stub** | No field — **hard-coded** `client.py:5` | **n/a — module does not parse** | n/a | n/a — `get_station_data()` returns `[]` | none | none | none |
-| `adl-pulsoweb-plugin` | HTTP/REST (token in POST body) | **Yes — field** `api_base_url` | `get_context()` (POST `/get_context/`, 1h-cached) | none — `get_context()` is connection-wide | inside `get_observation_data()` `client.py:176` | `PulsoWebConnectionError` **defined but never raised**; **no `raise_for_status()` anywhere** | none | none |
+| `adl-pulsoweb-plugin` | HTTP/REST (token in POST body) | **Yes — field** `api_base_url` | `get_context()` (POST `/get_context/`, 1h-cached) | none dedicated; membership scan over `get_context()["stations"]` `client.py:31` | inside `get_observation_data()` `client.py:176` | `PulsoWebConnectionError` **defined but never raised**; **no `raise_for_status()` anywhere** | none | none |
 | `adl-siapmicros-polarisweb-plugin` | HTTP/REST (token query param) | **Yes — field** `host` (URL, may carry explicit port) | `get_stations()` (`/api/polaris/…`) | none; membership test on `get_stations()` | `measure_ids` `plugins.py:30-33` | none defined; `requests.HTTPError` escapes | none | none |
 | `adl-collector-app-plugin` | **local DB — no upstream at all** | **Structurally none** | **n/a — nothing to authenticate against** | pending-submission count (local query) | `qs` / `records` `plugins.py:82-96`, `:122` | none relevant | `CollectorSubmission.clean()` — *not* a config model | **`tests/` exists** (`test_synop_utils.py`) |
 
@@ -271,7 +295,10 @@ AJAX, which incidentally proves credentials and reachability.
 (`client.py:38-39`, 86400s), `adl-weatherlink-plugin` (`client.py:40-41`),
 `adl-cimawebdrops-plugin` (`client.py:56-244`, 24h), `adl-microstep-db-plugin`
 (`db.py:9,36-39,54`, 24h) and `adl-pulsoweb-plugin` (`client.py:150-161`, 1h) all
-serve `get_stations()`/`get_context()` from `django.core.cache` by default. A
+serve `get_stations()`/`get_context()` from `django.core.cache` by default.
+`adl-microstep-db-plugin` caches at station scope too — `get_variables_for_station()`
+(`db.py:91-129`) is cached 24h **per station** — so the trap is not confined to the
+connection-scope list. A
 `check_source()` built naively on these would **report OK from cache while the
 source is down** — the exact false negative the diagnostic exists to prevent.
 Worse, the connection's `get_api_client()` factories do not thread a
@@ -308,11 +335,21 @@ it would report `OK` for a typo'd station ID. It needs an explicit
 For `adl-tahmo-plugin` and `adl-siapmicros-polarisweb-plugin` the honest cheap
 implementation is a membership test against the (uncached) station list.
 
-`adl-earthnetworks-plugin` and `adl-pulsoweb-plugin` have **no station-scoped
-read** short of the real data call. For EarthNetworks this is structural: there is
-no station-independent endpoint at all, so the *connection*-scope check is the
-one that cannot be built, and the station-scope check is the only one that can —
-the inverse of every other plugin.
+`adl-pulsoweb-plugin` has no *dedicated* station call, but it does have a station
+list: `get_context()["stations"]` (`client.py:31`, wrapped by
+`get_stations_metadata()` `client.py:29-32`), already feeding the picker at
+`views.py:53`. A client-side membership scan is available on exactly the same
+terms as tahmo and polarisweb above. Cached 1h, so it must be bypassed.
+
+`adl-earthnetworks-plugin` has no station-independent endpoint at all, so the
+*connection*-scope check is the one that cannot be built and the station-scope
+check is the only one that can — the inverse of every other plugin. Its only
+station-scoped read is the ingestion call, but that call is **window-parameterised**:
+`fetch_raw(station_id, start_utc, end_utc)` (`client.py:94`), and `normalize()`
+(`client.py:113`) reads `Result.Station` — `StationName`, `Inactive`, coordinates —
+*independently* of `HistoricalObservations`. A minimal window therefore returns
+station identity, the upstream's own label and an inactive flag for near-zero
+payload, which is a usable station check rather than a dead end.
 
 ### 6. The countable point exists everywhere the plugin functions — but often inside the client
 
@@ -466,10 +503,15 @@ client authenticates eagerly in `__init__` (`client.py:72`), so merely
 constructing it is the credential check. `adl-earthnetworks-plugin` has **no
 credentials at all** and belongs in its own bucket.
 
-**#226 (station scope).** Only two plugins have a usable primitive, both dead code
-(finding 5). `adl-cimawebdrops-plugin` needs a not-found branch added before its
-existing call can carry the contract. `adl-earthnetworks-plugin` inverts the usual
-shape: station scope is possible, connection scope is not.
+**#226 (station scope).** Only two plugins have a *dedicated* primitive, both dead
+code (finding 5), but five more can run a membership scan over a station list they
+already fetch, and `adl-earthnetworks-plugin`'s window-parameterised ingestion call
+carries station identity separately from the observations. Every station list in
+play is cached, so cache bypass is load-bearing here in a way it is not at
+connection scope — a stale list turns a newly-added station into a confident false
+"does not exist". `adl-cimawebdrops-plugin` needs a not-found branch added before
+its existing call can carry the contract. `adl-earthnetworks-plugin` inverts the
+usual shape: station scope is possible, connection scope is not.
 
 **#227 (sources count).** Three plugins are one-liners; six need the count hoisted
 out of `client.py` or threaded back (finding 6). Guard against the
@@ -568,7 +610,11 @@ Models `MicroStepDBConnection` (`models.py:11`), `MicroStepStationLink`
    `get_variables_for_station()` (`db.py:91-129`) joins
    `variables v INNER JOIN values_f_hist vf ON v.id=vf.varid WHERE vf.stationid =
    %s AND vf.meastime >= NOW() - INTERVAL '1 year'` — genuinely proves the station
-   has produced data. It is **dead code**: `utils.py:6-25` deliberately calls
+   has produced data. **Cached 24h per station** (`db.py:10`, key `:98`, read `:101`, write `:126`),
+   so it carries the same cache trap as `get_stations()` in item 3. Its docstring
+   claims "only checks the last 2 months of data" while the SQL says
+   `INTERVAL '1 year'` — the SQL is what runs. It is **dead code**: `utils.py:6-25`
+   deliberately calls
    `get_all_variables()` instead, per the comment "MicroStep does not have
    station-specific variables" (`utils.py:14`). The best station-scope primitive
    in the fleet, currently unused.
@@ -715,7 +761,13 @@ Models `EarthNetworksConnection` (`models.py:12`), `EarthNetworksStationLink`
    has nothing connection-scoped to probe.
 4. **Station identity** — `en_station_id` (`models.py:65`). No existence call
    short of `get_data()` (`client.py:209-216`) → `fetch_raw()`, the same call
-   ingestion uses. Note `views.py` and `wagtail_hooks.py` are **empty files**, so
+   ingestion uses — but `fetch_raw(station_id, start_utc, end_utc)`
+   (`client.py:94`) takes an explicit window, and `normalize()` (`client.py:113`)
+   reads `Result.Station` (`StationName`, `Inactive`, lat/lon/elevation) from a
+   different branch of the response than `HistoricalObservations`. A minimal
+   window therefore proves station identity and yields the upstream's own label
+   for near-zero payload, without fetching data. Note `views.py` and
+   `wagtail_hooks.py` are **empty files**, so
    the field is a bare `FieldPanel` (`models.py:73`) with no lookup widget — an
    operator must know the ID out of band.
 5. **Countable point** — `hist = result.get("HistoricalObservations") or []`
@@ -819,8 +871,10 @@ Models `PulsoWebConnection` (`models.py:14`), `PulsoWebStationLink`
    (`models.py:32-42` → `views.py:8-20`, URL `wagtail_hooks.py:14-15`) exercises
    it but renders UI rather than returning a verdict.
 4. **Station identity** — `pulsoweb_station_code` (`models.py:78`). No per-station
-   lookup; `get_stations_metadata()` (`client.py:29-32`) returns the whole list,
-   requiring a client-side scan.
+   lookup; `get_stations_metadata()` (`client.py:29-32`) returns the whole list
+   via `get_context()["stations"]` (`client.py:31`), requiring a client-side scan.
+   That list is what `views.py:53` already renders, so a membership check is
+   composable — subject to the 1h cache in item 3.
 5. **Countable point** — the `records` dict in `get_observation_data()` is
    complete at `client.py:183`, just before `return list(records.values())`.
    Inside the client; `plugins.py:51-53` returns it directly.
