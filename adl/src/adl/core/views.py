@@ -3,6 +3,7 @@ from collections import defaultdict
 
 from django.contrib.gis.geos import Point
 from django.core.cache import cache
+from django.core.exceptions import PermissionDenied
 from django.core.paginator import Paginator, InvalidPage
 from django.db import transaction
 from django.shortcuts import render, redirect, get_object_or_404
@@ -52,6 +53,7 @@ from .models import (
     DispatchChannelStationLink,
     StationLink, Network
 )
+from .permissions import can_manage_channel, can_manage_connection
 from .plugin_utils import get_plugin_metadata
 from .probes import (
     PROBE_COOLDOWN_SECONDS,
@@ -1157,16 +1159,26 @@ def dispatch_channel_station_links(request, channel_id):
         "network_connections": network_connections,
         "heartbeat": getattr(channel, "heartbeat", None),
         "dispatch_overdue": channel.is_dispatch_overdue(),
+        # Hidden, not disabled, for a user who cannot take the action
+        "can_manage_channel": can_manage_channel(request.user, channel),
     }
     return render(request, "core/dispatch_channel_station_links.html", context=context)
 
 
 @require_http_methods(["POST"])
 def trigger_station_collection(request, station_link_id):
-    """Manually trigger data collection for a station link"""
+    """Manually trigger data collection for a station link.
+
+    Gated on the station link's *connection*, not the link: the connection
+    holds the credentials the run will use, and it is the object the
+    ingestion side's other manual actions are already gated on.
+    """
     if request.method == 'POST':
         station_link = get_object_or_404(StationLink, id=station_link_id)
-        
+
+        if not can_manage_connection(request.user, station_link.network_connection):
+            raise PermissionDenied
+
         try:
             # Trigger the collection task
             process_station_link_batch.delay(station_link.network_connection.id, [station_link.id])
@@ -1191,6 +1203,9 @@ def trigger_channel_dispatch(request, channel_id):
     """Manually trigger a dispatch run for all eligible stations on a channel"""
     if request.method == 'POST':
         dispatch_channel = get_object_or_404(DispatchChannel, id=channel_id)
+
+        if not can_manage_channel(request.user, dispatch_channel):
+            raise PermissionDenied
 
         try:
             perform_channel_dispatch.delay(dispatch_channel.id)
@@ -1279,6 +1294,8 @@ def dispatch_channel_locks(request, channel_id):
         "lock_rows": rows,
         "worker_responsive": worker_responsive,
         "stale_count": stale_count,
+        # Hidden, not disabled, for a user who cannot take the action
+        "can_manage_channel": can_manage_channel(request.user, channel),
     }
     return render(request, "core/dispatch_channel_locks.html", context=context)
 
@@ -1295,6 +1312,10 @@ def reset_channel_dispatch(request, channel_id):
     """
     if request.method == 'POST':
         dispatch_channel = get_object_or_404(DispatchChannel, id=channel_id)
+
+        if not can_manage_channel(request.user, dispatch_channel):
+            raise PermissionDenied
+
         scope = request.POST.get('scope', 'all')
 
         try:
@@ -1417,6 +1438,11 @@ def test_dispatch_channel_connection(request, channel_id):
     if request.method == 'POST':
         dispatch_channel = get_object_or_404(DispatchChannel, id=channel_id)
 
+        # Before the claim: a refused press must not spend the budget a
+        # permitted operator is about to need
+        if not can_manage_channel(request.user, dispatch_channel):
+            raise PermissionDenied
+
         now = dj_timezone.now()
         cooldown_key = dispatch_test_cooldown_key(dispatch_channel)
         if (channel_implements_test_connection(dispatch_channel)
@@ -1456,7 +1482,10 @@ def trigger_station_dispatch(request, station_link_id, channel_id):
     if request.method == 'POST':
         station_link = get_object_or_404(StationLink, id=station_link_id)
         dispatch_channel = get_object_or_404(DispatchChannel, id=channel_id)
-        
+
+        if not can_manage_channel(request.user, dispatch_channel):
+            raise PermissionDenied
+
         try:
             # Get data records for this station
             perform_channel_dispatch.delay(dispatch_channel.id, [station_link.id])

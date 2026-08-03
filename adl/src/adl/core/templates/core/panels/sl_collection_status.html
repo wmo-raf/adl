@@ -95,6 +95,7 @@
             </div>
         {% endif %}
 
+        {% if can_trigger_collection %}
         <div class="manual-trigger">
             <form method="post" action="{% url 'trigger_station_collection' station_link.id %}"
                   class="manual-trigger__form">
@@ -109,6 +110,7 @@
                 <span class="manual-trigger__help">{% trans "Manually fetch latest data from source" %}</span>
             </form>
         </div>
+        {% endif %}
     </div>
 
     {# Push Status Section #}
@@ -201,6 +203,7 @@
                         {% endif %}
 
                         {# Manual Dispatch Trigger Form #}
+                        {% if channel.can_trigger_dispatch %}
                         <div class="manual-trigger manual-trigger--compact">
                             <form method="post" action="{% url 'trigger_station_dispatch' station_link.id channel.id %}"
                                   class="manual-trigger__form">
@@ -217,6 +220,7 @@
                                 <span class="manual-trigger__help">{% trans "Manually send data to this channel" %}</span>
                             </form>
                         </div>
+                        {% endif %}
                     </div>
                 {% endfor %}
             </div>

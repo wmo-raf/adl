@@ -18,6 +18,7 @@ from adl.core.broker import (
     tested_range_display,
 )
 from adl.core.models import NetworkConnection, StationLink
+from adl.core.permissions import can_manage_connection
 from adl.core.probes import claim_probe_cooldown, read_probe_claim
 from adl.core.tasks import INGESTION_QUEUE_NAME, run_network_plugin
 from adl.core.source_checks import (
@@ -44,10 +45,10 @@ logger = logging.getLogger(__name__)
 # window: equalising them would make an operator wait 15 minutes to verify a
 # password fix.
 
-# The permission that gates the probe: someone who can edit a host and its
-# credentials can already make the runtime dial them, and a new permission
-# would have to be discovered and assigned across 26 deployments
-PROBE_PERMISSION = "core.change_networkconnection"
+# The permission that gates the probe is the connection's own change
+# permission — see `adl.core.permissions`, which is also what gates the
+# station-link page's manual collection trigger. One rule, so the same user
+# never gets two verdicts about the same connection.
 
 # The manual re-run cooldown is the connection's own processing interval,
 # capped here — deliberately stricter than the probe's 60 seconds: one press
@@ -143,7 +144,7 @@ def connection_health(request, connection_id):
     # enabled during cooldown: the shared result is the limit, and a
     # countdown would reintroduce the refusal that was rejected
     show_probe_button = (
-        request.user.has_perm(PROBE_PERMISSION)
+        can_manage_connection(request.user, connection)
         and connection.source_probe_supported
     )
 
@@ -217,7 +218,7 @@ def connection_health(request, connection_id):
         "layer_groups": layer_groups,
         # Hidden rather than disabled, like the probe button — and hidden on
         # a disabled connection: there is nothing to run
-        "show_run_button": (request.user.has_perm(PROBE_PERMISSION)
+        "show_run_button": (can_manage_connection(request.user, connection)
                             and connection.enabled),
         "latest_run_was_manual": latest_run_was_manual(heartbeat),
         "heartbeat": heartbeat,
@@ -245,7 +246,7 @@ def connection_probe_source(request, connection_id):
     """
     connection = get_object_or_404(NetworkConnection, id=connection_id)
 
-    if not request.user.has_perm(PROBE_PERMISSION):
+    if not can_manage_connection(request.user, connection):
         raise PermissionDenied
 
     diagnostic_page = redirect("connection_health", connection_id=connection.id)
@@ -363,7 +364,7 @@ def connection_run_now(request, connection_id):
     """
     connection = get_object_or_404(NetworkConnection, id=connection_id)
 
-    if not request.user.has_perm(PROBE_PERMISSION):
+    if not can_manage_connection(request.user, connection):
         raise PermissionDenied
 
     diagnostic_page = redirect("connection_health", connection_id=connection.id)
@@ -447,7 +448,7 @@ def station_link_check_source(request, link_id):
     """
     station_link = get_object_or_404(StationLink, id=link_id)
 
-    if not request.user.has_perm(PROBE_PERMISSION):
+    if not can_manage_connection(request.user, station_link.network_connection):
         raise PermissionDenied
 
     inspect_page = _station_link_page(station_link)

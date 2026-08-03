@@ -30,14 +30,16 @@
         </div>
 
         <div style="display:flex; gap:10px; margin:15px 0;">
-            <form method="post" action="{% url 'dispatch_channel_dispatch_now' channel.id %}">
-                {% csrf_token %}
-                <button type="submit" class="button">{% trans "Dispatch now" %}</button>
-            </form>
-            <form method="post" action="{% url 'dispatch_channel_test_connection' channel.id %}">
-                {% csrf_token %}
-                <button type="submit" class="button button-secondary">{% trans "Test connection" %}</button>
-            </form>
+            {% if can_manage_channel %}
+                <form method="post" action="{% url 'dispatch_channel_dispatch_now' channel.id %}">
+                    {% csrf_token %}
+                    <button type="submit" class="button">{% trans "Dispatch now" %}</button>
+                </form>
+                <form method="post" action="{% url 'dispatch_channel_test_connection' channel.id %}">
+                    {% csrf_token %}
+                    <button type="submit" class="button button-secondary">{% trans "Test connection" %}</button>
+                </form>
+            {% endif %}
             <a href="{% url 'dispatch_channel_locks' channel.id %}" class="button button-secondary">
                 {% trans "Show active locks" %}
             </a>

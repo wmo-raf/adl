@@ -81,6 +81,18 @@ class ProbePermissionTests(ProbeViewTestCase):
         self.assertContains(response, "do not have permission")
         self.assertEqual(xhr_response.status_code, 403)
 
+    def test_connection_change_permission_fires_the_probe(self):
+        # The same permission that gates the station-link page's manual
+        # collection trigger: one rule, so an operator never gets two
+        # verdicts about the same connection
+        self.client.force_login(self.make_plain_user("change_networkconnection"))
+
+        with patch("adl.monitoring.views.health.run_source_probe",
+                   return_value=OK_STEPS) as probe:
+            self.probe()
+
+        probe.assert_called_once()
+
     def test_button_is_hidden_not_disabled_for_unpermitted_users(self):
         self.client.force_login(self.make_plain_user())
 

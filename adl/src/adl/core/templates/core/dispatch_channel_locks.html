@@ -72,21 +72,23 @@
             </p>
         {% endif %}
 
-        <div style="display:flex; gap:10px; margin:20px 0;">
-            <form method="post" action="{% url 'dispatch_channel_reset' channel.id %}">
-                {% csrf_token %}
-                <input type="hidden" name="scope" value="stale">
-                <button type="submit" class="button"
-                        {% if not worker_responsive or stale_count == 0 %}disabled{% endif %}>
-                    {% blocktrans count counter=stale_count %}Clear {{ counter }} stale lock &amp; dispatch{% plural %}Clear {{ counter }} stale locks &amp; dispatch{% endblocktrans %}
-                </button>
-            </form>
-            <form method="post" action="{% url 'dispatch_channel_reset' channel.id %}"
-                  onsubmit="return confirm('{% trans 'Clear ALL locks, including RUNNING ones? A running dispatch keeps executing and a duplicate may start for the same station, which can send the same records twice.' %}')">
-                {% csrf_token %}
-                <input type="hidden" name="scope" value="all">
-                <button type="submit" class="button no">{% trans "Clear ALL locks & dispatch" %}</button>
-            </form>
-        </div>
+        {% if can_manage_channel %}
+            <div style="display:flex; gap:10px; margin:20px 0;">
+                <form method="post" action="{% url 'dispatch_channel_reset' channel.id %}">
+                    {% csrf_token %}
+                    <input type="hidden" name="scope" value="stale">
+                    <button type="submit" class="button"
+                            {% if not worker_responsive or stale_count == 0 %}disabled{% endif %}>
+                        {% blocktrans count counter=stale_count %}Clear {{ counter }} stale lock &amp; dispatch{% plural %}Clear {{ counter }} stale locks &amp; dispatch{% endblocktrans %}
+                    </button>
+                </form>
+                <form method="post" action="{% url 'dispatch_channel_reset' channel.id %}"
+                      onsubmit="return confirm('{% trans 'Clear ALL locks, including RUNNING ones? A running dispatch keeps executing and a duplicate may start for the same station, which can send the same records twice.' %}')">
+                    {% csrf_token %}
+                    <input type="hidden" name="scope" value="all">
+                    <button type="submit" class="button no">{% trans "Clear ALL locks & dispatch" %}</button>
+                </form>
+            </div>
+        {% endif %}
     </div>
 {% endblock %}

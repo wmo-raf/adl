@@ -3,6 +3,7 @@ from django.urls import reverse
 from django.utils import timezone as dj_timezone
 from wagtail.admin.ui.components import Component
 
+from adl.core.permissions import can_manage_channel, can_manage_connection
 from adl.core.source_checks import CHECK_STATION_SOURCE
 from adl.monitoring.health import configuration_drift, probe_age_minutes
 from adl.monitoring.models import SourceProbeResult, StationLinkActivityLog
@@ -14,7 +15,9 @@ class StationLinkCollectionStatusPanel(Component):
     def get_context_data(self, parent_context):
         context = super().get_context_data(parent_context)
         station_link = parent_context.get('station_link')
-        
+        request = parent_context.get('request')
+        user = getattr(request, 'user', None)
+
         # get latest log entry for this station link
         latest_pull_log = StationLinkActivityLog.objects.filter(
             station_link=station_link, direction="pull"
@@ -30,15 +33,23 @@ class StationLinkCollectionStatusPanel(Component):
                     dispatch_channel=dispatch_channel
                 ).order_by('-time').first()
                 dispatch_channel.latest_push_log = latest_push_log
-        
+                # Per channel, not once for the panel: a user may hold the
+                # change permission on one channel type and not another
+                dispatch_channel.can_trigger_dispatch = can_manage_channel(
+                    user, dispatch_channel)
+
         station_link.latest_pull_log = latest_pull_log
         station_link.dispatch_channels = dispatch_channels
         context['station_link'] = station_link
-        
-        if 'request' in parent_context:
-            context['request'] = parent_context['request']
-            context['csrf_token'] = get_token(parent_context['request'])
-        
+
+        # Hidden, not disabled, for a user who cannot take the action
+        context['can_trigger_collection'] = can_manage_connection(
+            user, station_link.network_connection)
+
+        if request is not None:
+            context['request'] = request
+            context['csrf_token'] = get_token(request)
+
         return context
 
 
@@ -57,10 +68,6 @@ class StationLinkSourceCheckPanel(Component):
     template_name = 'core/panels/sl_source_check.html'
 
     def get_context_data(self, parent_context):
-        # Imported here, not at module level: the views module imports core
-        # models and utils, which import back into this app at startup
-        from adl.monitoring.views.health import PROBE_PERMISSION
-
         context = super().get_context_data(parent_context)
         station_link = parent_context.get('station_link')
         request = parent_context.get('request')
@@ -82,8 +89,8 @@ class StationLinkSourceCheckPanel(Component):
         context['latest_result'] = latest
         context['configuration_drift'] = drift if drift.drifted else None
         context['show_check_button'] = (
-            request is not None
-            and request.user.has_perm(PROBE_PERMISSION)
+            can_manage_connection(getattr(request, 'user', None),
+                                  station_link.network_connection)
             and station_link.station_source_check_supported
         )
         context['check_source_url'] = reverse('station_link_check_source',
