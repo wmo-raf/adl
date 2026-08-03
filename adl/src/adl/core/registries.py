@@ -25,7 +25,7 @@ from celery.exceptions import SoftTimeLimitExceeded
 from django.core.exceptions import ImproperlyConfigured
 from django.utils import timezone as dj_timezone
 
-from .classification import stamp_failure
+from .classification import mark_failed, stamp_failure
 from .date_utils import make_record_timezone_aware
 from .logging import TaskLogger
 from .registry import Registry, Instance
@@ -886,11 +886,7 @@ class Plugin(Instance):
             log.error("Ingestion for station %s timed out", station_link)
             raise
         except Exception as e:
-            error_msg = str(e)
-            activity_log.success = False
-            activity_log.message = error_msg
-            activity_log.status = StationLinkActivityLog.ActivityStatus.FAILED
-            stamp_failure(activity_log, e)
+            error_msg = mark_failed(activity_log, e)
             log.error("Error processing station %s: %s", station_link, error_msg)
         finally:
             activity_log.duration_ms = (time.monotonic() - start) * 1000

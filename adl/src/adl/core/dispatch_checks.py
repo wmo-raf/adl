@@ -29,6 +29,7 @@ from collections.abc import Mapping
 from django.utils.translation import gettext as _
 
 from .probes import PROBE_WALL_CLOCK_SECONDS, ProbeTimeout, run_bounded
+from .redaction import redact_secrets
 
 logger = logging.getLogger(__name__)
 
@@ -92,7 +93,10 @@ def normalise_dispatch_test_result(value, channel_type=None, measured_ms=None):
     return {
         "ok": bool(value["ok"]),
         "supported": bool(value["supported"]),
-        "message": str(value["message"]),
+        # Redacted here rather than at each channel: a plugin's own failure
+        # text is the likeliest place for a destination credential to appear,
+        # and no channel can be relied on to strip it.
+        "message": redact_secrets(str(value["message"])),
         "latency_ms": _coerce_latency(value.get("latency_ms"), measured_ms),
     }
 
@@ -146,7 +150,7 @@ def run_dispatch_connection_test(channel, timeout_seconds=PROBE_WALL_CLOCK_SECON
             "ok": False,
             "supported": True,
             "message": _("The connection test raised %(type)s: %(error)s")
-                       % {"type": type(e).__name__, "error": e},
+                       % {"type": type(e).__name__, "error": redact_secrets(e)},
             "latency_ms": elapsed_ms(),
         }
 

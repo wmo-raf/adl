@@ -4,6 +4,8 @@ from typing import Optional
 
 from django_eventstream import send_event
 
+from .redaction import redact_secrets
+
 logger = logging.getLogger(__name__)
 
 
@@ -25,10 +27,20 @@ class TaskLogger:
             logger.debug(f"TaskLogger initialized: task_id={task_id}, plugin={plugin_label}")
     
     def _send_to_stream(self, message: str, level: str = 'info'):
-        """Send log message to SSE stream via django-eventstream"""
+        """
+        Send log message to SSE stream via django-eventstream.
+
+        Redacted on the way out, not on the way in: the local logger keeps
+        the message a plugin actually wrote, while what leaves the process
+        for a browser carries no credential. Plugins interpolate exceptions
+        into their log lines freely, so this is the only place the stream
+        can be bounded.
+        """
         if not self.task_id:
             return
-        
+
+        message = redact_secrets(message)
+
         try:
             # Send event to task-specific channel
             send_event(

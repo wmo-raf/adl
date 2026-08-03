@@ -4,23 +4,40 @@ from datetime import timedelta
 from django_celery_results.models import TaskResult
 from rest_framework import serializers
 
+from adl.core.redaction import redact_json, redact_secrets
+
 from .models import StationLinkActivityLog
 
 
 class TaskResultSerializer(serializers.ModelSerializer):
+    """
+    A Celery task result, redacted at the boundary.
+
+    Everywhere else ADL redacts at the write point, but these two fields are
+    written by ``django_celery_results`` from the re-raised exception — core
+    never touches the row and cannot redact it on the way in. So this is the
+    one place redaction happens on read, and it has to stay here as long as
+    a failing task re-raises after logging.
+    """
+
     result = serializers.SerializerMethodField()
-    
+    traceback = serializers.SerializerMethodField()
+
     class Meta:
         model = TaskResult
         fields = ("date_created", "date_done", "status", "result", "traceback",)
-    
+
     def get_result(self, obj):
         try:
             result = json.loads(obj.result)
-        except json.JSONDecodeError:
-            result = obj.result
-        
-        return result
+        except (TypeError, json.JSONDecodeError):
+            # TypeError: a task that recorded no result at all stores NULL.
+            return redact_secrets(obj.result)
+
+        return redact_json(result)
+
+    def get_traceback(self, obj):
+        return redact_secrets(obj.traceback)
 
 
 class StationLinkActivityLogSerializer(serializers.ModelSerializer):
