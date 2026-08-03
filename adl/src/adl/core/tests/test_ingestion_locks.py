@@ -11,6 +11,7 @@ from adl.core.tasks import (
     INGEST_LOCK_TTL_MARGIN_SECONDS,
     INGEST_TIME_LIMIT_GRACE_SECONDS,
     effective_ingest_station_seconds,
+    ingest_batch_budget_seconds,
     ingest_batch_soft_limit_seconds,
     ingest_station_lock_key,
     process_station_link_batch,
@@ -78,14 +79,38 @@ class ProcessStationLockTests(ProcessStationLockTestCase):
         self.assertEqual(log.status, StationLinkActivityLog.ActivityStatus.FAILED)
         self.assertIn("host unreachable", log.message)
 
-    def test_lock_ttl_derives_from_connection_timeout(self):
-        # default timeout 300s + 30s hard-limit grace + 60s margin
+    def test_lock_ttl_derives_from_the_batch_bound(self):
+        # stock defaults: batch soft limit 900s (10 × 300s clamped to the
+        # 15-minute interval) + 30s hard-limit grace + 60s margin
         with patch.object(cache, "add", return_value=True) as mock_add, \
                 patch.object(cache, "delete"):
             self.plugin.records = []
             self.plugin.process_station(self.link)
 
-        mock_add.assert_called_once_with(self.lock_key, "locked", timeout=390)
+        mock_add.assert_called_once_with(self.lock_key, "locked", timeout=990)
+
+    def test_lock_outlives_a_station_running_past_the_per_station_budget(self):
+        # Regression for #209: a station may legitimately occupy the whole
+        # batch budget — with batching there is no per-station soft limit — so
+        # the lock must still be held once the per-station number has elapsed,
+        # or the concurrent run it exists to prevent is re-admitted.
+        connection = self.link.network_connection
+        per_station_budget = (connection.ingest_timeout_seconds
+                              + INGEST_TIME_LIMIT_GRACE_SECONDS
+                              + INGEST_LOCK_TTL_MARGIN_SECONDS)
+
+        # Let the run acquire the lock for real, but hold onto it afterwards so
+        # its remaining life can be read back out of the cache
+        with patch.object(cache, "delete"):
+            self.plugin.records = []
+            self.plugin.process_station(self.link)
+
+        self.assertGreater(cache.ttl(self.lock_key), per_station_budget)
+
+        # and a second entrant, arriving inside that window, is still refused
+        with patch.object(self.plugin, "get_station_data") as mock_get:
+            self.assertEqual(self.plugin.process_station(self.link), 0)
+        mock_get.assert_not_called()
 
     def test_soft_time_limit_reraised_after_log_finalised(self):
         with patch.object(
@@ -145,6 +170,59 @@ class BatchTimeLimitTests(TestCase):
         self.assertEqual(kwargs["time_limit"], 300 + INGEST_TIME_LIMIT_GRACE_SECONDS)
 
 
+class IngestBatchBudgetTests(TestCase):
+    """The single bound shared by the station lock TTL and the pull-side
+    stale-log sweep, per decision #153 §5."""
+
+    def test_budget_is_batch_soft_limit_plus_grace_and_margin(self):
+        connection = NetworkConnectionFactory(
+            plugin_processing_interval=15, ingest_timeout_seconds=300, batch_size=10
+        )
+
+        # 10 × 300s clamped to the 900s interval, + 30s grace + 60s margin
+        self.assertEqual(ingest_batch_budget_seconds(connection), 990)
+
+    def test_budget_uses_the_configured_batch_size_as_an_upper_bound(self):
+        # the sweeper cannot see the actual batch, so the configured size wins
+        connection = NetworkConnectionFactory(
+            plugin_processing_interval=60, ingest_timeout_seconds=300, batch_size=4
+        )
+
+        # 4 × 300s = 1200s, well under the 3600s interval
+        self.assertEqual(ingest_batch_budget_seconds(connection), 1290)
+
+    def test_unbatched_connection_collapses_to_the_per_station_budget(self):
+        # batch_size=1 is the degenerate case the old per-station helper always
+        # assumed: one station is the whole batch, so both numbers coincide
+        connection = NetworkConnectionFactory(
+            plugin_processing_interval=15, ingest_timeout_seconds=300, batch_size=1
+        )
+
+        per_station_budget = (connection.ingest_timeout_seconds
+                              + INGEST_TIME_LIMIT_GRACE_SECONDS
+                              + INGEST_LOCK_TTL_MARGIN_SECONDS)
+        self.assertEqual(ingest_batch_budget_seconds(connection), per_station_budget)
+
+    def test_short_interval_clamps_the_budget_below_the_per_station_number(self):
+        # the clamp binds in both directions: a connection ticking every minute
+        # cannot grant any station more than that minute, batching or not
+        connection = NetworkConnectionFactory(
+            plugin_processing_interval=1, ingest_timeout_seconds=300, batch_size=10
+        )
+
+        self.assertEqual(ingest_batch_budget_seconds(connection), 60 + 30 + 60)
+
+    def test_zero_batch_size_uses_the_batch_the_coordinator_would_form(self):
+        # 0 is admin-reachable and means "unset": the coordinator still chunks
+        # by 10, so the budget must size for 10 and not for a single station
+        connection = NetworkConnectionFactory(
+            plugin_processing_interval=60, ingest_timeout_seconds=300, batch_size=0
+        )
+
+        # 10 × 300s = 3000s, under the 3600s interval, + 30s grace + 60s margin
+        self.assertEqual(ingest_batch_budget_seconds(connection), 3090)
+
+
 class EffectiveStationTimeoutTests(TestCase):
     """The figure the admin displays, per decision #153 §2 — the per-station
     share a full batch actually gets once the interval clamp is applied."""
@@ -176,12 +254,14 @@ class EffectiveStationTimeoutTests(TestCase):
         # one station cannot outrun its own tick by more than the interval
         self.assertEqual(effective_ingest_station_seconds(connection), 60)
 
-    def test_zero_batch_size_does_not_divide_by_zero(self):
+    def test_zero_batch_size_falls_back_to_the_coordinators_own_default(self):
         connection = NetworkConnectionFactory(
             plugin_processing_interval=15, ingest_timeout_seconds=300, batch_size=0
         )
 
-        self.assertEqual(effective_ingest_station_seconds(connection), 300)
+        # 0 means "unset", and the coordinator reads it as 10 — so the admin
+        # must show the share of a batch of 10, not a station running alone
+        self.assertEqual(effective_ingest_station_seconds(connection), 90)
 
     def test_batch_reraises_soft_time_limit_from_process_station(self):
         plugin = make_test_plugin()

@@ -28,12 +28,13 @@ class IngestTimeoutBudgetPanel(Panel):
             context = super().get_context_data(parent_context)
 
             from adl.core.tasks import (
+                effective_ingest_batch_size,
                 effective_ingest_station_seconds,
                 ingest_batch_soft_limit_seconds,
             )
 
             connection = self.instance
-            batch_size = connection.batch_size or 1
+            batch_size = effective_ingest_batch_size(connection)
             configured = connection.ingest_timeout_seconds
             effective = effective_ingest_station_seconds(connection)
 
