@@ -1138,6 +1138,11 @@ class DispatchChannel(PolymorphicModel, ClusterableModel):
         destination (reachability + authentication). Implementations must
         never raise and must never block for more than ~10 seconds.
 
+        The return is normalised by core and never trusted as-is — call
+        :func:`adl.core.dispatch_checks.run_dispatch_connection_test` rather
+        than this method directly, so a channel that raises or returns the
+        wrong shape reports a failure instead of crashing the caller.
+
         :return: dict with keys ``ok`` (bool), ``supported`` (bool),
             ``message`` (str) and ``latency_ms`` (int or None).
         """

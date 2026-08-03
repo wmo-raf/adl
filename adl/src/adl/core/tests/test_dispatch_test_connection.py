@@ -4,6 +4,10 @@ from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.urls import reverse
 
+from adl.core.dispatch_checks import (
+    normalise_dispatch_test_result,
+    run_dispatch_connection_test,
+)
 from adl.core.models import DispatchChannel, Wis2BoxUpload
 from .factories import Wis2BoxUploadFactory
 
@@ -17,6 +21,99 @@ class BaseTestConnectionContractTests(TestCase):
         self.assertFalse(result["supported"])
         self.assertFalse(result["ok"])
         self.assertIn("not supported", result["message"])
+
+
+class NormaliseDispatchTestResultTests(TestCase):
+    """A channel type lives in its own repo and upgrades on its own schedule,
+    so core never trusts what `test_connection()` hands back."""
+
+    def test_conforming_result_passes_through_unchanged(self):
+        result = normalise_dispatch_test_result(
+            {"ok": True, "supported": True, "message": "reachable", "latency_ms": 12}
+        )
+
+        self.assertEqual(
+            result,
+            {"ok": True, "supported": True, "message": "reachable", "latency_ms": 12},
+        )
+
+    def test_missing_latency_falls_back_to_the_callers_measurement(self):
+        """The admin renders the latency unconditionally on success, so an
+        omitted one must not reach the operator as "(None ms)"."""
+        result = normalise_dispatch_test_result(
+            {"ok": False, "supported": True, "message": "bucket missing"}, measured_ms=7
+        )
+
+        self.assertEqual(result["latency_ms"], 7)
+        self.assertFalse(result["ok"])
+        self.assertEqual(result["message"], "bucket missing")
+
+    def test_unreadable_latency_falls_back_without_losing_the_verdict(self):
+        result = normalise_dispatch_test_result(
+            {"ok": True, "supported": True, "message": "reachable", "latency_ms": "fast"},
+            measured_ms=7,
+        )
+
+        self.assertTrue(result["ok"])
+        self.assertEqual(result["latency_ms"], 7)
+
+    def test_tuple_return_is_reported_as_malformed_not_indexed(self):
+        """The shape `adl-s3-plugin` shipped: `result["supported"]` on a tuple
+        raised TypeError and 500'd the admin button."""
+        result = normalise_dispatch_test_result((True, "Connection successful"), channel_type="S3Upload")
+
+        self.assertTrue(result["supported"])
+        self.assertFalse(result["ok"])
+        self.assertIn("S3Upload", result["message"])
+        self.assertIn("tuple", result["message"])
+
+    def test_result_missing_required_keys_is_reported_as_malformed(self):
+        result = normalise_dispatch_test_result({"ok": True}, channel_type="S3Upload")
+
+        self.assertTrue(result["supported"])
+        self.assertFalse(result["ok"])
+        self.assertIn("supported", result["message"])
+        self.assertIn("message", result["message"])
+
+    def test_none_return_is_reported_as_malformed(self):
+        result = normalise_dispatch_test_result(None, channel_type="S3Upload")
+
+        self.assertFalse(result["ok"])
+        self.assertIn("NoneType", result["message"])
+
+
+class RunDispatchConnectionTestTests(TestCase):
+    def setUp(self):
+        self.channel = Wis2BoxUploadFactory()
+
+    def test_probe_return_is_normalised(self):
+        with patch.object(Wis2BoxUpload, "test_connection", return_value=(True, "ok")):
+            result = run_dispatch_connection_test(self.channel)
+
+        self.assertFalse(result["ok"])
+        self.assertTrue(result["supported"])
+        self.assertIn("Wis2BoxUpload", result["message"])
+
+    def test_a_channel_omitting_latency_still_reports_a_number(self):
+        with patch.object(
+            Wis2BoxUpload, "test_connection",
+            return_value={"ok": True, "supported": True, "message": "reachable"},
+        ):
+            result = run_dispatch_connection_test(self.channel)
+
+        self.assertTrue(result["ok"])
+        self.assertIsInstance(result["latency_ms"], int)
+
+    def test_raising_probe_is_reported_as_a_failure_not_propagated(self):
+        with patch.object(
+            Wis2BoxUpload, "test_connection", side_effect=RuntimeError("client blew up")
+        ):
+            result = run_dispatch_connection_test(self.channel)
+
+        self.assertFalse(result["ok"])
+        self.assertTrue(result["supported"])
+        self.assertIn("RuntimeError", result["message"])
+        self.assertIn("client blew up", result["message"])
 
 
 class Wis2BoxTestConnectionTests(TestCase):
@@ -71,6 +168,15 @@ class TestConnectionAdminViewTests(TestCase):
         mock_probe.assert_called_once_with()
         rendered_messages = [str(m) for m in response.context["messages"]]
         self.assertTrue(any("reachable" in m for m in rendered_messages))
+
+    def test_malformed_probe_return_renders_an_error_instead_of_500ing(self):
+        with patch.object(Wis2BoxUpload, "test_connection", return_value=(True, "Connection successful")):
+            response = self.client.post(
+                self.url, HTTP_REFERER="/admin/dispatch-channels/", follow=True
+            )
+
+        rendered_messages = [str(m) for m in response.context["messages"]]
+        self.assertTrue(any("Wis2BoxUpload" in m for m in rendered_messages))
 
     def test_anonymous_cannot_probe(self):
         self.client.logout()
