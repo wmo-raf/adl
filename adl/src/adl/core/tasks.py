@@ -69,6 +69,35 @@ def ingest_timeout_budget_seconds(network_connection):
             + INGEST_LOCK_TTL_MARGIN_SECONDS)
 
 
+def ingest_batch_soft_limit_seconds(network_connection, station_count):
+    """
+    Soft time limit for one batch of ``station_count`` stations: the per-station
+    budget multiplied out, then clamped to the connection's own beat interval so
+    a batch can never outlive its own tick and overlap the next coordinator run.
+    """
+    return min(
+        station_count * network_connection.ingest_timeout_seconds,
+        network_connection.plugin_processing_interval * 60,
+    )
+
+
+def effective_ingest_station_seconds(network_connection):
+    """
+    The per-station share a full batch actually gets, once the clamp above is
+    applied. ``ingest_timeout_seconds`` is what operators configure, but a full
+    batch that would outrun the beat interval is cut back to it, and the
+    shortfall is divided across the batch — so the configured number can be
+    silently several times the real one (300s becomes 90s at stock defaults).
+
+    Surfaced in the admin rather than left to be derived from three fields.
+    Note this is the share of a *full* batch: a connection whose last batch is
+    short gives those stations more, and with batching there is no per-station
+    limit enforced anywhere, so this is a budget share and not a cut-off.
+    """
+    batch_size = network_connection.batch_size or 1
+    return ingest_batch_soft_limit_seconds(network_connection, batch_size) // batch_size
+
+
 # Namespace deliberately distinct from the legacy "lock:station:" prefix:
 # locks created before TTLs existed are eternal, so they are orphaned by the
 # rename instead of migrated
@@ -227,8 +256,6 @@ def run_network_plugin(self, network_id, manual=False):
     batch_count = 0
     spawned_tasks = []
 
-    interval_seconds = network_connection.plugin_processing_interval * 60
-
     for batch in chunked(station_link_ids, batch_size):
         batch_count += 1
         batch_list = list(batch)
@@ -236,12 +263,7 @@ def run_network_plugin(self, network_id, manual=False):
         log.info("Spawning batch %d with %d station links: %s",
                  batch_count, len(batch_list), batch_list)
 
-        # Per-station budget, clamped so a batch can never outlive its own
-        # beat tick and overlap the next coordinator run
-        soft_time_limit = min(
-            len(batch_list) * network_connection.ingest_timeout_seconds,
-            interval_seconds,
-        )
+        soft_time_limit = ingest_batch_soft_limit_seconds(network_connection, len(batch_list))
         task = process_station_link_batch.apply_async(
             args=[network_id, batch_list],
             queue=INGESTION_QUEUE_NAME,

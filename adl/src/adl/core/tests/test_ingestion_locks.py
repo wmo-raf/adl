@@ -10,6 +10,8 @@ from adl.core.registries import plugin_registry
 from adl.core.tasks import (
     INGEST_LOCK_TTL_MARGIN_SECONDS,
     INGEST_TIME_LIMIT_GRACE_SECONDS,
+    effective_ingest_station_seconds,
+    ingest_batch_soft_limit_seconds,
     ingest_station_lock_key,
     process_station_link_batch,
     run_network_plugin,
@@ -141,6 +143,45 @@ class BatchTimeLimitTests(TestCase):
         # 2 × 300s = 600s would outlive the 5-minute beat tick: clamp to 300s
         self.assertEqual(kwargs["soft_time_limit"], 300)
         self.assertEqual(kwargs["time_limit"], 300 + INGEST_TIME_LIMIT_GRACE_SECONDS)
+
+
+class EffectiveStationTimeoutTests(TestCase):
+    """The figure the admin displays, per decision #153 §2 — the per-station
+    share a full batch actually gets once the interval clamp is applied."""
+
+    def test_unclamped_batch_gives_each_station_the_configured_timeout(self):
+        connection = NetworkConnectionFactory(
+            plugin_processing_interval=30, ingest_timeout_seconds=300, batch_size=2
+        )
+
+        # 2 × 300s = 600s fits inside the 30-minute interval: no cap
+        self.assertEqual(ingest_batch_soft_limit_seconds(connection, 2), 600)
+        self.assertEqual(effective_ingest_station_seconds(connection), 300)
+
+    def test_clamped_batch_shortens_each_station_share(self):
+        connection = NetworkConnectionFactory(
+            plugin_processing_interval=15, ingest_timeout_seconds=300, batch_size=10
+        )
+
+        # stock defaults: 10 × 300s = 3000s, clamped to the 900s interval,
+        # so the configured 300s is really 90s a station
+        self.assertEqual(ingest_batch_soft_limit_seconds(connection, 10), 900)
+        self.assertEqual(effective_ingest_station_seconds(connection), 90)
+
+    def test_batch_size_of_one_is_never_clamped_below_the_interval(self):
+        connection = NetworkConnectionFactory(
+            plugin_processing_interval=1, ingest_timeout_seconds=300, batch_size=1
+        )
+
+        # one station cannot outrun its own tick by more than the interval
+        self.assertEqual(effective_ingest_station_seconds(connection), 60)
+
+    def test_zero_batch_size_does_not_divide_by_zero(self):
+        connection = NetworkConnectionFactory(
+            plugin_processing_interval=15, ingest_timeout_seconds=300, batch_size=0
+        )
+
+        self.assertEqual(effective_ingest_station_seconds(connection), 300)
 
     def test_batch_reraises_soft_time_limit_from_process_station(self):
         plugin = make_test_plugin()

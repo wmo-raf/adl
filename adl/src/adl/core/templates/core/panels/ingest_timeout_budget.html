@@ -1,0 +1,39 @@
+{% load i18n %}
+
+{% comment %}
+    Rendered inside the connection edit form, under the three fields it
+    combines. Uses Wagtail's own help-block idiom rather than new CSS —
+    panel templates are form fragments and have no extra_css block.
+
+    The figure is computed from the saved instance, so it lags the form
+    until the next save; the wording says so rather than implying it is live.
+{% endcomment %}
+
+<div class="help-block {% if is_clamped %}help-warning{% else %}help-info{% endif %}">
+    {% if is_clamped %}
+        <p>
+            {% blocktrans %}Each station in a full batch effectively gets {{ effective_seconds }} seconds, not the {{ configured_seconds }} seconds configured above.{% endblocktrans %}
+        </p>
+        <p>
+            {% blocktrans %}A batch of {{ batch_size }} stations at {{ configured_seconds }}s each would need longer than the {{ interval_minutes }}-minute interval, so the batch is capped at {{ batch_limit_seconds }}s to stop one run overlapping the next. The shortfall is shared across the batch.{% endblocktrans %}
+        </p>
+        <p>
+            {% trans "To give each station its full share, lower the batch size, shorten the timeout, or lengthen the interval." %}
+        </p>
+    {% else %}
+        <p>
+            {% blocktrans %}Each station in a full batch gets the full {{ configured_seconds }} seconds configured above.{% endblocktrans %}
+        </p>
+        <p>
+            {% blocktrans %}A batch of {{ batch_size }} stations fits within the {{ interval_minutes }}-minute interval, so no cap applies.{% endblocktrans %}
+        </p>
+    {% endif %}
+    <p>
+        {% comment %}
+            Honest about two things the number is not: it is not enforced
+            per station (batching means one slow station can eat another's
+            share), and it does not update until the form is saved.
+        {% endcomment %}
+        {% trans "This is a share of the batch budget, not a per-station cut-off — a slow station can still consume another's share. Recomputed when you save." %}
+    </p>
+</div>
