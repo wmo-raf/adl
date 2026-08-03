@@ -1,6 +1,9 @@
+import threading
+import time
 from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
+from django.core.cache import cache
 from django.test import TestCase
 from django.urls import reverse
 
@@ -9,6 +12,8 @@ from adl.core.dispatch_checks import (
     run_dispatch_connection_test,
 )
 from adl.core.models import DispatchChannel, Wis2BoxUpload
+from adl.core.probes import PROBE_COOLDOWN_SECONDS, PROBE_WALL_CLOCK_SECONDS
+from adl.core.views import dispatch_test_cooldown_key
 from .factories import Wis2BoxUploadFactory
 
 
@@ -116,6 +121,81 @@ class RunDispatchConnectionTestTests(TestCase):
         self.assertIn("client blew up", result["message"])
 
 
+class DispatchProbeWallClockTests(TestCase):
+    """A channel lives in a plugin repo that upgrades on its own schedule, so
+    the ~10 s in the base-class docstring is a contract, not a guarantee.
+    `adl-s3-plugin` inherits boto3's 60 s connect + 60 s read + retries."""
+
+    def setUp(self):
+        self.channel = Wis2BoxUploadFactory()
+        self.release = threading.Event()
+        self.addCleanup(self.release.set)
+
+    def blocking_probe(self, *args, **kwargs):
+        self.release.wait(30)
+        return {"ok": True, "supported": True, "message": "eventually", "latency_ms": 1}
+
+    def test_the_default_budget_is_the_shared_wall_clock(self):
+        """The same number on both sides, so the worst case an operator can
+        experience is identical whichever button they press."""
+        import inspect
+
+        default = inspect.signature(run_dispatch_connection_test).parameters[
+            "timeout_seconds"].default
+
+        self.assertEqual(default, PROBE_WALL_CLOCK_SECONDS)
+
+    def test_a_blocking_probe_reports_a_failure_naming_the_budget(self):
+        with patch.object(Wis2BoxUpload, "test_connection", self.blocking_probe):
+            result = run_dispatch_connection_test(self.channel, timeout_seconds=0.1)
+
+        self.assertFalse(result["ok"])
+        # `supported` stays True so the admin renders it as an error, not the
+        # softer "not supported for this channel type"
+        self.assertTrue(result["supported"])
+        self.assertIn("0.1-second budget", result["message"])
+        self.assertIn("Wis2BoxUpload", result["message"])
+
+    def test_the_reported_latency_is_measured_not_the_budget_constant(self):
+        with patch.object(Wis2BoxUpload, "test_connection", self.blocking_probe):
+            result = run_dispatch_connection_test(self.channel, timeout_seconds=0.1)
+
+        # Whatever was observed, not 100 assumed — honest if the bound ever
+        # fires early
+        self.assertIsInstance(result["latency_ms"], int)
+        self.assertGreaterEqual(result["latency_ms"], 0)
+
+    def test_the_bound_covers_client_construction_not_just_the_final_call(self):
+        """The live s3 case: `S3Client.__init__` dials `head_bucket`, so the
+        channel blocks before `test_connection`'s own call is reached."""
+
+        def probe_blocking_in_get_client(*args, **kwargs):
+            self.release.wait(30)  # stands in for the eager client constructor
+            raise AssertionError("the destination-facing call is never reached")
+
+        with patch.object(Wis2BoxUpload, "test_connection", probe_blocking_in_get_client):
+            result = run_dispatch_connection_test(self.channel, timeout_seconds=0.1)
+
+        self.assertFalse(result["ok"])
+        self.assertIn("budget", result["message"])
+
+    def test_an_abandoned_worker_does_not_extend_the_callers_wall_clock(self):
+        """Fails if the executor were tidied up into a context manager:
+        `with`-exit joins abandoned workers, so the caller would block until
+        the stuck probe finished rather than returning at the bound."""
+        started = time.monotonic()
+
+        with patch.object(Wis2BoxUpload, "test_connection", self.blocking_probe):
+            run_dispatch_connection_test(self.channel, timeout_seconds=0.1)
+
+        elapsed = time.monotonic() - started
+
+        # The worker is still blocked on `self.release` right now — the wait
+        # is 30 s and the caller is already back
+        self.assertFalse(self.release.is_set())
+        self.assertLess(elapsed, 5)
+
+
 class Wis2BoxTestConnectionTests(TestCase):
     def setUp(self):
         self.channel = Wis2BoxUploadFactory()
@@ -151,6 +231,7 @@ class Wis2BoxTestConnectionTests(TestCase):
 
 class TestConnectionAdminViewTests(TestCase):
     def setUp(self):
+        cache.clear()
         self.channel = Wis2BoxUploadFactory()
         self.user = get_user_model().objects.create_superuser(
             username="admin", email="admin@example.com", password="test-pass"
@@ -185,3 +266,153 @@ class TestConnectionAdminViewTests(TestCase):
 
         mock_probe.assert_not_called()
         self.assertIn("login", response["Location"])
+
+    def test_a_blocking_channel_still_completes_the_request_as_an_error(self):
+        """End to end: the operator gets a rendered error inside the budget
+        rather than a wedged worker."""
+        release = threading.Event()
+        self.addCleanup(release.set)
+
+        def blocking_probe(*args, **kwargs):
+            release.wait(30)
+            return {"ok": True, "supported": True, "message": "late", "latency_ms": 1}
+
+        with patch.object(Wis2BoxUpload, "test_connection", blocking_probe), \
+                patch("adl.core.views.run_dispatch_connection_test",
+                      side_effect=lambda channel: run_dispatch_connection_test(
+                          channel, timeout_seconds=0.1)):
+            response = self.client.post(
+                self.url, HTTP_REFERER="/admin/dispatch-channels/", follow=True
+            )
+
+        rendered = [str(m) for m in response.context["messages"]]
+        self.assertTrue(any("budget" in m for m in rendered), rendered)
+        self.assertFalse(release.is_set())
+
+
+class TestConnectionCooldownTests(TestCase):
+    """The wall clock bounds a single press; nothing bounds ten of them. The
+    cooldown is claimed before the probe fires, mirroring the source probe."""
+
+    def setUp(self):
+        cache.clear()
+        self.channel = Wis2BoxUploadFactory()
+        self.user = get_user_model().objects.create_superuser(
+            username="admin", email="admin@example.com", password="test-pass"
+        )
+        self.client.force_login(self.user)
+        self.url = reverse("dispatch_channel_test_connection", args=[self.channel.id])
+        self.ok_result = {
+            "ok": True, "supported": True, "message": "reachable", "latency_ms": 12,
+        }
+
+    def press(self):
+        # Redirect back to a real admin page, so the assertions below read
+        # the rendered messages off a 200 rather than an error page
+        return self.client.post(
+            self.url, HTTP_REFERER=reverse("wagtailadmin_home"), follow=True
+        )
+
+    def test_a_second_press_inside_the_cooldown_does_not_dial_the_destination(self):
+        with patch.object(Wis2BoxUpload, "test_connection",
+                          return_value=self.ok_result) as probe:
+            self.press()
+            response = self.press()
+
+        self.assertEqual(probe.call_count, 1)
+        self.assertEqual(response.status_code, 200)
+
+        rendered = [str(m) for m in response.context["messages"]]
+        self.assertTrue(any("second(s) ago" in m for m in rendered), rendered)
+
+    def test_a_press_inside_the_cooldown_is_a_message_not_an_error(self):
+        with patch.object(Wis2BoxUpload, "test_connection", return_value=self.ok_result):
+            self.press()
+            response = self.press()
+
+        levels = {m.level_tag for m in response.context["messages"]}
+        self.assertNotIn("error", levels)
+        self.assertIn("info", levels)
+
+    def test_a_raising_probe_does_not_release_the_cooldown(self):
+        """The destination was dialled either way, so the budget is spent."""
+        with patch.object(Wis2BoxUpload, "test_connection",
+                          side_effect=RuntimeError("boom")) as probe:
+            self.press()
+            self.press()
+
+        self.assertEqual(probe.call_count, 1)
+
+    def test_completion_does_not_extend_or_release_the_cooldown_ttl(self):
+        key = dispatch_test_cooldown_key(self.channel)
+
+        with patch.object(Wis2BoxUpload, "test_connection", return_value=self.ok_result), \
+                patch.object(cache, "set") as cache_set, \
+                patch.object(cache, "touch", create=True) as cache_touch, \
+                patch.object(cache, "delete") as cache_delete:
+            self.press()
+            claim_after_first = cache.get(key)
+            self.press()
+
+        self.assertIsNotNone(claim_after_first)
+        self.assertEqual(cache.get(key), claim_after_first)
+
+        # The claim is written once, with `add`, before the probe fires and
+        # is never touched again: no set/touch/delete may follow it, which is
+        # what would extend (or release) the TTL. Unrelated admin-render
+        # caching is ignored — only this key matters
+        for mock in (cache_set, cache_touch, cache_delete):
+            touched_keys = [call.args[0] for call in mock.call_args_list if call.args]
+            self.assertNotIn(key, touched_keys)
+
+    def test_a_channel_with_no_test_of_its_own_never_spends_a_budget(self):
+        """The base implementation returns its verdict without going near the
+        network, so pressing it costs nothing and must keep answering. Burning
+        a budget here would tell the operator to wait instead of telling them
+        again that this channel type has no test."""
+        bare = DispatchChannel.objects.create(name="Bare Channel")
+        url = reverse("dispatch_channel_test_connection", args=[bare.id])
+
+        first = self.client.post(url, HTTP_REFERER=reverse("wagtailadmin_home"), follow=True)
+        second = self.client.post(url, HTTP_REFERER=reverse("wagtailadmin_home"), follow=True)
+
+        for response in (first, second):
+            rendered = [str(m) for m in response.context["messages"]]
+            self.assertTrue(any("not supported" in m for m in rendered), rendered)
+            self.assertFalse(any("second(s) ago" in m for m in rendered), rendered)
+
+    def test_the_cooldown_message_names_the_actual_cooldown(self):
+        with patch.object(Wis2BoxUpload, "test_connection", return_value=self.ok_result):
+            self.press()
+            response = self.press()
+
+        rendered = " ".join(str(m) for m in response.context["messages"])
+        self.assertIn(f"every {PROBE_COOLDOWN_SECONDS} seconds", rendered)
+
+    def test_an_unreadable_claim_reports_no_age_rather_than_a_made_up_one(self):
+        key = dispatch_test_cooldown_key(self.channel)
+        cache.add(key, "not-a-timestamp", timeout=PROBE_COOLDOWN_SECONDS)
+
+        with patch.object(Wis2BoxUpload, "test_connection") as probe:
+            response = self.press()
+
+        probe.assert_not_called()
+        rendered = " ".join(str(m) for m in response.context["messages"])
+        self.assertIn("moments ago", rendered)
+        self.assertNotIn("0 second(s)", rendered)
+
+    def test_each_channel_gets_its_own_budget(self):
+        other = Wis2BoxUploadFactory()
+
+        self.assertNotEqual(dispatch_test_cooldown_key(self.channel),
+                            dispatch_test_cooldown_key(other))
+
+        with patch.object(Wis2BoxUpload, "test_connection",
+                          return_value=self.ok_result) as probe:
+            self.press()
+            self.client.post(
+                reverse("dispatch_channel_test_connection", args=[other.id]),
+                HTTP_REFERER=reverse("wagtailadmin_home"), follow=True,
+            )
+
+        self.assertEqual(probe.call_count, 2)

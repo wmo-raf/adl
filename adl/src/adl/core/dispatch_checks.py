@@ -9,11 +9,13 @@ contract had already drifted on its first out-of-core implementation —
 connection" button raised ``TypeError`` on ``result["supported"]`` rather than
 reporting anything at all.
 
-So core does not trust the return. :func:`run_dispatch_connection_test` calls
-the channel and passes whatever comes back through
-:func:`normalise_dispatch_test_result`, which reports a non-conforming return
-as a channel-side failure naming the offending type. The next plugin to drift
-degrades to a legible message instead of a 500.
+So core does not trust the return, and does not trust the clock either.
+:func:`run_dispatch_connection_test` calls the channel under the shared
+wall-clock bound in :mod:`adl.core.probes` and passes whatever comes back
+through :func:`normalise_dispatch_test_result`, which reports a non-conforming
+return as a channel-side failure naming the offending type. The next plugin to
+drift — in shape or in latency — degrades to a legible message instead of a
+500 or a wedged web worker.
 
 Mirrors :mod:`adl.core.source_checks` on the ingestion side (decision #152),
 without converging on its ``SourceCheckResult`` shape — that retrofit reaches
@@ -26,12 +28,28 @@ from collections.abc import Mapping
 
 from django.utils.translation import gettext as _
 
+from .probes import PROBE_WALL_CLOCK_SECONDS, ProbeTimeout, run_bounded
+
 logger = logging.getLogger(__name__)
 
 # Keys a conforming `test_connection()` must supply. `latency_ms` is not
 # among them: the caller times the call anyway, so an omitted latency is
 # filled in rather than treated as a broken result.
 REQUIRED_RESULT_KEYS = ("ok", "supported", "message")
+
+
+def channel_implements_test_connection(channel) -> bool:
+    """True when the channel type overrides ``test_connection()``.
+
+    Answerable without performing any I/O, which is what lets a caller tell
+    "this press will dial a destination" from "this press cannot dial
+    anything" — the base implementation returns its not-supported dict
+    without going near the network, so such a press must not spend a
+    cooldown budget. Mirrors
+    :func:`adl.core.source_checks.connection_implements_check_source`.
+    """
+    from adl.core.models import DispatchChannel
+    return type(channel).test_connection is not DispatchChannel.test_connection
 
 
 def _malformed(message):
@@ -86,14 +104,20 @@ def _coerce_latency(value, fallback):
         return fallback
 
 
-def run_dispatch_connection_test(channel):
+def run_dispatch_connection_test(channel, timeout_seconds=PROBE_WALL_CLOCK_SECONDS):
     """
     Probe ``channel``'s destination and return a well-formed result dict.
 
-    Both failure modes the base-class docstring only asks implementations to
+    All three failure modes the base-class docstring asks implementations to
     avoid are contained here: a raised exception becomes a reported failure,
-    and a non-conforming return becomes a malformed-result message. The
-    probe's own time bound is still the implementation's to keep.
+    a non-conforming return becomes a malformed-result message, and a probe
+    that outruns ``timeout_seconds`` becomes a failure naming the budget.
+
+    The bound covers the whole call, not the destination-facing request
+    inside it — a channel that builds its client eagerly (``adl-s3-plugin``
+    dials ``head_bucket`` from ``__init__``) blocks before its own
+    ``test_connection`` body reaches any timeout it might set. The abandoned
+    worker is left to finish on its own and cannot extend this call.
     """
     channel_type = type(channel).__name__
     started = time.monotonic()
@@ -102,7 +126,20 @@ def run_dispatch_connection_test(channel):
         return int((time.monotonic() - started) * 1000)
 
     try:
-        raw = channel.test_connection()
+        raw = run_bounded(channel.test_connection, timeout_seconds)
+    except ProbeTimeout:
+        logger.warning(
+            "[DISPATCH TEST] %s exceeded the %ss budget for channel %s",
+            channel_type, timeout_seconds, channel.id,
+        )
+        return {
+            "ok": False,
+            "supported": True,
+            "message": _("%(channel)s did not complete its connection test "
+                         "within the %(seconds)s-second budget.")
+                       % {"channel": channel_type, "seconds": timeout_seconds},
+            "latency_ms": elapsed_ms(),
+        }
     except Exception as e:
         logger.exception("[DISPATCH TEST] %s raised for channel %s", channel_type, channel.id)
         return {

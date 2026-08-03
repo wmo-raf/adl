@@ -1138,10 +1138,16 @@ class DispatchChannel(PolymorphicModel, ClusterableModel):
         destination (reachability + authentication). Implementations must
         never raise and must never block for more than ~10 seconds.
 
-        The return is normalised by core and never trusted as-is — call
+        Neither obligation is trusted. Call
         :func:`adl.core.dispatch_checks.run_dispatch_connection_test` rather
-        than this method directly, so a channel that raises or returns the
-        wrong shape reports a failure instead of crashing the caller.
+        than this method directly: it reports a raised exception or a
+        wrong-shaped return as a failure instead of crashing the caller, and
+        it enforces a hard wall clock of
+        :data:`adl.core.probes.PROBE_WALL_CLOCK_SECONDS` so a channel that
+        blocks — anywhere, including in the client it builds — cannot wedge
+        the web worker that pressed the button. The ~10 seconds above stays
+        the contract; the wall clock is only what happens when the contract
+        is broken, and the headroom between them is deliberate.
 
         :return: dict with keys ``ok`` (bool), ``supported`` (bool),
             ``message`` (str) and ``latency_ms`` (int or None).

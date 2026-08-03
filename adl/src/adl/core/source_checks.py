@@ -21,20 +21,24 @@ smuggle an invented category into stored history.
 import logging
 import socket
 import time
-from concurrent.futures import ThreadPoolExecutor
-from concurrent.futures import TimeoutError as FutureTimeoutError
 from dataclasses import dataclass, replace
 from typing import Optional, Tuple
 
 from django.utils.translation import gettext as _
 
 from .classification import FAILURE_CATEGORIES
+# The wall clock and the executor discipline behind it are shared with the
+# dispatch side, so one press cannot cost an operator more than the other.
+# This probe spends that one budget across DNS, TCP and the plugin's own
+# source check together.
+from .probes import (
+    PROBE_WALL_CLOCK_SECONDS,
+    ProbeTimeout,
+    bounded_executor,
+    run_bounded,
+)
 
 logger = logging.getLogger(__name__)
-
-# One probe may take at most this long, wall clock, across DNS, TCP and the
-# plugin's own source check together
-PROBE_WALL_CLOCK_SECONDS = 15
 
 # Stable identifiers for the probe steps — these become stored
 # `SourceProbeResult.check_id` values, so they must never be renamed
@@ -133,12 +137,6 @@ def _elapsed_ms(started: float) -> int:
     return int((time.monotonic() - started) * 1000)
 
 
-def _bounded_call(executor, fn, timeout_seconds):
-    """Run ``fn`` with a wall-clock bound. Raises FutureTimeoutError on
-    expiry; the abandoned worker thread is left to finish on its own."""
-    return executor.submit(fn).result(timeout=max(timeout_seconds, 0.001))
-
-
 def run_source_probe(connection, timeout_seconds=PROBE_WALL_CLOCK_SECONDS) -> Tuple[ProbeStep, ...]:
     """
     Probe ``connection``'s source on demand: DNS resolution, then a TCP
@@ -152,43 +150,39 @@ def run_source_probe(connection, timeout_seconds=PROBE_WALL_CLOCK_SECONDS) -> Tu
     """
     deadline = time.monotonic() + timeout_seconds
 
-    # Not a context manager: `with` would join abandoned worker threads on
-    # exit, letting a stuck DNS lookup or plugin call outlive the wall-clock
-    # bound this function promises. Two workers, so a stuck DNS thread
-    # cannot queue-starve the later source check.
-    executor = ThreadPoolExecutor(max_workers=2)
-    try:
-        return _probe(connection, executor, deadline, timeout_seconds)
-    finally:
-        executor.shutdown(wait=False)
+    # Two workers, so a stuck DNS thread cannot queue-starve the later
+    # source check. The pool's abandon-don't-join discipline lives in
+    # `probes.bounded_executor`, in one place for both sides of the system.
+    with bounded_executor(2) as bounded_call:
+        return _probe(connection, bounded_call, deadline, timeout_seconds)
 
 
-def _probe(connection, executor, deadline, timeout_seconds) -> Tuple[ProbeStep, ...]:
+def _probe(connection, bounded_call, deadline, timeout_seconds) -> Tuple[ProbeStep, ...]:
     steps = []
 
     endpoint = connection.get_source_endpoint()
     if endpoint is not None:
         host, port = endpoint
 
-        dns_step = _dns_step(executor, host, port, deadline)
+        dns_step = _dns_step(bounded_call, host, port, deadline)
         steps.append(dns_step)
         if dns_step.result.status != SourceCheckStatus.OK:
             return tuple(steps)
 
-        tcp_step = _tcp_step(executor, host, port, deadline)
+        tcp_step = _tcp_step(bounded_call, host, port, deadline)
         steps.append(tcp_step)
         if tcp_step.result.status != SourceCheckStatus.OK:
             return tuple(steps)
 
-    steps.append(_source_step(connection, executor, deadline, timeout_seconds))
+    steps.append(_source_step(connection, bounded_call, deadline, timeout_seconds))
     return tuple(steps)
 
 
-def _dns_step(executor, host, port, deadline) -> ProbeStep:
+def _dns_step(bounded_call, host, port, deadline) -> ProbeStep:
     started = time.monotonic()
     try:
-        _bounded_call(executor, lambda: socket.getaddrinfo(host, port),
-                      deadline - time.monotonic())
+        bounded_call(lambda: socket.getaddrinfo(host, port),
+                     deadline - time.monotonic())
     except socket.gaierror as e:
         result = SourceCheckResult(
             status=SourceCheckStatus.FAILED,
@@ -197,7 +191,7 @@ def _dns_step(executor, host, port, deadline) -> ProbeStep:
                     % {"host": host, "error": e},
             latency_ms=_elapsed_ms(started),
         )
-    except FutureTimeoutError:
+    except ProbeTimeout:
         result = SourceCheckResult(
             status=SourceCheckStatus.FAILED,
             category="DNS_FAILURE",
@@ -214,7 +208,7 @@ def _dns_step(executor, host, port, deadline) -> ProbeStep:
     return ProbeStep(CHECK_DNS, 4, result)
 
 
-def _tcp_step(executor, host, port, deadline) -> ProbeStep:
+def _tcp_step(bounded_call, host, port, deadline) -> ProbeStep:
     started = time.monotonic()
     context = {"host": host, "port": port}
 
@@ -229,7 +223,7 @@ def _tcp_step(executor, host, port, deadline) -> ProbeStep:
         conn.close()
 
     try:
-        _bounded_call(executor, connect, deadline - time.monotonic())
+        bounded_call(connect, deadline - time.monotonic())
     except ConnectionRefusedError:
         result = SourceCheckResult(
             status=SourceCheckStatus.FAILED,
@@ -237,7 +231,7 @@ def _tcp_step(executor, host, port, deadline) -> ProbeStep:
             message=_("%(host)s refused a TCP connection on port %(port)s.") % context,
             latency_ms=_elapsed_ms(started),
         )
-    except (socket.timeout, TimeoutError, FutureTimeoutError):
+    except (socket.timeout, TimeoutError, ProbeTimeout):
         result = SourceCheckResult(
             status=SourceCheckStatus.FAILED,
             category="TCP_TIMEOUT",
@@ -261,22 +255,22 @@ def _tcp_step(executor, host, port, deadline) -> ProbeStep:
     return ProbeStep(CHECK_TCP, 4, result)
 
 
-def _source_step(connection, executor, deadline, timeout_seconds) -> ProbeStep:
+def _source_step(connection, bounded_call, deadline, timeout_seconds) -> ProbeStep:
     return _plugin_check_step(
-        CHECK_SOURCE, connection.check_source, executor, deadline, timeout_seconds,
+        CHECK_SOURCE, connection.check_source, bounded_call, deadline, timeout_seconds,
         log_context="connection %s" % connection.id,
     )
 
 
-def _plugin_check_step(check_id, check, executor, deadline, timeout_seconds,
+def _plugin_check_step(check_id, check, bounded_call, deadline, timeout_seconds,
                        log_context) -> ProbeStep:
     """Run one plugin-implemented layer-5 check under the wall-clock bound
     and pass its return through the normaliser — shared by the connection
     probe's source step and the station-scope check."""
     started = time.monotonic()
     try:
-        raw = _bounded_call(executor, check, deadline - time.monotonic())
-    except FutureTimeoutError:
+        raw = bounded_call(check, deadline - time.monotonic())
+    except ProbeTimeout:
         return ProbeStep(check_id, 5, SourceCheckResult(
             status=SourceCheckStatus.FAILED,
             message=_("The source check did not complete within the probe's "
@@ -311,15 +305,10 @@ def run_station_source_check(station_link,
     """
     deadline = time.monotonic() + timeout_seconds
 
-    # Not a context manager, for the same reason as run_source_probe: `with`
-    # would join an abandoned worker on exit, letting a stuck plugin call
-    # outlive the wall-clock bound this function promises
-    executor = ThreadPoolExecutor(max_workers=1)
-    try:
-        return _plugin_check_step(
-            CHECK_STATION_SOURCE, station_link.check_station_source,
-            executor, deadline, timeout_seconds,
-            log_context="station link %s" % station_link.id,
-        )
-    finally:
-        executor.shutdown(wait=False)
+    # One step, so the single-call bound is enough — no pool of its own to
+    # keep, and none of the discipline that pool would have to remember
+    return _plugin_check_step(
+        CHECK_STATION_SOURCE, station_link.check_station_source,
+        run_bounded, deadline, timeout_seconds,
+        log_context="station link %s" % station_link.id,
+    )
