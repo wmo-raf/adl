@@ -512,7 +512,8 @@ class _ChecklistBuilder:
         if self.schedule_entries.duplicated:
             return (CheckState.WARNING,
                     _("%(count)d schedule entries run this connection; which one "
-                      "beat fires is undefined. Delete the extras.")
+                      "beat fires is undefined. Re-saving the connection "
+                      "collapses them back to one.")
                     % {"count": len(self.schedule_entries.entries)},
                     False)
         return CheckState.OK, _("Exactly one schedule entry exists."), False
