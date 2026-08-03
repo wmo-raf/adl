@@ -30,6 +30,7 @@ from .constants import (
     OSCAR_SURFACE_REQUIRED_CSV_COLUMNS,
     PREDEFINED_DATA_PARAMETERS
 )
+from .dispatch_checks import run_dispatch_connection_test
 from .forms import (
     StationLoaderForm,
     OSCARStationImportForm,
@@ -1345,11 +1346,14 @@ def test_dispatch_channel_connection(request, channel_id):
 
     Runs in the web process on purpose: a wedged dispatch queue must not be
     able to mask a destination health check.
+
+    The probe is an out-of-core plugin's code, so its return goes through
+    ``run_dispatch_connection_test`` rather than being read directly.
     """
     if request.method == 'POST':
         dispatch_channel = get_object_or_404(DispatchChannel, id=channel_id)
 
-        result = dispatch_channel.test_connection()
+        result = run_dispatch_connection_test(dispatch_channel)
 
         if not result["supported"]:
             messages.warning(request, result["message"])
