@@ -1,7 +1,7 @@
 import logging
 import time
 
-from adl.core.classification import stamp_failure
+from adl.core.classification import mark_failed
 from adl.core.utils import get_object_or_none
 from adl.monitoring.models import StationLinkActivityLog
 from django.utils import timezone as dj_timezone
@@ -328,12 +328,9 @@ def run_dispatch_channel(dispatcher_id, station_link_ids=None):
             log.message = f"Sent {num_of_sent_records} records successfully."
         
         except Exception as e:
-            log.success = False
-            log.message = str(e)
-            log.status = StationLinkActivityLog.ActivityStatus.FAILED
-            stamp_failure(log, e)
+            message = mark_failed(log, e)
             logger.error(f"[DISPATCH] Error while sending data for station {station_link} on channel "
-                         f"{dispatch_channel.name}: {e}")
+                         f"{dispatch_channel.name}: {message}")
         finally:
             log.duration_ms = (time.monotonic() - start) * 1000
             log.save()

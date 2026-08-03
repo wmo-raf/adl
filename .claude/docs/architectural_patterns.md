@@ -43,6 +43,20 @@ in both directions). A plugin that knows what its exception means may pre-stamp 
 `FAILURE_CATEGORIES` and drops bad values; unknown/ambiguous types are declined (`NULL`), never guessed. An attribute
 rather than a core exception class so plugins keep importing cleanly against older core.
 
+**Secret redaction at the write point:** the same failure write points pass their text through `redact_secrets()`
+(`adl/core/redaction.py`) before it is stored. `requests` puts the full request URL in its `HTTPError` text, so a
+source that authenticates with a query parameter turns a 401 into a stored, API-served copy of its own token.
+Redaction is done where the text is produced, not at the serializer, because the row is also rendered in the admin,
+exported and echoed into worker logs — one call bounds the exposure instead of every new reader having to remember.
+Only *named* secrets go (`token=***`, `Bearer ***`, `scheme://***:***@host`); the key is kept so the message still
+says which credential was involved. Plugins do not call it — core redacts a plugin's `SourceCheckResult.message` and
+`test_connection()` message on their way in, and `TaskLogger` redacts every line it pushes to the SSE stream. One
+surface has no core write point at all — Celery, not core, writes a failing task's text and traceback — so
+`TaskResultSerializer` redacts it on read with `redact_json()`/`redact_secrets()`. Worker-log tracebacks (`exc_info`)
+are deliberately not stripped — a host-local log is not a shared surface, and the traceback is why the entry exists.
+`mark_failed()` in `classification.py` is the one call that ends a failed run (status, success, redacted message,
+classification stamps) so a new write point cannot forget a step.
+
 New plugins are scaffolded using the Cookiecutter template in `plugin-boilerplate/`.
 
 ## 3. Polymorphic Models

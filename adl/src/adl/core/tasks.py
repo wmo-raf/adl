@@ -16,9 +16,10 @@ from django.utils import timezone as dj_timezone
 
 from adl.config.celery import app
 from adl.monitoring.models import StationLinkActivityLog
-from .classification import stamp_failure
+from .classification import mark_failed, stamp_failure
 from .dispatchers import get_station_dispatch_records
 from .logging import TaskLogger
+from .redaction import redact_secrets
 from .utils import get_object_or_none
 
 logger = logging.getLogger(__name__)
@@ -394,7 +395,11 @@ def process_station_link_batch(self, network_id, station_link_ids):
                       station_link)
             raise
         except Exception as e:
-            log.error("Error processing station link %s: %s", station_link, str(e), exc_info=True)
+            # The interpolated text is redacted, the traceback deliberately is
+            # not: this line goes only to the worker's own log, where the
+            # traceback is the reason to keep the entry at all. The redaction
+            # is what keeps a shipped-off log line from carrying the token.
+            log.error("Error processing station link %s: %s", station_link, redact_secrets(e), exc_info=True)
             errors += 1
 
         finally:
@@ -635,12 +640,9 @@ def dispatch_station(self, channel_id, station_link_id):
         return {"records_sent": 0, "timed_out": True}
 
     except Exception as e:
-        log.success = False
-        log.message = str(e)
-        log.status = StationLinkActivityLog.ActivityStatus.FAILED
-        stamp_failure(log, e)
+        message = mark_failed(log, e)
         logger.error("[DISPATCH] Error dispatching station %s on channel %s: %s",
-                     station_link, channel.name, e)
+                     station_link, channel.name, message)
         raise
 
     finally:

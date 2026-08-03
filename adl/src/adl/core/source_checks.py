@@ -27,6 +27,7 @@ from typing import Optional, Tuple
 from django.utils.translation import gettext as _
 
 from .classification import FAILURE_CATEGORIES
+from .redaction import redact_secrets
 # The wall clock and the executor discipline behind it are shared with the
 # dispatch side, so one press cannot cost an operator more than the other.
 # This probe spends that one budget across DNS, TCP and the plugin's own
@@ -110,9 +111,11 @@ def normalise_source_check_result(value) -> SourceCheckResult:
             message=_("The plugin returned an unknown status %(status)r.")
                     % {"status": value.status},
         )
-    if value.category is not None and value.category not in FAILURE_CATEGORIES:
-        return replace(value, category=None)
-    return value
+    category = value.category if value.category in FAILURE_CATEGORIES else None
+    # The plugin's own message is persisted and served over the API, and a
+    # plugin that authenticates in a query string will have put its
+    # credential in there — so it is redacted here, once, for every plugin.
+    return replace(value, category=category, message=redact_secrets(value.message))
 
 
 def connection_implements_check_source(connection) -> bool:
@@ -188,7 +191,7 @@ def _dns_step(bounded_call, host, port, deadline) -> ProbeStep:
             status=SourceCheckStatus.FAILED,
             category="DNS_FAILURE",
             message=_("%(host)s did not resolve: %(error)s")
-                    % {"host": host, "error": e},
+                    % {"host": host, "error": redact_secrets(e)},
             latency_ms=_elapsed_ms(started),
         )
     except ProbeTimeout:
@@ -243,7 +246,7 @@ def _tcp_step(bounded_call, host, port, deadline) -> ProbeStep:
             status=SourceCheckStatus.FAILED,
             category="UNKNOWN",
             message=_("A TCP connection to %(host)s:%(port)s failed: %(error)s")
-                    % {**context, "error": e},
+                    % {**context, "error": redact_secrets(e)},
             latency_ms=_elapsed_ms(started),
         )
     else:
@@ -282,7 +285,7 @@ def _plugin_check_step(check_id, check, bounded_call, deadline, timeout_seconds,
         return ProbeStep(check_id, 5, SourceCheckResult(
             status=SourceCheckStatus.FAILED,
             message=_("The source check raised %(type)s: %(error)s")
-                    % {"type": type(e).__name__, "error": e},
+                    % {"type": type(e).__name__, "error": redact_secrets(e)},
             latency_ms=_elapsed_ms(started),
         ))
 

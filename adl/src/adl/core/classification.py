@@ -114,3 +114,25 @@ def stamp_failure(activity_log, exc) -> None:
     category, layer = classify_failure(exc)
     activity_log.error_category = category
     activity_log.error_layer = layer
+
+
+def mark_failed(activity_log, exc) -> str:
+    """
+    Record ``exc`` as the failure that ended this run, and return the text.
+
+    The whole terminal-failure gesture in one call — status, success flag,
+    redacted message, classification stamps — because it was previously
+    repeated at each write point, and every copy was a place a later one
+    could forget to redact. Callers that want to log the text get it back
+    rather than reaching into the (unsaved) log instance for it.
+    """
+    from adl.monitoring.models import StationLinkActivityLog
+
+    from .redaction import redact_secrets
+
+    message = redact_secrets(exc)
+    activity_log.success = False
+    activity_log.message = message
+    activity_log.status = StationLinkActivityLog.ActivityStatus.FAILED
+    stamp_failure(activity_log, exc)
+    return message
