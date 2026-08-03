@@ -24,6 +24,16 @@ from adl.core.broker import (
 
 _PIN_PATTERN = re.compile(r"^([A-Za-z0-9._-]+)==(\S+)\s*$")
 
+# Libraries core drives through their own APIs but which carry no version
+# guard: the ingestion diagnostic makes no claim about them, so they have no
+# tested range to sit inside. They still have to be pinned in both files —
+# the beat-schedule writer depends on how a PeriodicTask's task+args identify
+# an owner, and a plugin install resolving that away would move the writer.
+SCHEDULE_LIBRARIES = ("django-celery-beat",)
+
+# Everything constraints.txt must bind, guarded or not.
+CONSTRAINED_LIBRARIES = tuple(BROKER_LIBRARIES) + SCHEDULE_LIBRARIES
+
 
 def _project_root():
     """The directory holding requirements.txt — the checkout's ``adl/`` in
@@ -48,9 +58,9 @@ def _pins(filename):
 
 
 class BrokerStackPinTests(SimpleTestCase):
-    def test_broker_libraries_are_pinned_exactly_in_requirements(self):
+    def test_constrained_libraries_are_pinned_exactly_in_requirements(self):
         pins = _pins("requirements.txt")
-        for name in BROKER_LIBRARIES:
+        for name in CONSTRAINED_LIBRARIES:
             self.assertIn(
                 name, pins,
                 "%s must be a direct, exactly-pinned dependency: first-party "
@@ -62,7 +72,7 @@ class BrokerStackPinTests(SimpleTestCase):
         # stack; a drifted copy would let a plugin resolve past the pins
         requirement_pins = _pins("requirements.txt")
         constraint_pins = _pins("constraints.txt")
-        for name in BROKER_LIBRARIES:
+        for name in CONSTRAINED_LIBRARIES:
             self.assertEqual(
                 constraint_pins.get(name), requirement_pins.get(name),
                 "constraints.txt must carry the same %s pin as "

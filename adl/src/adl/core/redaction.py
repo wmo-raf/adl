@@ -78,8 +78,11 @@ _KEY_VALUE_RE = re.compile(
 # A bare ``Bearer <credential>`` with no key in front of it.
 _SCHEME_RE = re.compile(r"(?i)\b(?P<scheme>" + _SCHEMES + r")\s+(?P<token>\S+)")
 
-# scheme://user:password@host — the password is in the URL itself.
-_USERINFO_RE = re.compile(r"(?i)\b([a-z][a-z0-9+.\-]*://)[^/\s:@]+:[^/\s@]*@")
+# scheme://user:password@host — the password is in the URL itself. The user
+# half may be empty: ``redis://:password@host:6379/0`` is the canonical form
+# of a broker URL for a Redis secured with ``requirepass``, and that URL is
+# what a kombu connection error carries into an activity-log message.
+_USERINFO_RE = re.compile(r"(?i)\b([a-z][a-z0-9+.\-]*://)[^/\s:@]*:[^/\s@]*@")
 
 # A whole mapping key that names a secret. In parsed data the key and its
 # value are already separate, so the value goes whatever it looks like —

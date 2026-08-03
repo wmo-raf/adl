@@ -79,8 +79,24 @@ class RedactUrlUserinfoTests(SimpleTestCase):
             "ftp://***:***@ftp.example.org/in/",
         )
 
+    def test_redacts_userinfo_with_an_empty_user(self):
+        # The broker URL of a Redis secured with ``requirepass`` has no user
+        # half. It reaches this function through kombu's connection errors,
+        # so the form that carries a real deployment's password must not be
+        # the one form the pattern misses.
+        self.assertEqual(
+            redact_secrets("Cannot connect to redis://:hunter2@adl_redis:6379/0"),
+            "Cannot connect to redis://***:***@adl_redis:6379/0",
+        )
+
     def test_leaves_a_url_without_userinfo_alone(self):
         text = "https://example.org:8443/data"
+        self.assertEqual(redact_secrets(text), text)
+
+    def test_leaves_a_port_and_path_that_resemble_userinfo_alone(self):
+        # The user half went from "one or more" to "zero or more" characters;
+        # a colon in a host:port or in a path must still not read as one.
+        text = "Timed out reading https://example.org:8443/keys/a:b@2024"
         self.assertEqual(redact_secrets(text), text)
 
 

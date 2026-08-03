@@ -11,3 +11,10 @@
 celery==5.6.3
 kombu==5.6.2
 redis==8.0.1
+
+# Not a broker-signal library — it carries no version guard on the ingestion
+# diagnostic — but core writes beat schedules through its model API
+# (core/tasks.py, monitoring/health.py), and that code depends on how a
+# PeriodicTask's task+args identify an owner. A plugin resolving it away
+# would move the schedule writer, not a diagnostic.
+django-celery-beat==2.9.0
