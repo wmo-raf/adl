@@ -22,13 +22,17 @@ not something a migration should make silently.
 
 from django.db import migrations
 
-from adl.core.redaction import SCHEME_NAMES, SENSITIVE_SUFFIXES
+from adl.core.redaction import (
+    SCHEME_NAMES,
+    SENSITIVE_SUFFIXES,
+    USERINFO_BODY_TEMPLATE,
+)
 
 BATCH_SIZE = 1000
 
 # Cheap SQL pre-filter: any row whose text mentions a credential-ish word at
-# all. Built from the redactor's own vocabulary — retyping the word list here
-# is how the backfill would come to miss what the forward fix catches. The
+# all. Built from the redactor's own vocabulary — retyping any of it here is
+# how the backfill would come to miss what the forward fix catches. The
 # redactor still decides whether anything is really there; this only keeps
 # the sweep from loading every log row ever written.
 #
@@ -41,9 +45,15 @@ _WORDS = "|".join(
 )
 _SCHEMES = "|".join(SCHEME_NAMES)
 
+# The userinfo branch is the redactor's own, with POSIX's spelling of
+# whitespace substituted in. It used to be a hand-copied second version, and
+# it drifted: the copy required a non-empty user half, so a row carrying
+# ``redis://:password@host`` never became a candidate at all.
+_USERINFO = USERINFO_BODY_TEMPLATE.format(space="[:space:]")
+
 CANDIDATE_REGEX = (
     rf"({_WORDS})[a-z]*[[:space:]]*[\"']?[[:space:]]*[:=]"
-    r"|://[^/@[:space:]]+:[^/@[:space:]]*@"
+    rf"|{_USERINFO}"
     rf"|({_SCHEMES})[[:space:]]"
 )
 

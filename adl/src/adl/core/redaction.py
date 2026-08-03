@@ -29,7 +29,14 @@ masking destroys the error text operators depend on.
 
 import re
 
-__all__ = ["REDACTED", "redact_json", "redact_secrets"]
+__all__ = [
+    "REDACTED",
+    "SCHEME_NAMES",
+    "SENSITIVE_SUFFIXES",
+    "USERINFO_BODY_TEMPLATE",
+    "redact_json",
+    "redact_secrets",
+]
 
 REDACTED = "***"
 
@@ -82,7 +89,17 @@ _SCHEME_RE = re.compile(r"(?i)\b(?P<scheme>" + _SCHEMES + r")\s+(?P<token>\S+)")
 # half may be empty: ``redis://:password@host:6379/0`` is the canonical form
 # of a broker URL for a Redis secured with ``requirepass``, and that URL is
 # what a kombu connection error carries into an activity-log message.
-_USERINFO_RE = re.compile(r"(?i)\b([a-z][a-z0-9+.\-]*://)[^/\s:@]*:[^/\s@]*@")
+#
+# Kept as a template because the backfill (monitoring/0010) needs the same
+# shape for its SQL pre-filter, where whitespace is spelled ``[:space:]``.
+# Deriving both from one source is what stops the sweep from missing what
+# this catches — the discipline SENSITIVE_SUFFIXES already imposes on the
+# word list, applied to the one branch that had been retyped by hand.
+USERINFO_BODY_TEMPLATE = r"://[^/{space}:@]*:[^/{space}@]*@"
+
+_USERINFO_RE = re.compile(
+    r"(?i)\b([a-z][a-z0-9+.\-]*)" + USERINFO_BODY_TEMPLATE.format(space=r"\s")
+)
 
 # A whole mapping key that names a secret. In parsed data the key and its
 # value are already separate, so the value goes whatever it looks like —
@@ -129,7 +146,7 @@ def redact_secrets(text):
     if not isinstance(text, str):
         text = str(text)
 
-    text = _USERINFO_RE.sub(rf"\1{REDACTED}:{REDACTED}@", text)
+    text = _USERINFO_RE.sub(rf"\g<1>://{REDACTED}:{REDACTED}@", text)
     text = _KEY_VALUE_RE.sub(rf"\g<key>\g<sep>{REDACTED}", text)
     text = _SCHEME_RE.sub(_mask_scheme, text)
 
