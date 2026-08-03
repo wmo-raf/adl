@@ -6,13 +6,19 @@ from django.core.cache import cache
 from django.test import SimpleTestCase, TestCase
 from django.urls import reverse
 
-from adl.core.tasks import dispatch_station_lock_key, get_active_dispatch_tasks
+from adl.core.broker_connection import INSPECT_TIMEOUT_SECONDS
+from adl.core.tasks import (
+    DISPATCH_INSPECT_TIMEOUT_SECONDS,
+    dispatch_station_lock_key,
+    get_active_dispatch_tasks,
+)
 from .factories import StationLinkFactory, Wis2BoxUploadFactory
 
 
 class GetActiveDispatchTasksTests(SimpleTestCase):
     def _run_with_active(self, active_reply):
-        with patch("adl.core.tasks.app.control.inspect") as mock_inspect:
+        with patch("adl.core.tasks.bounded_broker_connection"), \
+                patch("adl.core.tasks.bounded_inspect") as mock_inspect:
             mock_inspect.return_value.active.return_value = active_reply
             return get_active_dispatch_tasks()
 
@@ -41,8 +47,34 @@ class GetActiveDispatchTasksTests(SimpleTestCase):
         self.assertIsNone(self._run_with_active({}))
 
     def test_returns_none_instead_of_raising_on_broker_error(self):
-        with patch("adl.core.tasks.app.control.inspect", side_effect=Exception("broker down")):
+        with patch("adl.core.tasks.bounded_broker_connection",
+                   side_effect=Exception("broker down")):
             self.assertIsNone(get_active_dispatch_tasks())
+
+    def test_inspects_over_a_bounded_connection_not_the_app_default(self):
+        # The app's default connection retries; from the locks page that is a
+        # multi-second hang against a refused broker and minutes against a
+        # blackholed one (#166)
+        with patch("adl.core.tasks.bounded_broker_connection") as mock_connection, \
+                patch("adl.core.tasks.bounded_inspect") as mock_inspect:
+            mock_inspect.return_value.active.return_value = {}
+            get_active_dispatch_tasks()
+
+        mock_connection.assert_called_once_with()
+        connection = mock_connection.return_value.__enter__.return_value
+        self.assertEqual(mock_inspect.call_args.args, (connection,))
+
+    def test_waits_longer_than_the_shared_default_for_a_reply(self):
+        # Silence here makes the locks page refuse to clear anything, so a
+        # slow dispatch worker must not be mistaken for a dead one
+        with patch("adl.core.tasks.bounded_broker_connection"), \
+                patch("adl.core.tasks.bounded_inspect") as mock_inspect:
+            mock_inspect.return_value.active.return_value = {}
+            get_active_dispatch_tasks()
+
+        self.assertEqual(mock_inspect.call_args.kwargs["timeout"],
+                         DISPATCH_INSPECT_TIMEOUT_SECONDS)
+        self.assertGreater(DISPATCH_INSPECT_TIMEOUT_SECONDS, INSPECT_TIMEOUT_SECONDS)
 
 
 class LocksPageTestCase(TestCase):

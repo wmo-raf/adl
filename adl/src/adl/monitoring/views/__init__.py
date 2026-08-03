@@ -1,6 +1,6 @@
+import logging
 from datetime import timedelta, datetime
 
-from celery import current_app
 from django.http import JsonResponse
 from django.shortcuts import render, get_object_or_404
 from django.urls import reverse_lazy
@@ -13,12 +13,16 @@ from rest_framework.decorators import api_view
 from rest_framework.response import Response
 from wagtail.admin.paginator import WagtailPaginator
 
+from adl.core.broker_connection import bounded_broker_connection, bounded_inspect
 from adl.core.models import NetworkConnection, DispatchChannel, StationLink
+from adl.core.tasks import INGESTION_BATCH_TASK_NAME
 from adl.core.utils import get_object_or_none
 from ..constants import NETWORK_PLUGIN_TASK_NAME
 from ..health import configuration_drift
 from ..models import StationLinkActivityLog
 from ..serializers import TaskResultSerializer, StationLinkActivityLogSerializer
+
+logger = logging.getLogger(__name__)
 
 
 def task_monitor(request):
@@ -291,78 +295,114 @@ def station_link_monitoring(request, link_id):
     return render(request, "monitoring/station_link_monitoring.html", context)
 
 
+def _inspect_ingestion_tasks():
+    """
+    ``(tasks, workers_replied)``, where ``tasks`` pairs every task a worker
+    reported with the status it was reported under — executing tasks are
+    STARTED, prefetched-but-not-started ones PENDING.
+
+    Both calls share one dedicated short-lived bounded connection rather than
+    the app's default one, which retries: unbounded, this endpoint hung its
+    request thread for ~12 s against a refused broker and ~150 s against a
+    blackholed one — on the page whose whole purpose is to be usable when
+    ingestion is broken (see :mod:`adl.core.broker_connection`, issue #166).
+
+    Bounded, the *healthy* path still costs about two seconds: with no
+    ``limit`` each call waits out its timeout, and this dashboard polls. That
+    is the deliberate trade — a limit returns only the first worker's reply,
+    and on a scaled deployment the dashboard would silently stop showing
+    whole workers' tasks. A slow page beats a lying one; if the second ever
+    has to go, it goes by dropping a call, not by truncating a reply.
+
+    ``workers_replied`` is False when neither call got an answer. Inspect has
+    no empty reply — an idle worker answers ``{'worker@host': []}`` — so a
+    falsy reply is silence, which is *unknown*, never "nothing is running".
+    Never raises.
+    """
+    try:
+        with bounded_broker_connection() as connection:
+            inspect = bounded_inspect(connection)
+            active = inspect.active()
+            reserved = inspect.reserved()
+    except Exception as e:
+        logger.warning("[MONITORING] Could not inspect ingestion tasks: %s", e)
+        return [], False
+
+    if not active and not reserved:
+        return [], False
+
+    tasks = []
+    for replies, status in ((active, 'STARTED'), (reserved, 'PENDING')):
+        for worker_tasks in (replies or {}).values():
+            for task in worker_tasks or []:
+                tasks.append((task, status))
+    return tasks, True
+
+
+def _batch_task_detail(task, status):
+    """
+    One ingestion batch rendered for the dashboard, or ``None`` if the task
+    is not an ingestion batch or its args are not the shape this endpoint
+    knows how to read.
+    """
+    task_name = task.get('name', '')
+    if task_name != INGESTION_BATCH_TASK_NAME:
+        return None
+
+    task_args = task.get('args') or []
+    if not task_args:
+        return None
+    try:
+        task_network_id = int(task_args[0])
+    except (TypeError, ValueError):
+        # An arg shape this endpoint does not recognise is skipped, not
+        # rendered half-read and not allowed to 500 the whole dashboard
+        logger.warning("[MONITORING] Ingestion task %s has unreadable args: %r",
+                       task.get('id'), task_args)
+        return None
+
+    time_start = task.get('time_start')
+    detail = {
+        'task_id': task.get('id'),
+        'task_name': task_name,
+        'task_name_short': task_name.split('.')[-1],  # Just the function name
+        'network_id': task_network_id,
+        'status': status,
+        'worker': task.get('hostname'),
+        'started_at': datetime.fromtimestamp(time_start).isoformat() if time_start else None,
+        'args': task_args,
+    }
+
+    station_ids = task_args[1] if len(task_args) > 1 and isinstance(task_args[1], list) else []
+    if station_ids:
+        station_links = StationLink.objects.filter(id__in=station_ids).select_related('station')
+        detail['stations'] = [{'name': sl.station.name, 'id': sl.id} for sl in station_links]
+
+    return detail
+
+
 def get_active_tasks_by_network(request, network_id=None):
     """
-    Get currently running/pending tasks using Celery inspect API
-    Optionally filtered by network_id
+    Currently running and queued ingestion batches, optionally filtered to one
+    network connection.
+
+    ``workers_replied`` is part of the contract: False means no worker
+    answered, so an empty ``tasks`` list says nothing about whether ingestion
+    is running. Callers must render that as unknown, not as idle.
     """
-    inspect = current_app.control.inspect()
-    
-    active_tasks = []
-    
-    # Get active (currently executing) tasks
-    active = inspect.active()
-    if active:
-        for worker, tasks in active.items():
-            active_tasks.extend(tasks)
-    
-    # Get reserved (queued) tasks
-    reserved = inspect.reserved()
-    if reserved:
-        for worker, tasks in reserved.items():
-            active_tasks.extend(tasks)
-    
-    # Filter and format tasks
+    tasks, workers_replied = _inspect_ingestion_tasks()
+
     filtered_tasks = []
-    
-    for task in active_tasks:
-        task_name = task.get('name', '')
-        task_args = task.get('args', [])
-        task_id = task.get('id')
-        
-        # Only include our ADL tasks
-        allowed = {'adl.core.tasks.process_station_link_batch'}
-        if task_name not in allowed:
+    for task, status in tasks:
+        detail = _batch_task_detail(task, status)
+        if detail is None:
             continue
-        
-        # Extract network_id from args
-        task_network_id = None
-        task_station_ids = []
-        if task_args and len(task_args) > 0:
-            task_network_id = int(task_args[0])
-            
-            if task_name == 'adl.core.tasks.process_station_link_batch':
-                if len(task_args) > 1 and isinstance(task_args[1], list):
-                    task_station_ids = task_args[1]
-        
-        # Filter by network_id if provided
-        if network_id and task_network_id != network_id:
+        if network_id and detail['network_id'] != network_id:
             continue
-        
-        # Determine status
-        is_active = task in (active.get(list(active.keys())[0], []) if active else [])
-        status = 'STARTED' if is_active else 'PENDING'
-        
-        task_detail = {
-            'task_id': task_id,
-            'task_name': task_name,
-            'task_name_short': task_name.split('.')[-1],  # Just the function name
-            'network_id': task_network_id,
-            'status': status,
-            'worker': task.get('hostname'),
-            'started_at': datetime.fromtimestamp(task.get('time_start', 0)).isoformat() if task.get(
-                'time_start') else None,
-            'args': task_args,
-        }
-        
-        if task_station_ids:
-            stations_list = StationLink.objects.filter(id__in=task_station_ids).select_related('station')
-            task_stations = [{'name': sl.station.name, 'id': sl.id, } for sl in stations_list]
-            task_detail['stations'] = task_stations
-        
-        filtered_tasks.append(task_detail)
-    
+        filtered_tasks.append(detail)
+
     return JsonResponse({
         'tasks': filtered_tasks,
-        'count': len(filtered_tasks)
+        'count': len(filtered_tasks),
+        'workers_replied': workers_replied,
     })

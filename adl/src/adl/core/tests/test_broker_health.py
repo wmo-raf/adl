@@ -54,8 +54,8 @@ class GetIngestionQueueHealthTests(SimpleTestCase):
         # Version metadata is substituted like the broker itself, so these
         # tests are about the guards' logic, never about what this machine
         # happens to have installed
-        with patch("adl.core.broker.Connection", return_value=conn), \
-                patch("adl.core.broker.app") as app_mock, \
+        with patch("adl.core.broker_connection.Connection", return_value=conn), \
+                patch("adl.core.broker_connection.app") as app_mock, \
                 patch("adl.core.broker.local_library_versions",
                       return_value=versions or IN_RANGE_VERSIONS):
             app_mock.control.inspect.return_value = inspect
@@ -241,8 +241,8 @@ class GetIngestionQueueHealthTests(SimpleTestCase):
         conn = MagicMock()
         conn.__enter__.side_effect = OSError("connection refused")
 
-        with patch("adl.core.broker.Connection", return_value=conn), \
-                patch("adl.core.broker.app") as app_mock, \
+        with patch("adl.core.broker_connection.Connection", return_value=conn), \
+                patch("adl.core.broker_connection.app") as app_mock, \
                 patch("adl.core.broker.local_library_versions",
                       return_value=IN_RANGE_VERSIONS):
             app_mock.control.inspect.side_effect = OSError("no broker")
@@ -258,9 +258,9 @@ class GetIngestionQueueHealthTests(SimpleTestCase):
         # The ~1.1 s broker-down worst case depends on these four
         # redis-transport keys being passed; a missing one silently
         # reintroduces retry backoff (issue #151)
-        with patch("adl.core.broker.Connection",
+        with patch("adl.core.broker_connection.Connection",
                    return_value=make_connection_mock()) as connection_cls, \
-                patch("adl.core.broker.app") as app_mock, \
+                patch("adl.core.broker_connection.app") as app_mock, \
                 patch("adl.core.broker.local_library_versions",
                       return_value=IN_RANGE_VERSIONS):
             app_mock.control.inspect.return_value = MagicMock()
@@ -358,9 +358,9 @@ class VersionGuardTests(SimpleTestCase):
         inspect = MagicMock(spec=["active"])
         inspect.active.return_value = {"adl-worker@host": []}
 
-        with patch("adl.core.broker.Connection",
+        with patch("adl.core.broker_connection.Connection",
                    return_value=make_connection_mock()), \
-                patch("adl.core.broker.app") as app_mock, \
+                patch("adl.core.broker_connection.app") as app_mock, \
                 patch("adl.core.broker.local_library_versions",
                       return_value=IN_RANGE_VERSIONS):
             app_mock.control.inspect.return_value = inspect
