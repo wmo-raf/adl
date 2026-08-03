@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta
+from datetime import timedelta
 
 import logging
 
@@ -18,6 +18,7 @@ from adl.core.broker import (
     tested_range_display,
 )
 from adl.core.models import NetworkConnection, StationLink
+from adl.core.probes import claim_probe_cooldown, read_probe_claim
 from adl.core.tasks import INGESTION_QUEUE_NAME, run_network_plugin
 from adl.core.source_checks import (
     SourceCheckStatus,
@@ -35,11 +36,13 @@ from ..models import (
 
 logger = logging.getLogger(__name__)
 
-# One probe per source host per minute — beneath the noise floor of the
-# ingestion already hitting that host. Deliberately different from the
-# evaluator's 15-minute freshness window: equalising them would make an
-# operator wait 15 minutes to verify a password fix.
-PROBE_COOLDOWN_SECONDS = 60
+# The probe cooldown itself — one press per target per minute, claimed
+# before the dial — lives in `adl.core.probes`, shared with the dispatch
+# side's test-connection button. Here it means one probe per source host per
+# minute, beneath the noise floor of the ingestion already hitting that host,
+# and is deliberately different from the evaluator's 15-minute freshness
+# window: equalising them would make an operator wait 15 minutes to verify a
+# password fix.
 
 # The permission that gates the probe: someone who can edit a host and its
 # credentials can already make the runtime dial them, and a new permission
@@ -227,13 +230,6 @@ def connection_health(request, connection_id):
     return render(request, "monitoring/connection_health.html", context=context)
 
 
-def _parse_claim(value):
-    try:
-        return datetime.fromisoformat(value)
-    except (TypeError, ValueError):
-        return None
-
-
 def connection_probe_source(request, connection_id):
     """
     Fire the on-demand source probe (layers 4-5) for one connection —
@@ -266,8 +262,8 @@ def connection_probe_source(request, connection_id):
 
     now = dj_timezone.now()
     key = source_probe_cooldown_key(connection)
-    if not cache.add(key, now.isoformat(), timeout=PROBE_COOLDOWN_SECONDS):
-        _report_existing_probe(request, connection, cache.get(key), now)
+    if not claim_probe_cooldown(key, now):
+        _report_existing_probe(request, connection, read_probe_claim(key), now)
         return diagnostic_page
 
     try:
@@ -300,11 +296,10 @@ def connection_probe_source(request, connection_id):
     return diagnostic_page
 
 
-def _report_existing_probe(request, connection, claim, now):
+def _report_existing_probe(request, connection, claimed_at, now):
     """A press inside the cooldown: the shared result is the limit, so the
     answer is the stored result (with its age and origin) or the in-flight
     state — never a refusal."""
-    claimed_at = _parse_claim(claim)
     newest = (SourceProbeResult.objects
               .filter(connection=connection, station_link__isnull=True)
               .order_by("-at")
@@ -401,7 +396,7 @@ def connection_run_now(request, connection_id):
     key = manual_run_cooldown_key(connection)
     if not cache.add(key, now.isoformat(),
                      timeout=manual_run_cooldown_seconds(connection)):
-        claimed_at = _parse_claim(cache.get(key))
+        claimed_at = read_probe_claim(key)
         minutes = probe_age_minutes(now, claimed_at) if claimed_at else 0
         messages.info(
             request,
@@ -469,8 +464,8 @@ def station_link_check_source(request, link_id):
 
     now = dj_timezone.now()
     key = station_source_check_cooldown_key(station_link)
-    if not cache.add(key, now.isoformat(), timeout=PROBE_COOLDOWN_SECONDS):
-        _report_existing_station_check(request, station_link, cache.get(key), now)
+    if not claim_probe_cooldown(key, now):
+        _report_existing_station_check(request, station_link, read_probe_claim(key), now)
         return inspect_page
 
     try:
@@ -503,11 +498,10 @@ def station_link_check_source(request, link_id):
     return inspect_page
 
 
-def _report_existing_station_check(request, station_link, claim, now):
+def _report_existing_station_check(request, station_link, claimed_at, now):
     """A press inside the cooldown: the shared result is the limit, so the
     answer is this station's own stored result (with its age and origin) or
     the in-flight state — never a refusal."""
-    claimed_at = _parse_claim(claim)
     newest = (SourceProbeResult.objects
               .filter(station_link=station_link)
               .order_by("-at")

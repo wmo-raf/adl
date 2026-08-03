@@ -7,11 +7,15 @@ The probe never dials a real host in tests — DNS and TCP sit behind the
 module's ``socket`` reference and are patched there.
 """
 
+import inspect
 import socket
+import threading
+import time
 from unittest.mock import patch
 
 from django.test import TestCase
 
+from adl.core import probes, source_checks
 from adl.core.source_checks import (
     CHECK_DNS,
     CHECK_SOURCE,
@@ -312,3 +316,90 @@ class StationCheckRunTests(TestCase):
 
         self.assertEqual(step.result.status, SourceCheckStatus.FAILED)
         self.assertIn("did not complete", step.result.message)
+
+
+class SharedProbePrimitiveTests(TestCase):
+    """The wall clock and the executor discipline behind it have one home
+    (:mod:`adl.core.probes`), shared with the dispatch side. A second copy is
+    where the abandon-don't-join discipline would silently come back as a
+    tidy-up."""
+
+    def test_the_wall_clock_constant_is_the_shared_one(self):
+        self.assertIs(source_checks.PROBE_WALL_CLOCK_SECONDS,
+                      probes.PROBE_WALL_CLOCK_SECONDS)
+
+    def test_source_checks_builds_no_thread_pool_of_its_own(self):
+        """Pins the "no second copy of the executor discipline" criterion at
+        the only place it can be checked: a pool built here would be a pool
+        whose abandon-don't-join rule is remembered twice."""
+        self.assertNotIn("ThreadPoolExecutor", inspect.getsource(source_checks))
+
+    def test_the_shared_pool_is_never_joined_on_exit(self):
+        """Fails if `bounded_executor` were written as
+        `with ThreadPoolExecutor(...)`: `with`-exit joins abandoned workers,
+        so a stuck step would outlive the bound the module promises."""
+        with patch("adl.core.probes.ThreadPoolExecutor") as pool:
+            with probes.bounded_executor(2):
+                pass
+
+        pool.return_value.shutdown.assert_called_once_with(wait=False)
+        pool.return_value.__exit__.assert_not_called()
+
+    def test_an_abandoned_worker_does_not_extend_the_probes_wall_clock(self):
+        release = threading.Event()
+        self.addCleanup(release.set)
+
+        def stuck():
+            release.wait(30)
+            return SourceCheckResult(status=SourceCheckStatus.OK)
+
+        connection = NetworkConnectionFactory()
+        connection.check_source = stuck
+
+        started = time.monotonic()
+        steps = run_source_probe(connection, timeout_seconds=0.05)
+        elapsed = time.monotonic() - started
+
+        self.assertEqual(steps[0].result.status, SourceCheckStatus.FAILED)
+        self.assertFalse(release.is_set())
+        self.assertLess(elapsed, 5)
+
+    def test_the_station_check_shares_the_same_bound(self):
+        release = threading.Event()
+        self.addCleanup(release.set)
+
+        link = StationLinkFactory()
+        link.check_station_source = lambda: release.wait(30)
+
+        started = time.monotonic()
+        step = run_station_source_check(link, timeout_seconds=0.05)
+        elapsed = time.monotonic() - started
+
+        self.assertEqual(step.result.status, SourceCheckStatus.FAILED)
+        self.assertFalse(release.is_set())
+        self.assertLess(elapsed, 5)
+
+
+class ProbeTimeoutTests(TestCase):
+    """The bound's expiry has its own exception type. Since Python 3.11 the
+    executor's TimeoutError *is* the builtin TimeoutError, so a shared type
+    would report a call that failed fast with its own socket timeout as one
+    that never completed."""
+
+    def test_the_bound_raises_its_own_type_on_expiry(self):
+        with self.assertRaises(probes.ProbeTimeout):
+            probes.run_bounded(lambda: time.sleep(5), 0.01)
+
+    def test_a_callee_raising_timeout_error_is_not_reported_as_the_bound(self):
+        def fails_fast():
+            raise TimeoutError("the destination timed out on its own terms")
+
+        connection = NetworkConnectionFactory()
+        connection.check_source = fails_fast
+
+        steps = run_source_probe(connection, timeout_seconds=5)
+
+        result = steps[0].result
+        self.assertEqual(result.status, SourceCheckStatus.FAILED)
+        self.assertIn("TimeoutError", result.message)
+        self.assertNotIn("did not complete", result.message)

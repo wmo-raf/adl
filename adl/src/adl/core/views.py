@@ -7,6 +7,7 @@ from django.core.paginator import Paginator, InvalidPage
 from django.db import transaction
 from django.shortcuts import render, redirect, get_object_or_404
 from django.urls import reverse_lazy, reverse
+from django.utils import timezone as dj_timezone
 from django.utils.translation import gettext as _
 from django.views.decorators.http import (
     require_http_methods,
@@ -30,7 +31,10 @@ from .constants import (
     OSCAR_SURFACE_REQUIRED_CSV_COLUMNS,
     PREDEFINED_DATA_PARAMETERS
 )
-from .dispatch_checks import run_dispatch_connection_test
+from .dispatch_checks import (
+    channel_implements_test_connection,
+    run_dispatch_connection_test
+)
 from .forms import (
     StationLoaderForm,
     OSCARStationImportForm,
@@ -49,6 +53,11 @@ from .models import (
     StationLink, Network
 )
 from .plugin_utils import get_plugin_metadata
+from .probes import (
+    PROBE_COOLDOWN_SECONDS,
+    claim_probe_cooldown,
+    read_probe_claim
+)
 from .registries import (
     dispatch_channel_viewset_registry,
     connection_viewset_registry,
@@ -1341,17 +1350,79 @@ def reset_channel_dispatch(request, channel_id):
     return redirect('wagtailadmin_home')
 
 
+def dispatch_test_cooldown_key(channel):
+    """The cooldown cache key for one dispatch channel's connection test.
+
+    Keyed on the channel id rather than the destination host: a channel's
+    destination is a plugin-private detail with no contract for reading it,
+    unlike the ingestion side's ``get_source_endpoint()``. Two channels
+    pointing at the same host therefore get a budget each — a looser bound
+    than the source probe's, but still one that a repeated press cannot
+    exceed.
+    """
+    return f"adl_dispatch_test_cooldown:channel:{channel.id}"
+
+
+def _report_existing_dispatch_test(request, claimed_at, now):
+    """A press inside the cooldown: an informational answer about the press
+    already made, never an error and never a second dial.
+
+    Unlike the ingestion diagnostic, there is no stored history to hand back
+    — a dispatch test's verdict lives only in the message it produced — so
+    the honest answer is the age of the press that took the budget, and a
+    retry window. A claim that has expired or cannot be read between the
+    failed add and the read is reported without an age rather than with a
+    made-up one.
+    """
+    if claimed_at is None:
+        messages.info(
+            request,
+            _('This channel was tested moments ago. One test per channel '
+              'every %(cooldown)d seconds — try again shortly.')
+            % {'cooldown': PROBE_COOLDOWN_SECONDS},
+        )
+        return
+
+    messages.info(
+        request,
+        _('This channel was tested %(seconds)d second(s) ago. One test per '
+          'channel every %(cooldown)d seconds — try again shortly.')
+        % {'seconds': max(int((now - claimed_at).total_seconds()), 0),
+           'cooldown': PROBE_COOLDOWN_SECONDS},
+    )
+
+
 def test_dispatch_channel_connection(request, channel_id):
     """Synchronously probe a dispatch channel's destination.
 
     Runs in the web process on purpose: a wedged dispatch queue must not be
     able to mask a destination health check.
 
-    The probe is an out-of-core plugin's code, so its return goes through
-    ``run_dispatch_connection_test`` rather than being read directly.
+    The probe is an out-of-core plugin's code, so neither its return nor its
+    latency is trusted: ``run_dispatch_connection_test`` normalises the one
+    and bounds the other.
+
+    The bound covers a single press. The cooldown below covers ten of them:
+    claimed **before** the probe fires, never extended on completion and
+    never released early — including when the probe raises, since a crashed
+    probe still dialled the destination. So a press inside the cooldown
+    always resolves to a message, never an error and never a second thread
+    against a dead host.
+
+    A channel that does not implement the contract is exempt: its press
+    cannot dial anything, so it must not spend a budget — otherwise the
+    operator's second press would be told to wait instead of being told
+    again that the channel type has no test.
     """
     if request.method == 'POST':
         dispatch_channel = get_object_or_404(DispatchChannel, id=channel_id)
+
+        now = dj_timezone.now()
+        cooldown_key = dispatch_test_cooldown_key(dispatch_channel)
+        if (channel_implements_test_connection(dispatch_channel)
+                and not claim_probe_cooldown(cooldown_key, now)):
+            _report_existing_dispatch_test(request, read_probe_claim(cooldown_key), now)
+            return redirect(request.META.get('HTTP_REFERER', 'wagtailadmin_home'))
 
         result = run_dispatch_connection_test(dispatch_channel)
 

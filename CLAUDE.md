@@ -29,6 +29,7 @@ adl/src/adl/
 │   ├── registries.py  # Plugin base class and PluginRegistry
 │   ├── registry.py    # Generic Registry/Instance base classes
 │   ├── tasks.py       # Celery tasks for ingestion and dispatch
+│   ├── probes.py      # Shared wall clock + press cooldown for on-demand probes
 │   ├── dispatchers/   # Data dispatch implementations (wis2box, etc.)
 │   ├── qc/            # Quality control pipeline and validators
 │   └── logging.py     # TaskLogger for audit trails
