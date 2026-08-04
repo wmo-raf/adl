@@ -68,10 +68,20 @@ If data is disappearing without errors, work through this list first.
 
 ```{eval-rst}
 .. autoclass:: adl.core.models.NetworkConnection
-   :members: collect_data, get_plugin
+   :members: collect_data, get_plugin, get_source_endpoint, check_source
    :show-inheritance:
    :no-undoc-members:
 ```
+
+### Diagnostic contract
+
+{meth}`~adl.core.models.NetworkConnection.get_source_endpoint` and
+{meth}`~adl.core.models.NetworkConnection.check_source` are the
+connection-scoped half of the ingestion diagnostic's external layers. Both have
+working defaults that report the contract as unimplemented, so overriding them
+is optional. What each one means for your source archetype — and the rules a
+correct implementation follows — is in
+{doc}`diagnostic_contracts`.
 
 ### Required class attribute
 
@@ -109,10 +119,18 @@ panels = NetworkConnection.panels + [
 
 ```{eval-rst}
 .. autoclass:: adl.core.models.StationLink
-   :members: get_variable_mappings, get_first_collection_date, timezone
+   :members: get_variable_mappings, get_first_collection_date, timezone,
+             check_station_source
    :show-inheritance:
    :no-undoc-members:
 ```
+
+### Diagnostic contract
+
+{meth}`~adl.core.models.StationLink.check_station_source` is the
+station-scoped half of the diagnostic's source layer. It is **independently
+answerable**: implementing `check_source()` on the connection says nothing
+about this method, and vice versa. See {doc}`diagnostic_contracts`.
 
 ### Variable mapping contract
 
@@ -141,6 +159,36 @@ panels = StationLink.panels + [
     InlinePanel("variable_mappings", label=_("Variable Mappings")),
 ]
 ```
+
+---
+
+## `SourceCheckResult`
+
+The return type of both source checks. Frozen, and never trusted as-is: core
+passes every plugin return through `normalise_source_check_result`, which
+degrades a malformed value to `MALFORMED`, drops a `category` outside the shared
+vocabulary, and redacts the message.
+
+```{eval-rst}
+.. autoclass:: adl.core.source_checks.SourceCheckResult
+   :members:
+   :show-inheritance:
+
+.. autoclass:: adl.core.source_checks.SourceCheckStatus
+   :members:
+   :show-inheritance:
+```
+
+```{important}
+Import this class **inside the method**, never at module level — a core release
+predating the source-check contracts has no `adl.core.source_checks`, and a
+module-level import would break your plugin's import rather than just its
+diagnostic. See {doc}`diagnostic_contracts`.
+```
+
+The layer is stamped by core, not by you: every result returned from either
+check is recorded as layer 5. Returning a layer-4 category such as
+`DNS_FAILURE` or `TCP_REFUSED` therefore makes the diagnostic contradict itself.
 
 ---
 
