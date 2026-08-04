@@ -153,6 +153,16 @@ you omit it, station links will not appear in the admin and data collection
 will silently do nothing.
 ```
 
+```{seealso}
+Your `NetworkConnection` subclass is also where the ingestion diagnostic's
+connection-scoped contracts live — `get_source_endpoint()` and `check_source()`,
+which let the diagnostic name the failing layer instead of reporting "no data".
+They are optional and have working defaults, so you can add them after the
+plugin ingests. When you do, {doc}`diagnostic_contracts` is the spec: it says
+what each contract means for your source archetype and what a correct
+implementation must not do.
+```
+
 #### Validation rules: `clean()` must not perform I/O
 
 Any `clean()` override you add to your `NetworkConnection` or `StationLink`

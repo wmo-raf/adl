@@ -134,6 +134,8 @@ You control everything with `docker compose up`, and configure via the **Wagtail
 4. **Register** your plugin in `apps.py` using `plugin_registry.register(...)`.
 5. **Run** the stack, create a Connection (select your plugin type), add Station Links, set mappings, watch data land in
    the DB.
+6. **Wire up the diagnostic contracts** so a silent connection names its failing layer instead of reporting "no data" —
+   start with *Which archetype am I?* in [Ingestion Diagnostic Contracts](diagnostic_contracts.md).
 
 ---
 

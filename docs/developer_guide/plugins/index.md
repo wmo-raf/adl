@@ -10,6 +10,7 @@ maxdepth: 1
 plugin_overview
 plugin_structure
 plugin_implementation
+diagnostic_contracts
 plugin_reference
 plugin_installation
 plugin_dev_setup
