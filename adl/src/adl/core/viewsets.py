@@ -15,7 +15,11 @@ from .models import (
     DataParameter,
     Unit
 )
-from .utils import get_dispatch_channel_more_buttons, get_connection_list_more_buttons
+from .utils import (
+    get_dispatch_channel_more_buttons,
+    get_connection_list_more_buttons,
+    get_extra_model_admin_link_buttons,
+)
 
 ADLET_MODELS = []
 
@@ -79,6 +83,13 @@ class AdletIndexView(generic.IndexView):
         ]
         
         return columns
+
+
+class StationLinkIndexView(AdletIndexView):
+    def get_list_more_buttons(self, instance):
+        buttons = super().get_list_more_buttons(instance)
+        buttons.extend(get_extra_model_admin_link_buttons(instance))
+        return buttons
 
 
 class ConnectionIndexView(generic.IndexView):
