@@ -54,6 +54,7 @@ from .viewsets import (
     DispatchChannelEditView,
     DispatchChannelDeleteView,
     StationLinkInspectView,
+    StationLinkIndexView,
     StationLinkAddView,
     StationLinkEditView,
     StationLinkDeleteView
@@ -144,6 +145,7 @@ def get_connection_viewsets():
                 station_link_viewset_kwargs = {
                     "list_display": ["__str__", "wigos_id"],
                     "list_filter": ["network_connection"],
+                    "index_view_class": StationLinkIndexView,
                     "add_view_class": StationLinkAddView,
                     "edit_view_class": StationLinkEditView,
                     "delete_view_class": StationLinkDeleteView,

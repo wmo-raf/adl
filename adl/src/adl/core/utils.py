@@ -283,16 +283,14 @@ def make_registrable_viewset(model_cls, **kwargs):
     return ViewSetCls()
 
 
-def get_connection_list_more_buttons(connection):
-    buttons = [
-        ListingButton(
-            gettext("Ingestion Diagnostic"),
-            url=reverse("connection_health", args=[connection.id]),
-            icon_name="crosshairs",
-        )
-    ]
-    if hasattr(connection, "get_extra_model_admin_links"):
-        extra_links = connection.get_extra_model_admin_links()
+def get_extra_model_admin_link_buttons(instance):
+    """
+    Builds ListingButtons from an instance's get_extra_model_admin_links(),
+    for models (connections, station links) that expose extra admin pages.
+    """
+    buttons = []
+    if hasattr(instance, "get_extra_model_admin_links"):
+        extra_links = instance.get_extra_model_admin_links()
         for link in extra_links:
             label = link.get("label", None)
             url = link.get("url", None)
@@ -307,6 +305,18 @@ def get_connection_list_more_buttons(connection):
                         attrs=attrs,
                     )
                 )
+    return buttons
+
+
+def get_connection_list_more_buttons(connection):
+    buttons = [
+        ListingButton(
+            gettext("Ingestion Diagnostic"),
+            url=reverse("connection_health", args=[connection.id]),
+            icon_name="crosshairs",
+        )
+    ]
+    buttons.extend(get_extra_model_admin_link_buttons(connection))
     return buttons
 
 
