@@ -52,10 +52,48 @@ services:
     tty: true              # enables terminal support
     stdin_open: true       # allows interactive input
 
-  adl_celery_worker:
+  # Three queue-specific workers, mirroring the core stack: the entrypoint
+  # has no generic "celery-worker" command, and core routes ingestion to
+  # the "adl" queue and outbound dispatch to the "dispatch" queue -- a
+  # single default-queue worker would never consume them.
+  adl_celery_worker_default:
     image: {{ cookiecutter.project_slug }}_dev
-    command: celery-worker
-    container_name: {{ cookiecutter.project_slug }}-worker
+    command: celery-worker-default
+    container_name: {{ cookiecutter.project_slug }}-worker-default
+    env_file:
+      - .env
+    environment:
+      <<: *adl-variables
+      WAIT_HOSTS: adl_db:5432,adl_redis:6379,adl:8000
+    depends_on:
+      - adl
+    volumes:
+      - ./plugins/{{ cookiecutter.project_module }}:/adl/plugins/{{ cookiecutter.project_module }}
+    # Open stdin and tty so when attaching key input works as expected.
+    stdin_open: true
+    tty: true
+
+  adl_celery_worker_adl:
+    image: {{ cookiecutter.project_slug }}_dev
+    command: celery-worker-adl
+    container_name: {{ cookiecutter.project_slug }}-worker-adl
+    env_file:
+      - .env
+    environment:
+      <<: *adl-variables
+      WAIT_HOSTS: adl_db:5432,adl_redis:6379,adl:8000
+    depends_on:
+      - adl
+    volumes:
+      - ./plugins/{{ cookiecutter.project_module }}:/adl/plugins/{{ cookiecutter.project_module }}
+    # Open stdin and tty so when attaching key input works as expected.
+    stdin_open: true
+    tty: true
+
+  adl_celery_worker_dispatch:
+    image: {{ cookiecutter.project_slug }}_dev
+    command: celery-worker-dispatch
+    container_name: {{ cookiecutter.project_slug }}-worker-dispatch
     env_file:
       - .env
     environment:
