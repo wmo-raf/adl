@@ -18,8 +18,11 @@ from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone as dj_tz
 
+from django_celery_beat.models import IntervalSchedule, PeriodicTask
+
 from adl.core.broker import IngestionQueueHealth, RunningIngestionTask
 from adl.core.models import NetworkConnectionHeartbeat
+from adl.core.tasks import INGESTION_TASK_NAME
 from adl.core.tests.factories import StationLinkFactory
 from adl.monitoring.views.health import (
     MANUAL_RUN_COOLDOWN_CAP_SECONDS,
@@ -30,6 +33,8 @@ UNOBSERVED = IngestionQueueHealth(queue_depth=None, worker_consuming=None,
                                   running_tasks=None)
 IDLE = IngestionQueueHealth(queue_depth=0, worker_consuming=True,
                             running_tasks=())
+NOT_CONSUMING = IngestionQueueHealth(queue_depth=0, worker_consuming=False,
+                                     running_tasks=())
 
 
 def observed_running(connection_id, age_seconds=30.0):
@@ -259,3 +264,69 @@ class ManualRunCaptionTests(ManualRunViewTestCase):
         response = self.client.get(self.page_url)
 
         self.assertNotContains(response, "triggered manually")
+
+
+class ManualRunButtonVisibilityTests(ManualRunViewTestCase):
+    """
+    The button is hidden only where a press provably achieves nothing.
+
+    The page's own checklist resolves the broker through
+    ``adl.monitoring.health``, not through the view module — the view's patch
+    covers the press path only — so these tests substitute that name. They
+    also have to make layer 1 pass: while the ladder fails above it the
+    worker check is emitted as SKIPPED and never consults a broker at all.
+    """
+
+    def page_broker(self, observation):
+        return patch("adl.monitoring.health.get_ingestion_queue_health",
+                     return_value=observation)
+
+    def reach_the_worker_layer(self):
+        schedule, _ = IntervalSchedule.objects.get_or_create(
+            every=self.connection.interval, period=IntervalSchedule.MINUTES
+        )
+        PeriodicTask.objects.create(
+            name=f"ingest-{self.connection.id}",
+            task=INGESTION_TASK_NAME,
+            args=f"[{self.connection.id}]",
+            interval=schedule,
+            last_run_at=dj_tz.now(),
+        )
+        NetworkConnectionHeartbeat.objects.create(
+            connection=self.connection, last_run_at=dj_tz.now()
+        )
+
+    def test_hidden_when_no_worker_consumes_the_ingestion_queue(self):
+        self.reach_the_worker_layer()
+
+        with self.page_broker(NOT_CONSUMING):
+            response = self.client.get(self.page_url)
+
+        self.assertNotContains(response, "Run ingestion now")
+        self.assertNotContains(response, self.url)
+
+    def test_shown_when_a_worker_is_consuming(self):
+        self.reach_the_worker_layer()
+
+        with self.page_broker(IDLE):
+            response = self.client.get(self.page_url)
+
+        self.assertContains(response, "Run ingestion now")
+
+    def test_shown_when_the_broker_did_not_answer(self):
+        # Unknown is not down: a silent broker must not remove the button
+        self.reach_the_worker_layer()
+
+        with self.page_broker(UNOBSERVED):
+            response = self.client.get(self.page_url)
+
+        self.assertContains(response, "Run ingestion now")
+
+    def test_shown_when_beat_has_stopped(self):
+        # Layer 1 fails, so the worker check is SKIPPED rather than FAILED —
+        # and a manual run, which bypasses beat and goes straight to the
+        # queue, is the only way left to collect data
+        with self.page_broker(NOT_CONSUMING):
+            response = self.client.get(self.page_url)
+
+        self.assertContains(response, "Run ingestion now")

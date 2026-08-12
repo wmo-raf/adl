@@ -129,24 +129,6 @@
             </p>
         {% endif %}
 
-        {% if show_run_button %}
-            {% comment %}
-                Page-level and connection-wide: the run spans layers 1-6.
-                Hidden rather than disabled when unpermitted, and enabled
-                during cooldown: a press inside it answers with the last
-                run's age, not a refusal.
-            {% endcomment %}
-            <form method="post"
-                  action="{% url 'connection_run_now' connection.id %}"
-                  class="health-run-form">
-                {% csrf_token %}
-                <button type="submit" class="button">{% trans "Run ingestion now" %}</button>
-                <p class="health-run-form__hint">
-                    {% trans "Enqueues a run identical to a scheduled tick, through the real queue and workers. It stamps the manual-run slot, never the scheduler heartbeat." %}
-                </p>
-            </form>
-        {% endif %}
-
         {# Precondition band: assertions about configuration, above the ladder #}
         <h2 class="w-text-h3">{% trans "Preconditions" %}</h2>
         {% include "monitoring/partials/health_check_table.html" with checks=checklist.precondition %}
@@ -206,6 +188,27 @@
                 </form>
             {% endif %}
         {% endfor %}
+
+        {% if show_run_button %}
+            {% comment %}
+                Page-level and connection-wide: the run spans layers 1-6, so
+                it closes the ladder rather than heading the page — the
+                reader has the whole diagnosis before the action. Hidden
+                rather than disabled when unpermitted, when the connection is
+                off, or when no worker consumes the ingestion queue; enabled
+                during cooldown and while a run is in flight, where a press
+                answers with the running run's age, not a refusal.
+            {% endcomment %}
+            <form method="post"
+                  action="{% url 'connection_run_now' connection.id %}"
+                  class="health-run-form">
+                {% csrf_token %}
+                <button type="submit" class="button">{% trans "Run ingestion now" %}</button>
+                <p class="health-run-form__hint">
+                    {% trans "Enqueues a run identical to a scheduled tick, through the real queue and workers. It stamps the manual-run slot, never the scheduler heartbeat." %}
+                </p>
+            </form>
+        {% endif %}
 
         {% comment %}
             Verdict history: the append-only transitions log, paginated in
