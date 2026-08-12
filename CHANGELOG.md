@@ -10,6 +10,72 @@ Read that section before upgrading a deployment.
 
 This file starts at 0.8.9. Earlier history is in the git log.
 
+## [0.8.10] — 2026-08-12
+
+A maintenance release. The headline is a database durability fix that affects
+every deployment; the rest is admin ergonomics and plugin-authoring documentation.
+
+### Fixed
+
+- The database container is given five minutes to shut down rather than Docker's
+  default ten seconds. The `timescaledb-ha` image stops on `SIGINT` — a Postgres
+  *fast shutdown*, which must complete a checkpoint flushing `shared_buffers`
+  (2 GB by default) to disk before it exits. Ten seconds does not reliably cover
+  that, so every `docker compose down`, `restart` and host reboot was
+  `SIGKILL`ing Postgres mid-checkpoint and leaving an unclean shutdown, on every
+  deployment. Repair of the resulting torn pages then rested entirely on the
+  storage honouring `fsync`. One installation lost the HOT chain parent on
+  `django_celery_beat_periodictasks` after a power cut, which made
+  `PeriodicTasks.last_change()` raise `MultipleObjectsReturned`; celery beat
+  crash-looped for 14 days with no ingestion or dispatch and nothing to announce
+  it. (#241)
+- Scaffolded plugins run the three queue-specific celery workers. The plugin
+  compose template still used the entrypoint's removed generic `celery-worker`
+  command, so a new plugin shipped a worker that printed usage help and exited 1
+  — and even when that command existed it consumed only the default queue, never
+  the `adl` ingestion or `dispatch` queues that tasks are actually routed to.
+  (#240)
+
+### Added
+
+- Station links surface their plugin's extra admin pages as listing buttons, as
+  connections already did through `get_extra_model_admin_links()`. A plugin page
+  scoped to a single station — a per-station variable-mapping editor, say — had
+  no way to be reached from the listing. (#240)
+- The ingestion diagnostic's **Run ingestion now** button now closes the layer
+  ladder instead of heading the page, so the whole diagnosis is read before the
+  action is offered. It is hidden when no worker is consuming the ingestion
+  queue, the one state where the press provably achieves nothing; every failure
+  a manual run can still help with — a stopped scheduler above all — keeps the
+  button, since the run bypasses beat and goes straight to the queue. (#242)
+- A plugin-authoring guide for the ingestion diagnostic contracts: the seven
+  contract surfaces a plugin can implement so layers 4, 5 and part of 6 report
+  something better than `UNSUPPORTED`, what each means per source archetype, and
+  the rules a retrofit is measured against. (#239)
+
+### Upgrade notes
+
+No migrations in this release.
+
+**The database fix needs one manual step, once.** `stop_grace_period` is fixed
+when a container is *created*, so a running `adl_db` still carries the ten-second
+timeout — including for the stop that `docker compose up -d` performs in order to
+recreate it. Recreating it without stopping it explicitly crash-kills the
+database one last time:
+
+```bash
+docker compose stop -t 300 adl_db   # clean shutdown under the old container
+docker compose up -d
+docker compose logs adl_db | tail -20
+```
+
+The last line should end in `database system is shut down` on the stop and show
+no `database system was not properly shut down` on the start.
+
+This bounds the routine crash-kills; it does not make a host safe from power
+loss. Sites still need a UPS with automatic graceful shutdown, and should enable
+`data_checksums` so that a torn page is detected rather than silently served.
+
 ## [0.8.9] — 2026-08-03
 
 A maintenance release. Every change is a fix to how ADL behaves when something
