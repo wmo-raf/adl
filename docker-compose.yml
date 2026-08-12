@@ -43,6 +43,10 @@ services:
     container_name: adl_db
     image: timescale/timescaledb-ha:pg15
     restart: unless-stopped
+    # The image stops on SIGINT — a Postgres fast shutdown, which must finish a
+    # checkpoint that flushes shared_buffers to disk. Docker's 10s default kills
+    # it mid-checkpoint, leaving an unclean shutdown on every stop.
+    stop_grace_period: ${ADL_DB_STOP_GRACE_PERIOD:-5m}
     command: postgres -c max_connections=${POSTGRES_MAX_CONNECTIONS:-300} -c shared_buffers=${POSTGRES_SHARED_BUFFERS:-2GB}
     environment:
       - POSTGRES_USER=${ADL_DB_USER:-?}
