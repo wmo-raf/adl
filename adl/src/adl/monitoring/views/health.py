@@ -27,7 +27,13 @@ from adl.core.source_checks import (
     run_station_source_check,
 )
 
-from ..constants import LAYER_LABELS, LAYER_SOURCE, LAYER_WORKER, PROBE_LAYER_IDS
+from ..constants import (
+    CheckState,
+    LAYER_LABELS,
+    LAYER_SOURCE,
+    LAYER_WORKER,
+    PROBE_LAYER_IDS,
+)
 from ..health import EVALUATED_LAYERS, evaluate_connection_health, probe_age_minutes
 from ..models import (
     NetworkConnectionHealth,
@@ -148,6 +154,21 @@ def connection_health(request, connection_id):
         and connection.source_probe_supported
     )
 
+    # The press enqueues the coordinator on the ingestion queue, so a queue
+    # nobody consumes swallows it: no run, no feedback, and the task fires
+    # late whenever a worker returns. That is the one state where the button
+    # provably achieves nothing. Only a definite FAILED hides it — SKIPPED
+    # means a layer-1 failure above (beat not ticking, no schedule entry),
+    # which is exactly when the manual run is the way to collect data, and
+    # UNSUPPORTED means unknown, never down.
+    worker_check = next(
+        (check for check in checklist.checks if check.id == "worker_consuming"),
+        None,
+    )
+    ingestion_queue_unconsumed = (
+        worker_check is not None and worker_check.state == CheckState.FAILED
+    )
+
     # The broker stack renders always — not only on drift, and regardless of
     # what the ladder concluded — because nothing else reports which broker
     # libraries a running installation actually has. "This process" is the
@@ -216,10 +237,12 @@ def connection_health(request, connection_id):
         "health": health,
         "first_failing_layer_label": LAYER_LABELS.get(checklist.first_failing_layer),
         "layer_groups": layer_groups,
-        # Hidden rather than disabled, like the probe button — and hidden on
-        # a disabled connection: there is nothing to run
+        # Hidden rather than disabled, like the probe button — and hidden
+        # wherever the press cannot do anything: a disabled connection has
+        # nothing to run, an unconsumed queue has nothing to run it
         "show_run_button": (can_manage_connection(request.user, connection)
-                            and connection.enabled),
+                            and connection.enabled
+                            and not ingestion_queue_unconsumed),
         "latest_run_was_manual": latest_run_was_manual(heartbeat),
         "heartbeat": heartbeat,
         "transitions_page": transitions_page,
