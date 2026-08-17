@@ -12,6 +12,12 @@ This file starts at 0.8.9. Earlier history is in the git log.
 
 ## [Unreleased]
 
+## [0.8.11] — 2026-08-17
+
+A small release. The headline is a change to how a station link's collection
+start date is used, so operators can skip a large backlog on a station that has
+been offline; the rest is admin ergonomics for plugin-provided station pages.
+
 ### Changed
 
 - A station link's configured **collection start date** is now a floor on the
@@ -40,6 +46,18 @@ This file starts at 0.8.9. Earlier history is in the git log.
 - `StationLink.get_extra_model_admin_buttons()`, a hook that was declared but
   never rendered anywhere. No plugin implemented it; `get_extra_model_admin_links()`
   is the one contract for both surfaces.
+
+### Upgrade notes
+
+No migrations in this release.
+
+**Check station links whose start date is later than their latest saved record.**
+Until now such a date did nothing. From this release the next scheduled run for
+that station resumes from the date and does not fetch the intervening period.
+That is the intended use — an operator moved the date forward to skip a backlog
+— but if a date was set that way by accident and the gap is wanted, clear or
+move the date back *before* upgrading; afterwards the gap is only reachable
+through a manual `collect_data(initial_start_date=...)` run.
 
 ## [0.8.10] — 2026-08-12
 
