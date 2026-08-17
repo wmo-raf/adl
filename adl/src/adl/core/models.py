@@ -758,8 +758,19 @@ class StationLink(PolymorphicModel, ClusterableModel):
     
     def get_first_collection_date(self):
         """
-        Returns the first collection date for the station link.
-        This method should be overridden in subclasses to provide specific logic.
+        Optional. The collection start date configured for this station link,
+        as an aware datetime, or ``None`` when the plugin does not offer one.
+
+        Core treats the value as a **floor** on the ingestion window: the
+        resolved ``start_date`` is the later of this date and the latest saved
+        observation (see :meth:`~adl.core.registries.Plugin.get_dates_for_station`).
+        On the first run it is the start of the backfill; afterwards, moving it
+        forward past the latest saved record makes the next run resume from the
+        new date and skip the gap. It cannot move the window backwards.
+
+        Plugins that expose it typically back it with a nullable
+        ``DateTimeField`` named ``start_date`` on the station link. Must not
+        perform I/O.
         """
         return None
     

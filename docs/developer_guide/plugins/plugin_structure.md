@@ -350,7 +350,7 @@ With just these, you can fetch, normalize, and store observations end-to-end.
 
 - `Plugin.get_urls()` — expose plugin-specific URLs (health checks, manual triggers).
 - `Plugin.get_default_start_date()` / `get_default_end_date()` — customize cadence (e.g., daily at 00:00).
-- `StationLink.get_first_collection_date()` — provider-specific history fallback.
+- `StationLink.get_first_collection_date()` — the configured collection start date; a floor on the ingestion window (backfill start on the first run, and moving it forward skips a backlog).
 - **Dispatch channels** (outside the plugin): push saved data to WIS2, MQTT, WIS2Box, etc.
 
 ---

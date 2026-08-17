@@ -109,8 +109,11 @@ Kelvin) → `air_temperature` (Celsius). This drives conversion and saving.
 
 - Plugins work in the **station’s timezone**; the database stores UTC.
 - Default window is **the previous hour** up to the **top of the next hour** (closed-open `[start, end)`).
-- If past data exists in ADL ObservationRecords table, ADL resumes from the **latest saved observation time**.
-- If no database records, ADL may use a **station-defined first collection date** or the default previous-hour window.
+- ADL resumes from the **later** of the **latest saved observation time** and the station's configured
+  **collection start date** (when the plugin offers one). The start date is a floor: on the first run it is the start
+  of the backfill; moving it forward past the latest saved record makes the next run resume from the new date and skip
+  the gap. It never moves the window backwards.
+- If there are no database records and no start date, ADL uses the default previous-hour window.
 - For daily feeds, the `NetworkConnection.is_daily_data` flag marks saved rows accordingly.
 
 ### Naive vs Aware datetimes

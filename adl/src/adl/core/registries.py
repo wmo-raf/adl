@@ -372,18 +372,27 @@ class Plugin(Instance):
         individual helpers (:meth:`get_default_start_date`,
         :meth:`get_default_end_date`, :meth:`get_start_date_from_db`) instead.
     
-        ``start_date`` is resolved in the following priority order:
+        ``start_date`` is resolved as follows:
     
-        1. :meth:`get_start_date_from_db` — resume from the latest saved
-           observation (normal incremental ingestion).
-        2. ``station_link.get_first_collection_date()`` — the custom backfill
-           start date set on the station link, localised to the station timezone.
-        3. :meth:`get_default_start_date` — final fallback when no prior data
-           exists and no custom date is configured.
+        1. The **later** of :meth:`get_start_date_from_db` (the latest saved
+           observation — normal incremental ingestion) and
+           ``station_link.get_first_collection_date()`` (the collection start
+           date configured on the station link). Either may be ``None``, in
+           which case the other is used on its own.
+        2. :meth:`get_default_start_date` — final fallback when no prior data
+           exists and no start date is configured.
     
-        When ``latest=True``, steps 1 and 2 are skipped and the default start
-        date is always used. This mode is used when fetching the most recent data
-        on demand rather than resuming normal ingestion.
+        The configured start date is therefore a *floor*: ingestion never starts
+        before it. On the first run it is the start of the backfill; afterwards,
+        moving it forward past the latest saved record makes the next run resume
+        from the new date, deliberately skipping the gap (which is not backfilled).
+        When that happens an ``INFO`` line is written to the task log. It cannot
+        move the window backwards; use ``process_station(initial_start_date=...)``
+        for that.
+    
+        When ``latest=True``, step 1 is skipped and the default start date is
+        always used. This mode is used when fetching the most recent data on
+        demand rather than resuming normal ingestion.
     
         Both dates are always localised to the station's timezone before being
         returned. If ``start_date`` equals ``end_date`` after resolution, one
@@ -401,11 +410,18 @@ class Plugin(Instance):
         if latest:
             start_date = self.get_default_start_date(station_link)
         else:
-            start_date = (
-                    self.get_start_date_from_db(station_link)
-                    or self._get_station_first_collection_date(station_link)
-                    or self.get_default_start_date(station_link)
-            )
+            db_start = self.get_start_date_from_db(station_link)
+            floor = self._get_station_first_collection_date(station_link)
+            
+            if db_start and floor and floor > db_start:
+                self.get_logger().info(
+                    "Collection start date %s for %s is after the latest saved record %s; "
+                    "resuming from the start date and skipping the gap.",
+                    floor, station_link, db_start,
+                )
+                start_date = floor
+            else:
+                start_date = db_start or floor or self.get_default_start_date(station_link)
         
         end_date = self.get_default_end_date(station_link)
         

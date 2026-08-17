@@ -37,3 +37,34 @@ A network connection must be associated with a plugin, that implements the actua
 plugin to associate with the network connection by selecting from the `Plugin` dropdown. This will be a list of plugins
 that have been installed.
 ```
+
+## Station links: choosing where collection starts
+
+Each station is attached to a connection through a **station link**. Most
+plugins expose a **Collection Start Date** on the link. ADL never fetches data
+from before this date:
+
+- On the **first run** for a station it is the start of the backfill. Leave it
+  empty to start from the previous hour.
+- Afterwards, ADL resumes each run from the **later** of the last saved
+  observation and this date. An old start date is therefore inert once data has
+  been collected past it.
+
+### Skipping a backlog
+
+If a station has been offline for a long time — or its history is larger than
+you want to ingest — the next run would otherwise try to fetch everything from
+the last saved observation to now, which can take a very long time.
+
+To skip that backlog:
+
+1. Open the station link and set **Collection Start Date** to the point you want
+   collection to resume from (for example, yesterday).
+2. Save. The next scheduled run starts from that date; the task log records that
+   the gap was skipped.
+
+```{note}
+The skipped period is **not** backfilled later. Moving the date back again has
+no effect once data exists after it — the start date only ever moves collection
+forward.
+```
