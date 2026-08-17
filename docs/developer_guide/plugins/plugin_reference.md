@@ -17,6 +17,11 @@ override, and call out the non-obvious behaviours that are easiest to miss.
    :no-undoc-members:
 ```
 
+```{eval-rst}
+.. autodata:: adl.core.registries.FLUSH
+   :no-value:
+```
+
 ### What you must implement
 
 The only method your plugin **must** override is {meth}`~adl.core.registries.Plugin.get_station_data`.
@@ -66,6 +71,40 @@ count:
 - Unit conversion raises an exception for a specific mapping row.
 
 If data is disappearing without errors, work through this list first.
+
+### When records reach the database
+
+{meth}`~adl.core.registries.Plugin.save_records` buffers the records your
+generator yields and writes them in bulk. A write happens:
+
+- when {attr}`~adl.core.registries.Plugin.SAVE_CHUNK_SIZE` records (500 by
+  default) have accumulated;
+- when your generator yields {data}`~adl.core.registries.FLUSH`;
+- when your generator is exhausted;
+- when your generator **raises** — whatever is buffered is written first, then
+  the exception propagates. This includes Celery's soft time limit, so a run
+  cut short by its time budget still keeps the data it had already fetched,
+  and the activity log records how many records were saved before the failure.
+
+If your source's natural unit is much smaller than a chunk — one file per
+observation, one small API page — yield ``FLUSH`` after each unit. That keeps
+downloaded data out of memory-only limbo, and it gives you a point at which
+you *know* the unit's records are in the database: code after the ``yield
+FLUSH`` runs only once the write has completed, so it is the right place to
+mark the file/page as done on your side.
+
+```python
+for path in matched_files:
+    yield from self._decode(path)
+    yield FLUSH
+    self._mark_processed(path)   # its records are now in the database
+```
+
+Do **not** swallow {class}`celery.exceptions.SoftTimeLimitExceeded` inside
+your generator (it is an ``Exception`` subclass, so a bare ``except
+Exception`` will catch it). Let it propagate: the batch soft limit only works
+if it ends the run, and core needs to see it to persist the buffered records
+and record the timeout on the activity log.
 
 ---
 

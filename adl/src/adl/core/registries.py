@@ -14,6 +14,10 @@ normalization, unit conversion, upserts, and logging.
 Processing is optimised for memory efficiency: :meth:`Plugin.get_station_data`
 should yield records as a generator, and :meth:`Plugin.save_records` processes
 them in configurable chunks rather than loading the full response into memory.
+Buffered records are never lost to an interruption: a source that raises
+mid-stream has whatever it already yielded persisted before the exception is
+re-raised, and a plugin can yield :data:`FLUSH` to persist at its own natural
+unit of work (a file, a page) instead of waiting for a chunk to fill.
 """
 
 import time
@@ -30,6 +34,63 @@ from .date_utils import make_record_timezone_aware
 from .logging import TaskLogger
 from .registry import Registry, Instance
 from .validators import StationRecordModel
+
+
+class _FlushMarker:
+    """Type of the :data:`FLUSH` sentinel. Never instantiate it yourself."""
+    __slots__ = ()
+
+    def __repr__(self):
+        return "FLUSH"
+
+
+#: Sentinel a plugin may ``yield`` from :meth:`Plugin.get_station_data`, in
+#: between record dicts, to ask ADL to persist everything buffered so far.
+#:
+#: Without it, records are written only when :attr:`Plugin.SAVE_CHUNK_SIZE` of
+#: them have accumulated or the source is exhausted. For a source whose natural
+#: unit is much smaller than that — one file holding one record, one API page
+#: holding a handful — that means data downloaded minutes ago is still only in
+#: memory, and a plugin has no honest point at which to mark its own source
+#: item as done. Yielding ``FLUSH`` after each item persists that item's
+#: records before the generator is resumed, so code after the ``yield`` runs
+#: knowing the rows are in the database::
+#:
+#:     for path in files:
+#:         yield from self._decode(path)
+#:         yield FLUSH
+#:         mark_done(path)   # runs after the file's records were upserted
+#:
+#: A ``FLUSH`` with nothing buffered is a no-op; a plugin that never yields it
+#: behaves exactly as before.
+FLUSH = _FlushMarker()
+
+
+class _SaveTally:
+    """Running totals over the chunks persisted for one station run.
+
+    Kept as an object rather than three locals so :meth:`Plugin.process_station`
+    can read what *was* saved when the save loop is cut short by an exception —
+    the counts survive the ``raise`` where a return value would not.
+    """
+    __slots__ = ("saved", "earliest", "latest", "chunks")
+
+    def __init__(self):
+        self.saved = 0
+        self.earliest = None
+        self.latest = None
+        self.chunks = 0
+
+    def add(self, saved_count, chunk_earliest, chunk_latest):
+        self.chunks += 1
+        self.saved += saved_count
+        if chunk_earliest and (self.earliest is None or chunk_earliest < self.earliest):
+            self.earliest = chunk_earliest
+        if chunk_latest and (self.latest is None or chunk_latest > self.latest):
+            self.latest = chunk_latest
+
+    def as_tuple(self):
+        return self.saved, self.earliest, self.latest
 
 
 def _sanitize_sources_count(value):
@@ -80,7 +141,10 @@ class Plugin(Instance):
     """
     label = ""
     
-    # Configurable chunk size for batch processing
+    #: How many raw records :meth:`save_records` buffers before one bulk
+    #: upsert. Override on a subclass for a source with a very different
+    #: record size; for a source that wants to persist at its own boundaries
+    #: (per file, per page) yield :data:`FLUSH` instead of lowering this.
     SAVE_CHUNK_SIZE = 500
     
     # ---------- Lifecycle ----------
@@ -243,6 +307,21 @@ class Plugin(Instance):
             complete list. :meth:`save_records` processes in chunks of
             :attr:`SAVE_CHUNK_SIZE`, so a generator avoids loading the entire
             upstream response into memory — important for large historical backfills.
+
+        .. note::
+            **Optional flush marker.** Records are written to the database when
+            :attr:`SAVE_CHUNK_SIZE` of them have accumulated, when the iterable
+            is exhausted, or when it raises (whatever was buffered is persisted
+            before the exception propagates). A generator may also ``yield``
+            :data:`FLUSH` between records to persist immediately — after each
+            file, page or other source unit — so that code following the
+            ``yield`` (marking the unit as done, for instance) runs only once
+            its records are in the database::
+
+                for path in matched_files:
+                    yield from decode(path)
+                    yield FLUSH
+                    mark_processed(path)
 
         .. note::
             **Optional sources-count handover.** A plugin that can count the
@@ -436,20 +515,62 @@ class Plugin(Instance):
     
     # ---------- Iterator utilities ----------
     def _chunk_iterator(self, iterable: Iterable, chunk_size: int) -> Generator[List, None, None]:
-        """Yield successive ``chunk_size``-length lists from ``iterable``."""
+        """
+        Yield lists of at most ``chunk_size`` records from ``iterable``.
+
+        A chunk is yielded when it is full, when :data:`FLUSH` is encountered
+        (the marker itself is consumed, never yielded), and when the source is
+        exhausted. If the source raises, whatever is buffered is yielded first
+        and the exception is re-raised afterwards — so a soft time limit or a
+        connection dropping on item *n+1* does not throw away items *1..n*
+        that were already fetched. Only the source's own exceptions are handled
+        this way; an exception raised by the consumer while persisting a chunk
+        propagates untouched.
+        """
         log = self.get_logger()
         chunk = []
         total = 0
-        
-        for item in iterable:
+        source = iter(iterable)
+        interruption = None
+
+        while True:
+            try:
+                item = next(source)
+            except StopIteration:
+                break
+            except Exception as e:
+                # SoftTimeLimitExceeded is an Exception subclass, so the batch
+                # soft limit lands here too — with the grace window Celery
+                # allows after it, long enough to persist one partial chunk
+                interruption = e
+                break
+
+            if item is FLUSH:
+                if chunk:
+                    log.info(f"Flush requested by source: yielding chunk of {len(chunk)} records "
+                             f"(total so far: {total})")
+                    yield chunk
+                    chunk = []
+                continue
+
             chunk.append(item)
             total += 1
-            
+
             if len(chunk) >= chunk_size:
                 log.info(f"Yielding chunk of {len(chunk)} records (total so far: {total})")
                 yield chunk
                 chunk = []
-        
+
+        if interruption is not None:
+            if chunk:
+                log.warning(
+                    "Source raised %s after %d records; persisting the %d buffered "
+                    "records before re-raising",
+                    type(interruption).__name__, total, len(chunk),
+                )
+                yield chunk
+            raise interruption
+
         if chunk:
             log.info(f"Yielding final chunk of {len(chunk)} records (total: {total})")
             yield chunk
@@ -712,54 +833,74 @@ class Plugin(Instance):
         :rtype: Tuple[int, Optional[datetime], Optional[datetime]]
         """
         
+        tally = _SaveTally()
+        for chunk_result in self._iter_save_records(
+                station_link, station_records, start_date, end_date, chunk_size
+        ):
+            tally.add(*chunk_result)
+        return tally.as_tuple()
+
+    def _iter_save_records(
+            self,
+            station_link,
+            station_records: Iterable[Dict[str, Any]],
+            start_date,
+            end_date,
+            chunk_size: Optional[int] = None,
+    ) -> Generator[Tuple[int, Optional[datetime], Optional[datetime]], None, None]:
+        """
+        The chunk-by-chunk engine behind :meth:`save_records`.
+
+        Yields ``(saved_count, earliest_time, latest_time)`` for each chunk
+        *after* it has been upserted, so a caller accumulating the results
+        holds an accurate total at every point — including the moment the
+        source raises and the exception comes out of this generator. That is
+        what lets :meth:`process_station` record how much *was* saved on a
+        run that then failed, instead of reporting zero.
+
+        Chunk boundaries are :attr:`SAVE_CHUNK_SIZE` records, a :data:`FLUSH`
+        yielded by the source, exhaustion, or an interruption — see
+        :meth:`_chunk_iterator`.
+        """
         log = self.get_logger()
-        
+
         station = station_link.station
         variable_mappings = list(station_link.get_variable_mappings() or [])
-        
+
         if not variable_mappings:
             log.warning("No variable mappings for station %s.", station.name)
-            return 0, None, None
-        
+            return
+
         chunk_size = chunk_size or self.SAVE_CHUNK_SIZE
-        
-        total_saved = 0
-        overall_earliest = None
-        overall_latest = None
-        chunk_count = 0
-        
-        # Process in chunks - works with both generators and lists
-        for chunk in self._chunk_iterator(station_records, chunk_size):
-            chunk_count += 1
-            
-            saved_count, chunk_earliest, chunk_latest = self._save_chunk(
-                station_link, chunk, variable_mappings, start_date, end_date, log
-            )
-            
-            total_saved += saved_count
-            
-            # Track overall time range
-            if chunk_earliest:
-                if overall_earliest is None or chunk_earliest < overall_earliest:
-                    overall_earliest = chunk_earliest
-            if chunk_latest:
-                if overall_latest is None or chunk_latest > overall_latest:
-                    overall_latest = chunk_latest
-            
-            log.debug(
-                "Processed chunk %d for station %s: %d records saved",
-                chunk_count, station.name, saved_count
-            )
-        
-        if total_saved == 0:
-            log.warning("No valid observation records for station %s.", station.name)
-        else:
-            log.info(
-                "Saved %d total records for station %s in %d chunks",
-                total_saved, station.name, chunk_count
-            )
-        
-        return total_saved, overall_earliest, overall_latest
+        tally = _SaveTally()
+        exhausted = False
+
+        try:
+            # Process in chunks - works with both generators and lists
+            for chunk in self._chunk_iterator(station_records, chunk_size):
+                chunk_result = self._save_chunk(
+                    station_link, chunk, variable_mappings, start_date, end_date, log
+                )
+                tally.add(*chunk_result)
+                log.debug(
+                    "Processed chunk %d for station %s: %d records saved",
+                    tally.chunks, station.name, chunk_result[0]
+                )
+                yield chunk_result
+            exhausted = True
+        finally:
+            # Runs on clean exhaustion and on the re-raise out of
+            # _chunk_iterator alike, so a run that saved something always
+            # gets its summary line. "No valid records" is only claimed
+            # when the source was actually read to the end — a source that
+            # failed before yielding anything is reported by the caller.
+            if tally.saved:
+                log.info(
+                    "Saved %d total records for station %s in %d chunks",
+                    tally.saved, station.name, tally.chunks
+                )
+            elif exhausted:
+                log.warning("No valid observation records for station %s.", station.name)
     
     # ---------- Orchestration ----------
     def process_station(self, station_link, initial_start_date=None, initial_end_date=None,
@@ -834,9 +975,9 @@ class Plugin(Instance):
             direction='pull',
         )
 
-        saved_obs_records_count = 0
-        earliest_time = None
-        latest_time = None
+        # Accumulated chunk by chunk, so the numbers survive an exception out
+        # of the save loop and the terminal activity log can carry them
+        tally = _SaveTally()
 
         # Duck-typed handover: the plugin may set this while listing its
         # source, and the terminal log records it. Re-initialised every run
@@ -867,15 +1008,16 @@ class Plugin(Instance):
                 # reaches COMPLETED instead of resting at STARTED.
                 station_records = []
 
-            # Use chunked save - handles generators efficiently
-            saved_obs_records_count, earliest_time, latest_time = self.save_records(
-                station_link,
-                station_records,
-                start_date,
-                end_date
-            )
+            # Chunked save - handles generators efficiently. Consumed chunk
+            # by chunk (rather than through save_records) so that if the
+            # source raises part-way, the tally still holds what was
+            # persisted before the exception reaches the handlers below.
+            for chunk_result in self._iter_save_records(
+                    station_link, station_records, start_date, end_date
+            ):
+                tally.add(*chunk_result)
             
-            if saved_obs_records_count == 0:
+            if tally.saved == 0:
                 log.info("No records saved for %s.", station_link)
                 activity_log.status = StationLinkActivityLog.ActivityStatus.COMPLETED
                 activity_log.success = True
@@ -883,13 +1025,11 @@ class Plugin(Instance):
             else:
                 log.info(
                     "Saved %d records for %s from %s to %s.",
-                    saved_obs_records_count, station_link, earliest_time, latest_time
+                    tally.saved, station_link, tally.earliest, tally.latest
                 )
                 activity_log.status = StationLinkActivityLog.ActivityStatus.COMPLETED
                 activity_log.success = True
-                activity_log.obs_start_time = earliest_time
-                activity_log.obs_end_time = latest_time
-                activity_log.message = f"Processed {saved_obs_records_count} records."
+                activity_log.message = f"Processed {tally.saved} records."
         
         except SoftTimeLimitExceeded as e:
             # Re-raised so the batch task's soft limit actually stops the
@@ -897,16 +1037,25 @@ class Plugin(Instance):
             # would be inert and the worker would run on to the hard kill
             activity_log.success = False
             activity_log.message = "Ingestion timed out (batch soft time limit exceeded)"
+            if tally.saved:
+                activity_log.message += f"; {tally.saved} records saved before the cut-off"
             activity_log.status = StationLinkActivityLog.ActivityStatus.FAILED
             stamp_failure(activity_log, e)
-            log.error("Ingestion for station %s timed out", station_link)
+            log.error("Ingestion for station %s timed out (%d records saved before the cut-off)",
+                      station_link, tally.saved)
             raise
         except Exception as e:
             error_msg = mark_failed(activity_log, e)
-            log.error("Error processing station %s: %s", station_link, error_msg)
+            log.error("Error processing station %s: %s (%d records saved before the failure)",
+                      station_link, error_msg, tally.saved)
         finally:
             activity_log.duration_ms = (time.monotonic() - start) * 1000
-            activity_log.records_count = saved_obs_records_count
+            activity_log.records_count = tally.saved
+            if tally.saved:
+                # Set on every terminal path, not only the clean one: a run
+                # cut short still saved a real range, and the log should say so
+                activity_log.obs_start_time = tally.earliest
+                activity_log.obs_end_time = tally.latest
             activity_log.sources_count = _sanitize_sources_count(
                 getattr(station_link, "adl_sources_count", None)
             )
@@ -914,7 +1063,7 @@ class Plugin(Instance):
             if not bypass_lock:
                 cache.delete(lock_key)
 
-        return saved_obs_records_count
+        return tally.saved
     
     def run_process(self, network_connection, initial_start_date=None) -> Dict[int, int]:
         """
