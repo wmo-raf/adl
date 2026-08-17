@@ -12,6 +12,13 @@ This file starts at 0.8.9. Earlier history is in the git log.
 
 ## [Unreleased]
 
+## [0.8.12] — 2026-08-17
+
+A bug-fix release. Records a plugin had already fetched could be lost when an
+ingestion run was cut short; they are now written before the run ends, and a
+plugin can ask for them to be written at its own natural boundaries. No
+migrations ship.
+
 ### Fixed
 
 - Records a plugin had already yielded are no longer lost when the run is cut
@@ -35,6 +42,24 @@ This file starts at 0.8.9. Earlier history is in the git log.
   runs only once the write is done, so a plugin can mark its own unit as
   processed truthfully. Plugins that never yield it are unaffected. See
   *Plugin API Reference → When records reach the database*.
+
+### Upgrade notes
+
+No migrations in this release. Nothing to do before upgrading.
+
+**What changes on a running deployment.** A station run that hits the batch soft
+time limit, or whose source fails part-way, now leaves the records it had
+already fetched in the database and reports them on its activity log
+(`records_count`, observation range, and "; N records saved before the
+cut-off" on the timeout message). Previously such a run reported 0 and kept
+nothing. If you have been reading FAILED / 0 rows as "no data was fetched",
+re-read them as "nothing survived" — from this release the two are told apart.
+
+**Plugins.** No code change is required. Plugins whose source unit is much
+smaller than a 500-record chunk (one file per observation, small API pages)
+should yield the new `adl.core.registries.FLUSH` marker after each unit so
+records are written as they arrive; `adl-ftp-plugin` does so from 0.11.1. See
+*Plugin API Reference → When records reach the database*.
 
 ## [0.8.11] — 2026-08-17
 
