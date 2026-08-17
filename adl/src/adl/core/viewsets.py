@@ -19,6 +19,7 @@ from .utils import (
     get_dispatch_channel_more_buttons,
     get_connection_list_more_buttons,
     get_extra_model_admin_link_buttons,
+    get_extra_model_admin_header_buttons,
 )
 
 ADLET_MODELS = []
@@ -211,6 +212,13 @@ class StationChooserViewSet(ChooserViewSet):
 
 
 class StationLinkInspectView(generic.InspectView):
+    def get_header_buttons(self):
+        # The plugin's extra pages for this station link, beside Edit/Delete —
+        # the same links StationLinkIndexView puts on the row menu
+        buttons = get_extra_model_admin_header_buttons(self.object)
+        buttons.extend(super().get_header_buttons())
+        return buttons
+    
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context["collection_status_panel"] = StationLinkCollectionStatusPanel()

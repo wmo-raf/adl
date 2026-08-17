@@ -12,7 +12,7 @@ from django.utils.functional import cached_property
 from django.utils.translation import gettext
 from pyoscar import OSCARClient
 from wagtail.admin.viewsets.model import ModelViewSet
-from wagtail.admin.widgets import ListingButton
+from wagtail.admin.widgets import HeaderButton, ListingButton
 
 from adl.core.registries import (
     station_link_viewset_registry,
@@ -283,29 +283,45 @@ def make_registrable_viewset(model_cls, **kwargs):
     return ViewSetCls()
 
 
+def _iter_extra_model_admin_links(instance):
+    """
+    Yields ``(label, url, icon_name, attrs)`` for each usable entry of an
+    instance's ``get_extra_model_admin_links()`` — models (connections,
+    station links) that expose extra admin pages. Entries missing a label
+    or url are skipped.
+    """
+    if not hasattr(instance, "get_extra_model_admin_links"):
+        return
+    for link in instance.get_extra_model_admin_links() or []:
+        label = link.get("label", None)
+        url = link.get("url", None)
+        icon_name = link.get("icon_name", "link")
+        attrs = link.get("kwargs", {}).get("attrs", {})
+        if label and url:
+            yield label, url, icon_name, attrs
+
+
 def get_extra_model_admin_link_buttons(instance):
     """
-    Builds ListingButtons from an instance's get_extra_model_admin_links(),
-    for models (connections, station links) that expose extra admin pages.
+    Builds ListingButtons (index-row "more" menu) from an instance's
+    get_extra_model_admin_links().
     """
-    buttons = []
-    if hasattr(instance, "get_extra_model_admin_links"):
-        extra_links = instance.get_extra_model_admin_links()
-        for link in extra_links:
-            label = link.get("label", None)
-            url = link.get("url", None)
-            icon_name = link.get("icon_name", "link")
-            attrs = link.get("kwargs", {}).get("attrs", {})
-            if label and url:
-                buttons.append(
-                    ListingButton(
-                        label,
-                        url=url,
-                        icon_name=icon_name,
-                        attrs=attrs,
-                    )
-                )
-    return buttons
+    return [
+        ListingButton(label, url=url, icon_name=icon_name, attrs=attrs)
+        for label, url, icon_name, attrs in _iter_extra_model_admin_links(instance)
+    ]
+
+
+def get_extra_model_admin_header_buttons(instance):
+    """
+    Builds HeaderButtons (inspect/edit page header) from an instance's
+    get_extra_model_admin_links() — the same links as the row menu, so a
+    page reachable from the listing is also reachable from the record.
+    """
+    return [
+        HeaderButton(label, url=url, icon_name=icon_name, attrs=attrs)
+        for label, url, icon_name, attrs in _iter_extra_model_admin_links(instance)
+    ]
 
 
 def get_connection_list_more_buttons(connection):

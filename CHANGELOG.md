@@ -10,6 +10,24 @@ Read that section before upgrading a deployment.
 
 This file starts at 0.8.9. Earlier history is in the git log.
 
+## [Unreleased]
+
+### Added
+
+- A station link's extra admin pages — the `get_extra_model_admin_links()` hook
+  a plugin overrides — now render on the station link's **inspect page header**
+  as well as on its listing row, so a page reachable from the list is also
+  reachable from the record itself. `StationLink` gains a documented default of
+  the hook (an empty list) mirroring the connection's, and the plugin guide
+  shows the per-instance gating pattern (offer the page only for links
+  configured a certain way).
+
+### Removed
+
+- `StationLink.get_extra_model_admin_buttons()`, a hook that was declared but
+  never rendered anywhere. No plugin implemented it; `get_extra_model_admin_links()`
+  is the one contract for both surfaces.
+
 ## [0.8.10] — 2026-08-12
 
 A maintenance release. The headline is a database durability fix that affects
