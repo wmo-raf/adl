@@ -44,6 +44,11 @@ itself:
        to avoid re-fetching the last saved record
 ```
 
+The resolved ``start_date`` is the **later** of ``get_start_date_from_db()``
+and ``StationLink.get_first_collection_date()`` — the configured collection
+start date is a floor the window never goes below — falling back to
+``get_default_start_date()`` when both are ``None``.
+
 ### Silent failure modes
 
 {meth}`~adl.core.registries.Plugin.save_records` drops records silently in

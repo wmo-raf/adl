@@ -12,6 +12,19 @@ This file starts at 0.8.9. Earlier history is in the git log.
 
 ## [Unreleased]
 
+### Changed
+
+- A station link's configured **collection start date** is now a floor on the
+  ingestion window instead of a first-run-only fallback. Each run resumes from the
+  later of the latest saved observation and that date, so moving the date forward
+  on a station with a large backlog (for example one that has been offline for
+  months) makes the next run skip the gap rather than fetch it all; the task log
+  says so when it happens. Existing rows are unaffected unless the date is later
+  than the latest saved record — the case in which it previously did nothing.
+  The date still never moves collection backwards. Plugins need no code change;
+  their field label and help text ("Initial collection start date… ignored if any
+  data has been collected") will be updated to match in their own releases.
+
 ### Added
 
 - A station link's extra admin pages — the `get_extra_model_admin_links()` hook

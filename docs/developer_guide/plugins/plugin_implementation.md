@@ -209,10 +209,12 @@ class TahmoStationLink(StationLink):
         blank=True,
         null=True,
         validators=[validate_start_date],
-        verbose_name=_("Initial Collection Start Date"),
+        verbose_name=_("Collection Start Date"),
         help_text=_(
-            "The date to start collecting data for the first run. "
-            "Ignored if data has already been collected for this station."
+            "Collection never starts before this date. On the first run it is "
+            "the start of the backfill; afterwards, moving it forward past the "
+            "latest saved record skips the gap. Leave empty to start from the "
+            "last hour."
         ),
     )
     
@@ -238,7 +240,8 @@ class TahmoStationLink(StationLink):
     
     def get_first_collection_date(self):
         """
-        ADL calls this to determine where to start if no prior data exists.
+        ADL uses this as a floor on the ingestion window: the run starts at
+        the later of this date and the latest saved observation.
         Return None to fall back to the default window.
         """
         return self.start_date
@@ -499,13 +502,16 @@ ADL determines the `start_date` and `end_date` passed to `get_station_data`
 through a chain of methods on the base `Plugin` class. You can override any of
 them.
 
-The default resolution order for `start_date` is:
+The default resolution of `start_date` is:
 
-1. **`get_start_date_from_db`** — latest `observation_time` already saved for
-   this station link (so ingestion always resumes from where it left off)
-2. **`station_link.get_first_collection_date()`** — the custom start date set
-   on the station link, if any (used for historical backfills)
-3. **`get_default_start_date`** — fallback when no prior data and no custom
+1. The **later** of **`get_start_date_from_db`** — the latest `observation_time`
+   already saved for this station link (so ingestion resumes from where it
+   left off) — and **`station_link.get_first_collection_date()`** — the
+   collection start date configured on the station link, if any. The
+   configured date is a floor: it starts the backfill on the first run, and
+   moving it forward past the latest saved record skips the gap. Either may be
+   `None`, in which case the other is used alone.
+2. **`get_default_start_date`** — fallback when no prior data and no configured
    date exists; base class defaults to one hour before `end_date`
 
 The TAHMO plugin overrides two of these:

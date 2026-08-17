@@ -63,3 +63,9 @@ manual.
 ![OSCAR Surface Stations Import Form](../_static/images/user/import_oscar_station_form.png)
 
 Then click on the `Import` button to import the station.
+
+```{seealso}
+Where collection starts for a station — and how to skip a large backlog — is
+set on the station's link to a connection. See
+[Station links: choosing where collection starts](manage_connections.md#station-links-choosing-where-collection-starts).
+```
