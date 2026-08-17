@@ -244,6 +244,24 @@ class TahmoStationLink(StationLink):
         return self.start_date
 ```
 
+A station link can also offer extra admin pages of its own — a preview or a
+per-station editor — through `get_extra_model_admin_links()`, the same hook and
+dict shape as on the connection. Core renders the links as buttons on the
+station link's row menu and on its inspect page header. The decision is per
+instance, so a page can be offered only for links configured a certain way;
+the hook runs on every listing row, so it must not perform I/O:
+
+```python
+    def get_extra_model_admin_links(self):
+        if self.listing_strategy != "direct_fetch" or not self.pk:
+            return []
+        return [{
+            "label": _("Direct Fetch Files"),
+            "url": reverse("ftp_direct_fetch_file_list", args=[self.pk]),
+            "icon_name": "doc-full-inverse",
+        }]
+```
+
 ### 4.3 Variable Mapping Model
 
 Each `StationLink` usually needs a per-variable mapping that tells ADL how to

@@ -763,7 +763,20 @@ class StationLink(PolymorphicModel, ClusterableModel):
         """
         return None
     
-    def get_extra_model_admin_buttons(self, classname=None):
+    def get_extra_model_admin_links(self):
+        """
+        Optional. Extra admin pages this station link offers, rendered by core
+        as buttons on the station link's index-row "more" menu and on its
+        inspect page header.
+
+        Return a list of dicts, each with ``label`` and ``url``, and optionally
+        ``icon_name`` and ``kwargs`` (``{"attrs": {...}}`` for extra HTML
+        attributes) — the same shape as ``NetworkConnection``'s hook of the
+        same name, so plugin authors learn one contract. Return an empty list
+        for links that have nothing to offer; the decision is per instance,
+        so a plugin can show a page only for links configured a certain way.
+        Must not perform I/O: it runs on every listing row.
+        """
         return []
 
     def check_station_source(self):
