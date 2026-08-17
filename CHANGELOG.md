@@ -12,6 +12,30 @@ This file starts at 0.8.9. Earlier history is in the git log.
 
 ## [Unreleased]
 
+### Fixed
+
+- Records a plugin had already yielded are no longer lost when the run is cut
+  short. `save_records` buffers records up to `SAVE_CHUNK_SIZE` (500) before
+  each bulk write, and previously that buffer was only written on a full chunk
+  or a clean end of the source: a batch soft time limit, or an upstream error
+  on the next fetch, threw the buffered records away. For a one-record-per-file
+  feed that could mean every file of a run downloaded and stamped as processed
+  by its plugin with nothing reaching the database. The buffer is now written
+  before the exception propagates, and a failed or timed-out run's activity log
+  carries the records that *were* saved (`records_count`, observation range,
+  and a note on the timeout message) instead of `0`.
+
+### Added
+
+- `adl.core.registries.FLUSH` — a marker a plugin can `yield` from
+  `get_station_data` between records to have the buffered records written
+  immediately. Meant for sources whose natural unit is much smaller than a
+  chunk (one file per observation, small API pages): yielding it after each
+  unit keeps fetched data out of memory-only limbo, and code after the `yield`
+  runs only once the write is done, so a plugin can mark its own unit as
+  processed truthfully. Plugins that never yield it are unaffected. See
+  *Plugin API Reference → When records reach the database*.
+
 ## [0.8.11] — 2026-08-17
 
 A small release. The headline is a change to how a station link's collection
