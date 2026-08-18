@@ -12,7 +12,7 @@ class CheckState(models.TextChoices):
     definition.
 
     Only ``OK``/``WARNING``/``FAILED`` are verdicts about severity; the other
-    five are statements of epistemic status (what the diagnostic could or
+    six are statements of epistemic status (what the diagnostic could or
     could not have observed) and must render grey, distinguished by wording.
     """
 
@@ -28,6 +28,10 @@ class CheckState(models.TextChoices):
     # The plugin does not implement this contract, or the underlying library
     # API is not the tested one
     UNSUPPORTED = "UNSUPPORTED", _("Unsupported")
+    # The layer has no subject on this connection — not a contract left
+    # unimplemented, but one that can never apply (an internal-source
+    # plugin has no host to reach and no credential to present)
+    NOT_APPLICABLE = "NOT_APPLICABLE", _("Not applicable")
     DISABLED = "DISABLED", _("Disabled")
     MISCONFIGURED = "MISCONFIGURED", _("Misconfigured")
 

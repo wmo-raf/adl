@@ -279,6 +279,9 @@ def connection_probe_source(request, connection_id):
     if not connection.source_probe_supported:
         messages.warning(
             request,
+            _("Observations are submitted to ADL directly, so there is no "
+              "source to probe.")
+            if not connection.has_external_source else
             _("This plugin does not implement the source-check contract, so "
               "there is nothing to probe."),
         )
@@ -481,6 +484,9 @@ def station_link_check_source(request, link_id):
     if not station_link.station_source_check_supported:
         messages.warning(
             request,
+            _("Observations are submitted to ADL directly, so there is no "
+              "source to check.")
+            if not station_link.network_connection.has_external_source else
             _("This plugin does not implement the station source check, so "
               "there is nothing to run."),
         )

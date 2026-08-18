@@ -96,10 +96,15 @@ a stale push-fed connection means its observers have gone quiet, which is the
 fault an operator actually wants named.
 
 ```{note}
-`has_external_source` is read by core as of the change tracked in
+`has_external_source` is read by core as of
 [#235](https://github.com/wmo-raf/adl/issues/235). Setting it on an older core
-is inert but harmless — an unread class attribute — so the declaration is
-correct to write in advance.
+is inert but harmless — an unread class attribute —
+so the declaration is correct to write in advance.
+
+Alongside the two layer verdicts, the declaration also withdraws the on-demand
+**Probe source** button on the connection's diagnostic page and the
+**Check source** button on each of its station links: there is no host to dial,
+so nothing offers to.
 ```
 
 ---

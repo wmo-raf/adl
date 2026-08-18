@@ -29,7 +29,7 @@ from django.core.exceptions import NON_FIELD_ERRORS, ValidationError
 from django.db.models import Count, Max, Q
 from django.urls import reverse
 from django.utils import timezone as dj_timezone
-from django.utils.translation import gettext as _
+from django.utils.translation import gettext as _, gettext_lazy
 from django_celery_beat.models import IntervalSchedule
 
 from adl.core.broker import (
@@ -91,6 +91,16 @@ _UNRESOLVED = object()
 # resting state is STALE, never FAILED.
 EVALUATED_LAYERS = (LAYER_SCHEDULER, LAYER_WORKER, LAYER_LOCKS,
                     LAYER_NETWORK, LAYER_SOURCE, LAYER_DATA)
+
+# The one core-authored line every external layer of an internal-source
+# connection reports. Fixed rather than plugin-supplied: a per-plugin string
+# is a second thing to get wrong, and a plugin that sets the boolean and
+# forgets the string would render a blank explanation.
+NO_EXTERNAL_SOURCE_MESSAGE = gettext_lazy(
+    "Observations are submitted to ADL directly, so there is no external "
+    "source to reach or authenticate against. This layer does not apply to "
+    "this connection."
+)
 
 # A probe result older than this is STALE — "not recently checked", excluded
 # from the headline. Deliberately different from the probe view's 60-second
@@ -926,6 +936,17 @@ class _ChecklistBuilder:
     # The slot -------------------------------------------------------------
 
     def _external_slot(self, layer_id, supported, unsupported_message):
+        if not self.connection.has_external_source:
+            # Decided before any evidence is gathered, and deliberately so:
+            # a fallback would lose to the layer-4/5 OK that every successful
+            # run of an internal-source plugin mints. The layer has no
+            # subject, so there is nothing here to observe.
+            return {
+                "state": CheckState.NOT_APPLICABLE,
+                "message": NO_EXTERNAL_SOURCE_MESSAGE,
+                "blocking": False,
+            }
+
         probe_row = self._probe_slot_row(layer_id)
 
         candidates = []

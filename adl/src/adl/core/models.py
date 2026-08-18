@@ -531,6 +531,20 @@ class NetworkConnection(PolymorphicModel, ClusterableModel):
        appear in the admin and ingestion will silently do nothing.
     """
     
+    #: Whether this connection's plugin pulls from an upstream source that
+    #: lives outside ADL — a host to reach and, usually, a credential to
+    #: present. ``True`` for every plugin that dials out.
+    #:
+    #: A plugin whose observations are submitted to ADL directly (an office
+    #: entry form, a field-observer app) sets this ``False``. It is the whole
+    #: declaration: layers 4 and 5 of the ingestion diagnostic then report
+    #: ``NOT_APPLICABLE`` instead of manufacturing a green verdict from a
+    #: run that never touched a network, and the on-demand probe buttons —
+    #: connection-scope and station-scope alike — disappear. Layers 1-3 and
+    #: layer 6 are unaffected; for such a plugin layer 6 is the interesting
+    #: one, since stale data means its observers have gone quiet.
+    has_external_source = True
+    
     name = models.CharField(max_length=255, unique=True, verbose_name=_("Name"), )
     network = models.ForeignKey(Network, on_delete=models.CASCADE, verbose_name=_("Network"))
     plugin = models.CharField(max_length=255, verbose_name=_("Plugin"),
@@ -656,8 +670,13 @@ class NetworkConnection(PolymorphicModel, ClusterableModel):
     def source_probe_supported(self):
         """True when this connection's plugin implements any part of the
         source-check contract — what decides whether the probe button exists
-        at all, without performing any I/O."""
+        at all, without performing any I/O.
+
+        A connection that declares no external source is never probeable,
+        whatever its class happens to define: there is no host to dial."""
         from adl.core.source_checks import connection_implements_check_source
+        if not self.has_external_source:
+            return False
         return (
             type(self).get_source_endpoint is not NetworkConnection.get_source_endpoint
             or connection_implements_check_source(self)
@@ -815,8 +834,13 @@ class StationLink(PolymorphicModel, ClusterableModel):
     def station_source_check_supported(self):
         """True when this station link's plugin implements the station-scope
         source check — what decides whether the check button exists at all,
-        without performing any I/O."""
+        without performing any I/O.
+
+        Gated on the connection's ``has_external_source`` first, for the same
+        reason the connection-scope probe is: there is nothing to check."""
         from adl.core.source_checks import station_link_implements_check_station_source
+        if not self.network_connection.has_external_source:
+            return False
         return station_link_implements_check_station_source(self)
     
     def fetch_latest_data(self):

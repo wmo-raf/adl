@@ -127,6 +127,20 @@ is optional. What each one means for your source archetype — and the rules a
 correct implementation follows — is in
 {doc}`diagnostic_contracts`.
 
+A plugin whose observations are **submitted to ADL directly** — an office entry
+form, a field-observer app, a webhook — has no host to reach and no credential
+to present, so neither method has a subject. Such a plugin implements neither
+and instead declares:
+
+```python
+class MyConnection(NetworkConnection):
+    has_external_source = False
+```
+
+Layers 4 and 5 then report **not applicable** rather than a verdict, and the
+on-demand source-probe buttons are withdrawn. See
+{ref}`the push-fed archetype <dc-push-fed>`.
+
 ### Required class attribute
 
 ```{important}
