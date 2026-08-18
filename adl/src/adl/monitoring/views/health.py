@@ -34,7 +34,12 @@ from ..constants import (
     LAYER_WORKER,
     PROBE_LAYER_IDS,
 )
-from ..health import EVALUATED_LAYERS, evaluate_connection_health, probe_age_minutes
+from ..health import (
+    EVALUATED_LAYERS,
+    NO_EXTERNAL_SOURCE_MESSAGE,
+    evaluate_connection_health,
+    probe_age_minutes,
+)
 from ..models import (
     NetworkConnectionHealth,
     NetworkConnectionHealthTransition,
@@ -279,8 +284,7 @@ def connection_probe_source(request, connection_id):
     if not connection.source_probe_supported:
         messages.warning(
             request,
-            _("Observations are submitted to ADL directly, so there is no "
-              "source to probe.")
+            NO_EXTERNAL_SOURCE_MESSAGE
             if not connection.has_external_source else
             _("This plugin does not implement the source-check contract, so "
               "there is nothing to probe."),
@@ -484,8 +488,7 @@ def station_link_check_source(request, link_id):
     if not station_link.station_source_check_supported:
         messages.warning(
             request,
-            _("Observations are submitted to ADL directly, so there is no "
-              "source to check.")
+            NO_EXTERNAL_SOURCE_MESSAGE
             if not station_link.network_connection.has_external_source else
             _("This plugin does not implement the station source check, so "
               "there is nothing to run."),

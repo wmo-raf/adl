@@ -11,7 +11,7 @@ misconfigured) render grey via --muted and are distinguished by wording.
             <td class="health-check__label">{{ check.label }}</td>
             <td class="health-check__state">
                 <span class="status-badge {% if check.coloured %}status-badge--{{ check.state|lower }}{% else %}status-badge--muted{% endif %}">
-                    {{ check.state }}
+                    {{ check.state_label }}
                 </span>
             </td>
             <td>

@@ -92,6 +92,15 @@ class HealthEvaluatorTestCase(TestCase):
     def evaluate(self, queue_health=HEALTHY_BROKER):
         return evaluate_connection_health(self.connection, queue_health=queue_health)
 
+    def observe(self, station_link, age):
+        """One stored observation for a station, aged into the past — what
+        layer 6's freshness roll-up reads."""
+        return ObservationRecordFactory(
+            station=station_link.station,
+            connection=self.connection,
+            time=dj_tz.now() - age,
+        )
+
     def check(self, checklist, check_id):
         matches = [c for c in checklist.checks if c.id == check_id]
         self.assertEqual(len(matches), 1, f"expected exactly one check {check_id!r}")
@@ -692,15 +701,12 @@ class NoExternalSourceTests(ExternalLayerTestCase):
 
     def setUp(self):
         super().setUp()
-        # The declaration a plugin makes on its NetworkConnection subclass
-        self.connection.has_external_source = False
-
-    def observe(self, station_link, age):
-        return ObservationRecordFactory(
-            station=station_link.station,
-            connection=self.connection,
-            time=dj_tz.now() - age,
-        )
+        # Declared on the class, exactly as a plugin declares it on its
+        # NetworkConnection subclass — an instance attribute would not
+        # survive the re-fetch a real request performs
+        patcher = patch.object(type(self.connection), "has_external_source", False)
+        patcher.start()
+        self.addCleanup(patcher.stop)
 
     def test_both_external_layers_report_not_applicable(self):
         self.make_healthy()
@@ -766,6 +772,16 @@ class NoExternalSourceTests(ExternalLayerTestCase):
 
         self.assertFalse(self.check(checklist, "network_path").coloured)
 
+    def test_the_badge_reads_as_prose_not_an_enum_token(self):
+        # The first state whose value is not already a word: the badge must
+        # show the label, or it reads NOT_APPLICABLE
+        self.make_healthy()
+
+        checklist = self.evaluate()
+
+        self.assertEqual(self.check(checklist, "network_path").state_label,
+                         "Not applicable")
+
     def test_the_probe_buttons_disappear(self):
         # Withdrawn even from a plugin that happens to implement the whole
         # contract: there is no host to dial, so nothing may offer to
@@ -779,9 +795,9 @@ class NoExternalSourceTests(ExternalLayerTestCase):
 
             # The same plugin with an external source keeps both buttons —
             # the declaration is what withdrew them, not the patches
-            self.connection.has_external_source = True
-            self.assertTrue(self.connection.source_probe_supported)
-            self.assertTrue(self.link.station_source_check_supported)
+            with patch.object(type(self.connection), "has_external_source", True):
+                self.assertTrue(self.connection.source_probe_supported)
+                self.assertTrue(self.link.station_source_check_supported)
 
 
 class SlotResolutionTests(ExternalLayerTestCase):
@@ -1195,13 +1211,6 @@ class DataLayerTests(HealthEvaluatorTestCase):
     """Layer 6 rolls up per-station data freshness: all stations affected
     FAILED, some WARNING, none OK — driven by the shared per-station
     status helper, never a second implementation."""
-
-    def observe(self, station_link, age):
-        return ObservationRecordFactory(
-            station=station_link.station,
-            connection=self.connection,
-            time=dj_tz.now() - age,
-        )
 
     def test_fresh_data_on_every_station_reports_ok(self):
         self.make_healthy()

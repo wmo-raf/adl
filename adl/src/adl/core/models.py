@@ -674,9 +674,9 @@ class NetworkConnection(PolymorphicModel, ClusterableModel):
 
         A connection that declares no external source is never probeable,
         whatever its class happens to define: there is no host to dial."""
-        from adl.core.source_checks import connection_implements_check_source
         if not self.has_external_source:
             return False
+        from adl.core.source_checks import connection_implements_check_source
         return (
             type(self).get_source_endpoint is not NetworkConnection.get_source_endpoint
             or connection_implements_check_source(self)
@@ -838,9 +838,9 @@ class StationLink(PolymorphicModel, ClusterableModel):
 
         Gated on the connection's ``has_external_source`` first, for the same
         reason the connection-scope probe is: there is nothing to check."""
-        from adl.core.source_checks import station_link_implements_check_station_source
         if not self.network_connection.has_external_source:
             return False
+        from adl.core.source_checks import station_link_implements_check_station_source
         return station_link_implements_check_station_source(self)
     
     def fetch_latest_data(self):

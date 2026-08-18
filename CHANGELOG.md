@@ -26,6 +26,12 @@ This file starts at 0.8.9. Earlier history is in the git log.
   source-probe buttons are withdrawn from the connection and its station
   links. (#235)
 
+### Changed
+
+- Diagnostic check badges now render each state's translated label rather
+  than its raw enum value. Every previous state was a single word, so the two
+  were indistinguishable; `NOT_APPLICABLE` is the first that is not. (#235)
+
 ### Upgrade notes
 
 - Ships one migration, `monitoring.0011`, which only widens the stored status

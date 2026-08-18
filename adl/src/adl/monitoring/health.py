@@ -237,6 +237,13 @@ class HealthCheck:
     superseded_message: Optional[str] = None
 
     @property
+    def state_label(self):
+        """The state's human, translated label — what the badge renders.
+        The raw value is an enum token, which reads as one only while every
+        state happens to be a single word."""
+        return CheckState(self.state).label
+
+    @property
     def coloured(self):
         """Colour carries the verdict axis only; epistemic states render grey."""
         return self.state in (CheckState.OK, CheckState.WARNING, CheckState.FAILED)
