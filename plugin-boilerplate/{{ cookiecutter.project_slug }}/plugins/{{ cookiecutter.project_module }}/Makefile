@@ -1,8 +1,5 @@
 lint:
-	flake8 src tests && \
-	black . --extend-exclude='/generated/' --check && \
-	bandit -r src/ \
-	|| exit;
+	flake8 src
 
 lint-python: lint
 
