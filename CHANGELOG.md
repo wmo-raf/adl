@@ -12,6 +12,31 @@ This file starts at 0.8.9. Earlier history is in the git log.
 
 ## [Unreleased]
 
+### Fixed
+
+- A connection whose plugin has no upstream source no longer reads a
+  fabricated green at layers 4 and 5 of the ingestion diagnostic. Observations
+  that are submitted to ADL directly never cross a network or present a
+  credential, yet every successful run minted an `OK` for both layers — and
+  because those verdicts are blocking, the ladder stopped there and never
+  walked the operator down to layer 6, where the real fault (nobody submitted
+  anything) lives. Such a plugin now declares `has_external_source = False` on
+  its `NetworkConnection` subclass; both layers report the new
+  `NOT_APPLICABLE` state, gathering no evidence at all, and the on-demand
+  source-probe buttons are withdrawn from the connection and its station
+  links. (#235)
+
+### Changed
+
+- Diagnostic check badges now render each state's translated label rather
+  than its raw enum value. Every previous state was a single word, so the two
+  were indistinguishable; `NOT_APPLICABLE` is the first that is not. (#235)
+
+### Upgrade notes
+
+- Ships one migration, `monitoring.0011`, which only widens the stored status
+  choices to include `NOT_APPLICABLE`. No data is rewritten.
+
 ## [0.8.12] — 2026-08-17
 
 A bug-fix release. Records a plugin had already fetched could be lost when an

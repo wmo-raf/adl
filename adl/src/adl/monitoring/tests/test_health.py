@@ -92,6 +92,15 @@ class HealthEvaluatorTestCase(TestCase):
     def evaluate(self, queue_health=HEALTHY_BROKER):
         return evaluate_connection_health(self.connection, queue_health=queue_health)
 
+    def observe(self, station_link, age):
+        """One stored observation for a station, aged into the past — what
+        layer 6's freshness roll-up reads."""
+        return ObservationRecordFactory(
+            station=station_link.station,
+            connection=self.connection,
+            time=dj_tz.now() - age,
+        )
+
     def check(self, checklist, check_id):
         matches = [c for c in checklist.checks if c.id == check_id]
         self.assertEqual(len(matches), 1, f"expected exactly one check {check_id!r}")
@@ -684,6 +693,113 @@ class LogEvidenceTests(ExternalLayerTestCase):
         self.assertNotEqual(self.check(checklist, "source_check").state, CheckState.OK)
 
 
+class NoExternalSourceTests(ExternalLayerTestCase):
+    """A connection whose plugin declares no upstream source: layers 4-5
+    have no subject, so they report NOT_APPLICABLE before any evidence is
+    gathered — never a green verdict manufactured from a run that touched
+    no network — and the ladder descends to layer 6."""
+
+    def setUp(self):
+        super().setUp()
+        # Declared on the class, exactly as a plugin declares it on its
+        # NetworkConnection subclass — an instance attribute would not
+        # survive the re-fetch a real request performs
+        patcher = patch.object(type(self.connection), "has_external_source", False)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def test_both_external_layers_report_not_applicable(self):
+        self.make_healthy()
+
+        checklist = self.evaluate()
+
+        for check_id in PROBE_CHECK_IDS:
+            check = self.check(checklist, check_id)
+            self.assertEqual(check.state, CheckState.NOT_APPLICABLE, check_id)
+            self.assertFalse(check.blocking, check_id)
+            self.assertIn("submitted to ADL directly", str(check.message))
+
+    def test_a_successful_run_no_longer_fabricates_a_green_verdict(self):
+        # The bug: every successful run of an internal-source plugin minted
+        # a layer-4 and a layer-5 OK, each asserting a hop that never happened
+        self.make_healthy()
+        self.log_row(age=timedelta(minutes=5), sources_count=3)
+
+        checklist = self.evaluate()
+
+        for check_id in PROBE_CHECK_IDS:
+            check = self.check(checklist, check_id)
+            self.assertEqual(check.state, CheckState.NOT_APPLICABLE, check_id)
+            self.assertIsNone(check.provenance, check_id)
+
+    def test_a_fresh_probe_row_is_not_gathered_either(self):
+        # Nothing is collected before the declaration is consulted, so even
+        # a stored probe row cannot resurrect the layer
+        self.make_healthy()
+        self.with_supported_contract()
+        self.probe_row("dns_resolution", "OK", age=timedelta(minutes=1))
+
+        checklist = self.evaluate()
+
+        self.assertEqual(self.check(checklist, "network_path").state,
+                         CheckState.NOT_APPLICABLE)
+
+    def test_not_applicable_never_seizes_the_headline(self):
+        self.make_healthy()
+        self.observe(self.link, timedelta(minutes=10))
+
+        checklist = self.evaluate()
+
+        self.assertEqual(checklist.status, CheckState.OK)
+        self.assertIsNone(checklist.first_failing_layer)
+
+    def test_the_ladder_descends_to_the_data_layer(self):
+        # The consequence that mattered: layers 4-5 were blocking, so an
+        # operator was never walked down to where the real fault lives
+        self.make_healthy()
+        self.observe(self.link, timedelta(hours=6))
+
+        checklist = self.evaluate()
+
+        self.assertEqual(checklist.status, CheckState.FAILED)
+        self.assertEqual(checklist.first_failing_layer, LAYER_DATA)
+        self.assertEqual(checklist.headline_check_id, "data_freshness")
+
+    def test_not_applicable_renders_grey(self):
+        self.make_healthy()
+
+        checklist = self.evaluate()
+
+        self.assertFalse(self.check(checklist, "network_path").coloured)
+
+    def test_the_badge_reads_as_prose_not_an_enum_token(self):
+        # The first state whose value is not already a word: the badge must
+        # show the label, or it reads NOT_APPLICABLE
+        self.make_healthy()
+
+        checklist = self.evaluate()
+
+        self.assertEqual(self.check(checklist, "network_path").state_label,
+                         "Not applicable")
+
+    def test_the_probe_buttons_disappear(self):
+        # Withdrawn even from a plugin that happens to implement the whole
+        # contract: there is no host to dial, so nothing may offer to
+        with patch("adl.core.source_checks.connection_implements_check_source",
+                   return_value=True), \
+             patch("adl.core.source_checks."
+                   "station_link_implements_check_station_source",
+                   return_value=True):
+            self.assertFalse(self.connection.source_probe_supported)
+            self.assertFalse(self.link.station_source_check_supported)
+
+            # The same plugin with an external source keeps both buttons —
+            # the declaration is what withdrew them, not the patches
+            with patch.object(type(self.connection), "has_external_source", True):
+                self.assertTrue(self.connection.source_probe_supported)
+                self.assertTrue(self.link.station_source_check_supported)
+
+
 class SlotResolutionTests(ExternalLayerTestCase):
     """One slot per external layer: freshest observation wins, ties go to
     the probe, and the superseded observation is retained with its
@@ -1095,13 +1211,6 @@ class DataLayerTests(HealthEvaluatorTestCase):
     """Layer 6 rolls up per-station data freshness: all stations affected
     FAILED, some WARNING, none OK — driven by the shared per-station
     status helper, never a second implementation."""
-
-    def observe(self, station_link, age):
-        return ObservationRecordFactory(
-            station=station_link.station,
-            connection=self.connection,
-            time=dj_tz.now() - age,
-        )
 
     def test_fresh_data_on_every_station_reports_ok(self):
         self.make_healthy()

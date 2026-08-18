@@ -49,6 +49,11 @@ class BaseContractDefaultTests(TestCase):
     def test_base_connection_does_not_support_the_probe(self):
         self.assertFalse(self.connection.source_probe_supported)
 
+    def test_the_base_declares_an_external_source(self):
+        # Every plugin that dials out gets the contract by default; only a
+        # push-fed plugin opts out
+        self.assertTrue(self.connection.has_external_source)
+
 
 class NormaliserTests(TestCase):
     """A plugin return is never trusted: anything that is not a well-formed

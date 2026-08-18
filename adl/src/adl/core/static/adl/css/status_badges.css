@@ -5,8 +5,9 @@
  * Built on Wagtail's CSS variables so the colours track the admin theme and
  * do not lie in dark mode. Colour carries the verdict axis only: OK/WARNING/
  * FAILED are coloured; the epistemic states (skipped, stale, unsupported,
- * disabled, misconfigured) all render grey and are distinguished by wording —
- * colouring them is exactly what would make a resting "stale" read as a fault.
+ * not applicable, disabled, misconfigured) all render grey and are
+ * distinguished by wording — colouring them is exactly what would make a
+ * resting "stale" read as a fault.
  */
 
 .status-badge {
@@ -40,6 +41,7 @@
 .status-badge--skipped,
 .status-badge--stale,
 .status-badge--unsupported,
+.status-badge--not_applicable,
 .status-badge--disabled,
 .status-badge--misconfigured,
 .status-badge--muted {
