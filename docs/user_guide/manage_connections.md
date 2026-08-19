@@ -38,6 +38,7 @@ plugin to associate with the network connection by selecting from the `Plugin` d
 that have been installed.
 ```
 
+(station-links-choosing-where-collection-starts)=
 ## Station links: choosing where collection starts
 
 Each station is attached to a connection through a **station link**. Most
@@ -45,7 +46,9 @@ plugins expose a **Collection Start Date** on the link. ADL never fetches data
 from before this date:
 
 - On the **first run** for a station it is the start of the backfill. Leave it
-  empty to start from the previous hour.
+  empty and the plugin picks its own default window — usually the previous hour
+  or the previous 24 hours; the field's help text on the station link states
+  which.
 - Afterwards, ADL resumes each run from the **later** of the last saved
   observation and this date. An old start date is therefore inert once data has
   been collected past it.
