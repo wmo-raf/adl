@@ -65,10 +65,17 @@ packages and other docker container build steps required by your plugin.
 The `adl_plugin_info.json` file is a json file, in your root plugin folder, containing metadata about your
 plugin. It should have the following JSON structure:
 
+```{note}
+The plugin's **version** does not belong here. It lives in exactly one place —
+`VERSION` in `setup.py` — which is where ADL reads it from, via the installed
+package metadata. A copy in this file would be free to drift out of step with
+the software, and across the fleet it did.
+```
+
+
 ```json
 {
   "name": "TODO",
-  "version": "TODO",
   "description": "TODO",
   "author": "TODO",
   "author_url": "TODO",
@@ -178,7 +185,8 @@ Include non-Python assets (templates, static files, locales) in the distribution
 
 ### `adl_plugin_info.json`
 
-Human-friendly plugin metadata used by ADL (name, version, author, URLs, license, contact).
+Human-friendly plugin metadata used by ADL (name, description, author, URLs,
+license, contact). **Not** the version — that lives in `setup.py`.
 
 ---
 
@@ -330,7 +338,7 @@ Include migrations if you define models (standard Django workflow).
 - `dev.Dockerfile` — dev image that installs your plugin into ADL.
 - `docker-compose.yml` — local dev stack (DB, Redis, app, Celery).
 - `.env.sample` — template env file for local runs.
-- `adl_plugin_info.json` — plugin metadata (name, version, URLs).
+- `adl_plugin_info.json` — plugin metadata (name, description, URLs); the version lives in `setup.py`.
 
 ---
 

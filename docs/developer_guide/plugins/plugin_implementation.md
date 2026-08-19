@@ -52,7 +52,7 @@ Scaffold your plugin with the cookiecutter template
 
 ```
 plugins/adl_tahmo_plugin/
-├── adl_plugin_info.json          # Plugin metadata (name, version)
+├── adl_plugin_info.json          # Plugin metadata (name, description)
 ├── build.sh                      # Called on container build/install
 ├── runtime_setup.sh              # Called on first container startup
 ├── uninstall.sh                  # Called on uninstall
