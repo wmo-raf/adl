@@ -1,6 +1,5 @@
 {
   "name": "{{ cookiecutter.project_name }}",
-  "version": "0.0.1",
   "description": "{{ cookiecutter.project_description }}",
   "author": "TODO",
   "author_url": "TODO",
