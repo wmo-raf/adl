@@ -8,6 +8,10 @@ ENV PLUGIN_BUILD_UID=${PLUGIN_BUILD_UID:-9999}
 ARG PLUGIN_BUILD_GID
 ENV PLUGIN_BUILD_GID=${PLUGIN_BUILD_GID:-9999}
 
+# The base image ends on a non-root user, but the remapping below needs root.
+# The trailing USER drops back down before CMD.
+USER root
+
 # If we aren't building as the same user that owns all the files in the base
 # image/installed plugins we need to chown everything first.
 COPY --from=base --chown=$PLUGIN_BUILD_UID:$PLUGIN_BUILD_GID /adl /adl
