@@ -214,7 +214,7 @@ class TahmoStationLink(StationLink):
             "Collection never starts before this date. On the first run it is "
             "the start of the backfill; afterwards, moving it forward past the "
             "latest saved record skips the gap. Leave empty to start from the "
-            "last hour."
+            "last 24 hours."
         ),
     )
     
@@ -245,6 +245,16 @@ class TahmoStationLink(StationLink):
         Return None to fall back to the default window.
         """
         return self.start_date
+```
+
+```{note}
+The closing sentence of that help text must match what the plugin actually does
+when `start_date` is empty. TAHMO overrides `get_default_start_date` to fall
+back 24 hours (see [Section 6.1](#date-window-overrides)), so its help text
+says "the last 24 hours". A plugin that keeps the base class default should say
+"the last hour" instead, and one that falls back to `now()` should say it
+collects only from now onwards. Everything before that sentence is identical in
+every plugin.
 ```
 
 A station link can also offer extra admin pages of its own — a preview or a
@@ -496,6 +506,7 @@ class TahmoPlugin(Plugin):
         )
 ```
 
+(date-window-overrides)=
 ### 6.1 Date-Window Overrides
 
 ADL determines the `start_date` and `end_date` passed to `get_station_data`
@@ -787,7 +798,7 @@ observation:
    resolves the registered plugin via `TahmoConnection.plugin_type` and calls
    `plugin.run_process(connection)`.
 5. For each enabled station link, ADL determines the date window using the
-   chain described in [Section 6.1](#61-date-window-overrides).
+   chain described in [Section 6.1](#date-window-overrides).
 6. ADL calls `get_station_data(station_link, start_date, end_date)`. The plugin
    calls the TAHMO API and returns a list of record dicts.
 7. ADL normalizes timestamps, walks the variable mappings, converts units where
