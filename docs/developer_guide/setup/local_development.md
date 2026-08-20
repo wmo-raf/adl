@@ -103,10 +103,24 @@ backups) are owned by your host user rather than root.
 make dev-build
 ```
 
-This builds the `dev` target from the `Dockerfile`. The builder stage installs
-all Python dependencies into `/adl/venv`. The dev stage copies only the venv
-— your local `./adl` directory is bind-mounted into the container at runtime
-so code changes are reflected immediately without rebuilding.
+This builds the `dev` target from the `Dockerfile` and tags it **`adl:dev`**.
+The builder stage installs all Python dependencies into `/adl/venv`. The dev
+stage copies only the venv — your local `./adl` directory is bind-mounted into
+the container at runtime so code changes are reflected immediately without
+rebuilding.
+
+```{note}
+The two targets carry two tags, and the difference matters outside this repo.
+`make build` produces **`adl:latest`** (the `prod` target, app source baked
+in); `make dev-build` produces **`adl:dev`** (source bind-mounted, absent from
+the image).
+
+Plugins build `FROM adl:latest` and mount only their own source, so they need
+the target that contains core. If a plugin's dev stack exits immediately
+complaining that `/adl/app/src/adl/manage.py` does not exist, you have an
+`adl:latest` left over from before this split, built from the dev target. Run
+`make build` once to replace it.
+```
 
 If you hit a BuildKit error such as:
 
@@ -275,7 +289,7 @@ adl/
 
 | Command                    | Description                               |
 |----------------------------|-------------------------------------------|
-| `make dev-build`           | Build the dev image                       |
+| `make dev-build`           | Build the dev image (`adl:dev`)           |
 | `make dev-up`              | Start the dev stack                       |
 | `make dev-down`            | Stop and remove dev containers            |
 | `make dev-stop`            | Stop dev containers                       |
