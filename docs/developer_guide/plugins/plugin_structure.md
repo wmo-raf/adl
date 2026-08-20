@@ -142,7 +142,9 @@ plugin-root/
 
 ### `dev.Dockerfile`
 
-- **Base image**: `FROM adl:latest` (inherits ADL Core with Django/Celery/etc.).
+- **Base image**: `FROM adl:latest` (inherits ADL Core with Django/Celery/etc.). Build it with `make build` in
+  the `adl` repo — `make dev-build` produces `adl:dev`, which leaves core's source out for bind-mounting and so
+  cannot serve as a plugin base.
 - **User/permissions**: Uses `PLUGIN_BUILD_UID/GID` so mounted volumes are writable from your host.
 - **Installs dev deps**: from `requirements/dev.txt` (linters, build tools).
 - **Installs the plugin**: Copies your code under `/adl/plugins/<module>/` then runs

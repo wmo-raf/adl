@@ -12,6 +12,20 @@ Every plugin scaffolded from the boilerplate includes its own
 development environment with hot-reload, without needing to touch the main ADL
 repository.
 
+### Prerequisite: an `adl:latest` that contains core
+
+The base image must be the one with core's source baked in. In your `adl`
+checkout:
+
+```bash
+make build
+```
+
+That produces `adl:latest` from the `prod` target. `make dev-build` produces a
+different image, `adl:dev`, whose source is bind-mounted rather than copied —
+useful for core development, useless as a plugin base, since a plugin's compose
+file mounts only the plugin. Building it does not disturb `adl:latest`.
+
 ### How it works
 
 The `dev.Dockerfile` builds on top of the `adl:latest` base image and installs
@@ -33,6 +47,10 @@ volumes:
 ### Step-by-step setup
 
 ```bash
+# 0. In your adl checkout: make sure adl:latest exists and carries core
+#    (see the prerequisite above)
+make build
+
 # 1. Scaffold (if you haven't already)
 pip install cookiecutter
 cookiecutter gh:wmo-raf/adl --directory plugin-boilerplate

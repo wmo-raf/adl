@@ -28,6 +28,17 @@ This file starts at 0.8.9. Earlier history is in the git log.
 
 ### Changed
 
+- `make dev-build` now tags its image **`adl:dev`** instead of `adl:latest`,
+  leaving `adl:latest` to mean the `prod` target only. The two targets are not
+  interchangeable — the dev target omits core's source, because the dev stack
+  bind-mounts it — yet both carried the same tag, so whichever of `make build`
+  and `make dev-build` you ran last decided whether every plugin's dev stack,
+  in every other repository, could start at all. Plugins build
+  `FROM adl:latest` and mount only themselves; they need the target that
+  contains core. If you develop plugins, run `make build` once to replace an
+  `adl:latest` left over from the dev target. Nothing else changes: the dev
+  stack builds and runs exactly as before, under its own tag. (#252)
+
 - Diagnostic check badges now render each state's translated label rather
   than its raw enum value. Every previous state was a single word, so the two
   were indistinguishable; `NOT_APPLICABLE` is the first that is not. (#235)

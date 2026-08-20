@@ -1,5 +1,16 @@
+# Overrides docker-compose.yml to build and run the `dev` target.
+#
+# Note the `image: adl:dev` on every service. The dev target deliberately does
+# NOT contain the app source -- it is bind-mounted below -- so an image built
+# from it is unusable as a base image for anything that does not also mount
+# core. Plugins build `FROM adl:latest` and mount only themselves, so if the
+# dev target were tagged `adl:latest` too, whichever of `make build` and
+# `make dev-build` you ran last would decide whether every plugin's dev stack
+# in every other repo could start. Two targets, two tags. See #252.
+
 services:
   adl:
+    image: adl:dev
     build:
       target: dev
     command: django-dev-no-attach
@@ -13,6 +24,7 @@ services:
       - "8000:8000"
 
   adl_celery_worker_default:
+    image: adl:dev
     build:
       target: dev
     command: celery-worker-dev
@@ -22,6 +34,7 @@ services:
       - ./adl:/adl/app
 
   adl_celery_worker_adl:
+    image: adl:dev
     build:
       target: dev
     command: celery-worker-adl
@@ -31,6 +44,7 @@ services:
       - ./adl:/adl/app
 
   adl_celery_worker_dispatch:
+    image: adl:dev
     build:
       target: dev
     command: celery-worker-dispatch
@@ -40,6 +54,7 @@ services:
       - ./adl:/adl/app
 
   adl_celery_beat:
+    image: adl:dev
     build:
       target: dev
     environment:
