@@ -170,3 +170,6 @@ cython_debug/
 .DS_Store
 
 # End of https://www.toptal.com/developers/gitignore/api/django
+
+# Redis snapshot written into the repo root by the dev stack's redis container
+dump.rdb
