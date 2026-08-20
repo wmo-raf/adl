@@ -552,6 +552,80 @@ class SourceProbeLayerTests(ExternalLayerTestCase):
                              CheckState.SKIPPED, check_id)
 
 
+class PushedSourceTests(ExternalLayerTestCase):
+    """A source that is real but that ADL never dials.
+
+    The archetype is an agent on a country server with no public IP: it
+    uploads to ADL, so layer 5 has a subject that can genuinely fail, while
+    layer 4 has no path of ADL's at all. Such a connection sets
+    ``dials_source = False`` and leaves ``has_external_source`` True.
+
+    What is being defended here is that a *local* pass over what already
+    arrived is never mistaken for a network exchange. Ingestion on these
+    connections completes normally and often — the run is a sweep of a
+    staging store — and each completed row would otherwise mint layer-4 and
+    layer-5 OK evidence claiming DNS, TCP and an authentication that never
+    happened, and (being fresher than any probe) would overrule the source's
+    own report of being dead.
+    """
+
+    def as_pushed(self):
+        patcher = patch.object(type(self.connection), "dials_source", False)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def test_network_path_is_not_applicable_and_never_blocks(self):
+        self.make_healthy()
+        self.as_pushed()
+
+        check = self.check(self.evaluate(), "network_path")
+
+        self.assertEqual(check.state, CheckState.NOT_APPLICABLE)
+        self.assertFalse(check.blocking)
+
+    def test_a_completed_run_is_not_evidence_about_either_external_layer(self):
+        self.make_healthy()
+        self.as_pushed()
+        self.with_supported_contract()
+        self.log_row(age=timedelta(minutes=5), sources_count=3)
+
+        checklist = self.evaluate()
+
+        self.assertEqual(self.check(checklist, "network_path").state,
+                         CheckState.NOT_APPLICABLE)
+        # Layer 5 rests where an unprobed external layer rests, rather than
+        # going green on a sweep of files that arrived hours ago
+        self.assertEqual(self.check(checklist, "source_check").state,
+                         CheckState.STALE)
+
+    def test_the_source_check_still_outranks_a_completed_run(self):
+        # The whole point: the plugin says the source is dead, a local pass
+        # completed more recently, and the plugin's verdict must stand
+        self.make_healthy()
+        self.as_pushed()
+        self.with_supported_contract()
+        self.probe_row("source_check", "FAILED", age=timedelta(minutes=10),
+                       layer="source", message="The machine has gone quiet.")
+        self.log_row(age=timedelta(minutes=1), sources_count=3)
+
+        checklist = self.evaluate()
+
+        self.assertEqual(self.check(checklist, "source_check").state,
+                         CheckState.FAILED)
+        self.assertEqual(checklist.first_failing_layer, LAYER_SOURCE)
+
+    def test_a_dialing_connection_keeps_its_log_evidence(self):
+        # The guard must not cost the nine plugins that do dial
+        self.make_healthy()
+        self.log_row(age=timedelta(minutes=5), sources_count=3)
+
+        checklist = self.evaluate()
+
+        for check_id in PROBE_CHECK_IDS:
+            self.assertEqual(self.check(checklist, check_id).state,
+                             CheckState.OK, check_id)
+
+
 class LogEvidenceTests(ExternalLayerTestCase):
     """What already happened counts as evidence about layers 4-5: successes
     are OK evidence, write-time-stamped failures are trusted, unstamped

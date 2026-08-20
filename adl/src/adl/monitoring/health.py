@@ -102,6 +102,15 @@ NO_EXTERNAL_SOURCE_MESSAGE = gettext_lazy(
     "this connection."
 )
 
+# The line layer 4 reports for a source ADL never dials. Its counterpart
+# above says the layer has no subject; this one says the subject exists but
+# reaches ADL by its own initiative, so there is no path of ADL's to probe.
+NOT_DIALED_MESSAGE = gettext_lazy(
+    "This source delivers to ADL rather than being fetched, so ADL opens no "
+    "network path to it and there is nothing here to probe. Whether the "
+    "source itself is reporting is answered by the layer below."
+)
+
 # A probe result older than this is STALE — "not recently checked", excluded
 # from the headline. Deliberately different from the probe view's 60-second
 # cooldown: freshness asks "can I still trust this", cooldown asks "may I
@@ -839,7 +848,26 @@ class _ChecklistBuilder:
 
     def _log_evidence(self, layer_id):
         """The freshest activity-log observation bearing on one external
-        layer, within 2x the connection's interval."""
+        layer, within 2x the connection's interval.
+
+        Withheld entirely from a connection ADL does not dial. Every line
+        this evidence produces is a claim about a network exchange *ADL
+        itself made* -- "reached the source host over the network",
+        "authenticated against the source", and, on the failure side, a
+        category drawn from what a server sent back. A run on a pushed
+        connection made no such exchange: it swept what had already arrived.
+        Reading it as layer-4 or layer-5 evidence would have the diagnostic
+        report a call that never happened, and -- because the freshest
+        observation wins -- would let a local sweep overrule what the source
+        itself last said about being alive.
+
+        Note the predicate is ``dials_source``, not "names an endpoint": a
+        plugin that dials but has not yet retrofitted ``get_source_endpoint``
+        still made a real connection, and its runs are still evidence.
+        """
+        if not self.connection.dials_source:
+            return None
+
         window_start = self.now - timedelta(seconds=self._log_freshness_seconds())
         for log in self._terminal_pull_logs(window_start):
             evidence = self._evidence_from_log(log, layer_id)
@@ -1025,6 +1053,18 @@ class _ChecklistBuilder:
                 "blocking": False}
 
     def _check_network_path(self):
+        if (self.connection.has_external_source
+                and not self.connection.dials_source):
+            # The source is real but ADL never reaches for it. Reporting
+            # this layer STALE would say "not recently checked" about a
+            # check that will never be run, and UNSUPPORTED would blame the
+            # plugin for not naming a host it deliberately has none of.
+            return {
+                "state": CheckState.NOT_APPLICABLE,
+                "message": NOT_DIALED_MESSAGE,
+                "blocking": False,
+            }
+
         return self._external_slot(
             4,
             supported=self.source_endpoint is not None,

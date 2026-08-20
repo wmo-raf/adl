@@ -38,6 +38,28 @@ This file starts at 0.8.9. Earlier history is in the git log.
   source-probe buttons are withdrawn from the connection and its station
   links. (#235)
 
+- A connection whose source pushes to ADL no longer reads a fabricated green
+  at layers 4 and 5 from its own ingestion runs. `has_external_source` asked
+  only whether an external source exists, so a plugin whose source is a real
+  remote machine that *delivers* to ADL — an ADL Agent on a country server
+  with no public IP — had to choose between claiming a network path it never
+  opens and giving up a layer that has a genuine subject. Worse, either way
+  its runs were read as evidence: such a run sweeps a staging store, dialling
+  and authenticating nothing, yet each completed one minted an `OK` for both
+  layers, and because the freshest observation wins, a drain of files that
+  arrived before the machine died overruled the machine's own report of being
+  dead — the connection read green exactly when the country was dark.
+
+  `NetworkConnection` gains a second declaration, `dials_source` (default
+  `True`, so nothing changes for the nine plugins that dial). A connection
+  setting it `False` reports layer 4 as `NOT_APPLICABLE` — there is no network
+  path of ADL's to probe — and contributes no activity-log evidence to either
+  external layer, leaving layer 5 to its plugin's own `check_source()`. The
+  predicate is deliberately this flag and not "names an endpoint": a plugin
+  that dials but has not yet retrofitted `get_source_endpoint()` still made a
+  real connection, and its runs are still evidence. See the new
+  *pushed-external* archetype in the plugin diagnostic-contracts guide. (#277)
+
 ### Changed
 
 - `make dev-build` now tags its image **`adl:dev`** instead of `adl:latest`,
