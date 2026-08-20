@@ -48,6 +48,31 @@ error(){
 }
 
 
+# Hand files to the container's runtime user.
+#
+# Only meaningful when running as root -- an image build, where pip and a
+# plugin's build.sh leave root-owned files that the unprivileged runtime user
+# must still be able to read. Running unprivileged there is nothing to fix:
+# whatever we just created is already ours.
+#
+# Attempting it anyway is worse than redundant. The trailing colon sets the
+# group to $DOCKER_USER's login group, and a non-root process cannot give a
+# file to a group it does not belong to. A plugin's dev stack deliberately
+# runs as the *host* user, so that bind-mounted plugin source stays writable
+# from the host -- so there the chown fails with EPERM and, under `set -e`,
+# takes the whole container down before the app ever starts. Even succeeding
+# would be wrong: it would take the developer's own source folder away from
+# them.
+chown_to_runtime_user(){
+  if [[ "$(id -u)" -ne 0 ]]; then
+    log "Running unprivileged as $(id -un); leaving ownership of $* alone."
+    return 0
+  fi
+
+  log "Giving $* to $DOCKER_USER."
+  chown -R "$DOCKER_USER": "$@"
+}
+
 install_plugins_from_manifest(){
   local manifest_file="${ADL_PLUGIN_LIST_FILE:-/adl/plugins.toml}"
 
