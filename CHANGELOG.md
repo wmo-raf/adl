@@ -12,6 +12,15 @@ This file starts at 0.8.9. Earlier history is in the git log.
 
 ## [Unreleased]
 
+## [0.8.13] — 2026-08-20
+
+A release about telling silence apart from health. Two shapes of connection
+were reading green at the ingestion diagnostic's external layers when nothing
+was reaching ADL at all: one whose observations are submitted directly, and
+one whose source is a real remote machine that pushes to us. Both now say what
+they are, and the diagnostic stops claiming network calls it never made. Ships
+one migration.
+
 ### Fixed
 
 - A plugin's dev stack no longer dies at startup when `PLUGIN_BUILD_GID` is
@@ -79,8 +88,29 @@ This file starts at 0.8.9. Earlier history is in the git log.
 
 ### Upgrade notes
 
-- Ships one migration, `monitoring.0011`, which only widens the stored status
-  choices to include `NOT_APPLICABLE`. No data is rewritten.
+Ships one migration, `monitoring.0011`, which only widens the stored status
+choices to include `NOT_APPLICABLE`. No data is rewritten.
+
+**What changes on a running deployment.** Connections whose plugin declares no
+upstream source, or declares that ADL does not dial it, stop showing green
+verdicts at layers 4 and 5 of the ingestion diagnostic and report
+`NOT_APPLICABLE` instead. Nothing about those connections has got worse — the
+green was never earned — but a dashboard read as "all layers green" will now
+read as "the external layers do not apply here, and the fault is at layer 6".
+That is the point: the operator is walked down to where the fault actually is.
+Connections whose plugin dials out are unaffected.
+
+**Plugin authors.** `dials_source` defaults to `True`, so no existing plugin
+changes behaviour and no plugin has to be edited. If your plugin's source is a
+remote machine that pushes to ADL rather than one ADL fetches from, read the
+new *pushed-external* archetype in *Developer Guide → Plugins → Ingestion
+Diagnostic Contracts*: declaring it is what stops your own ingestion runs being
+read as evidence that the remote machine is alive.
+
+**Plugin images.** Plugins build `FROM adl:latest`, so rebuild that image
+(`make build`) and then each plugin's stack before the new declarations take
+effect there. On an older core the flag is an unread class attribute: such a
+plugin still runs, it simply does not get the new behaviour.
 
 ## [0.8.12] — 2026-08-17
 
