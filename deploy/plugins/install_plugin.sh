@@ -180,7 +180,7 @@ if [[ ! "$folder" -ef "$plugin_install_dir" ]]; then
   fi
   folder="$ADL_PLUGIN_DIR/$plugin_name"
 fi
-chown -R "$DOCKER_USER": "$folder"
+chown_to_runtime_user "$folder"
 
 # Now we've copied the plugin into the plugin dir we can delete the tmp download dir
 # if we used it.
@@ -262,7 +262,5 @@ if [[ -d "$folder" ]]; then
     fi
 fi
 
-log "Fixing ownership of plugins from $(id -u) to $DOCKER_USER in $ADL_PLUGIN_DIR"
-chown -R "$DOCKER_USER": "$ADL_PLUGIN_DIR"
-chown -R "$DOCKER_USER": /adl/container_markers/
+chown_to_runtime_user "$ADL_PLUGIN_DIR" /adl/container_markers/
 log_success "Finished setting up ${plugin_name} successfully."

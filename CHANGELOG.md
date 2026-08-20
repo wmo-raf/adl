@@ -14,6 +14,18 @@ This file starts at 0.8.9. Earlier history is in the git log.
 
 ### Fixed
 
+- A plugin's dev stack no longer dies at startup when `PLUGIN_BUILD_GID` is
+  not the image's own group. `install_plugin.sh` ended by handing the plugin
+  folder and the container markers to `adl_docker_user` — including on the
+  runtime path, where it is not root and cannot give a file to a group it
+  does not belong to. On macOS the documented `PLUGIN_BUILD_GID=$(id -g)` is
+  `20`, so the chown returned `EPERM` and `set -e` took the container down
+  before the app started. The chown now happens only when running as root,
+  which is the only time it means anything: unprivileged, everything the
+  script just created is already owned by the user that created it, and
+  reassigning it would take a developer's own bind-mounted source folder
+  away from them.
+
 - A connection whose plugin has no upstream source no longer reads a
   fabricated green at layers 4 and 5 of the ingestion diagnostic. Observations
   that are submitted to ADL directly never cross a network or present a
