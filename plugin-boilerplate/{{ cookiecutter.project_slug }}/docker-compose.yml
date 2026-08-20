@@ -4,7 +4,12 @@
 # It is accessible at http://localhost .
 
 x-adl-variables: &adl-variables
-  DATABASE_URL: postgis://${ADL_DB_USER:-adl}:${ADL_DB_PASSWORD}@adl_db:5432/${ADL_DB_NAME:-adl}
+  # timescalegis, not postgis: core's observation tables are TimescaleDB
+  # hypertables, and the field that declares them only creates one under the
+  # timescale backend. On plain postgis they are ordinary tables, and the
+  # first continuous-aggregate migration fails -- so the stack never starts
+  # and the plugin's own tests never get a database to run against.
+  DATABASE_URL: timescalegis://${ADL_DB_USER:-adl}:${ADL_DB_PASSWORD}@adl_db:5432/${ADL_DB_NAME:-adl}
   REDIS_URL: redis://adl_redis:6379/0
   PLUGIN_RUNTIME_SETUP_MARKER: 0
   WAIT_TIMEOUT: 120
