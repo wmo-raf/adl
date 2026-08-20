@@ -36,11 +36,22 @@ of the seven surfaces apply to you at all.
 > **Does ADL dial out to fetch this data?**
 
 **No** — observations arrive at ADL by someone else's action and "ingestion" is
-a local sweep of what landed. A webhook receiver, an inbound API endpoint, a
-mobile collector app writing into ADL's own database, a file-drop-into-ADL
-plugin. This is the **internal / push-fed** archetype. Jump to
-{ref}`§0.1 <dc-push-fed>` — you are done in one line and the rest of the
-external half does not apply to you.
+a local sweep of what landed. Now ask a second question, because "we do not
+dial" splits into two archetypes that report differently:
+
+> **Is there a machine out there whose health is a real thing that can fail?**
+
+**No** — a webhook receiver, an inbound API endpoint, a mobile collector app
+writing into ADL's own database, a file-drop-into-ADL plugin. The "source" is
+whoever chose to submit, and there is nothing to be up or down. This is the
+**internal / push-fed** archetype. Jump to {ref}`§0.1 <dc-push-fed>` — you are
+done in one line and the rest of the external half does not apply to you.
+
+**Yes** — an ADL Agent on a country server, or any future integration where a
+remote machine we can name pushes to us. It has an operating system, a disk
+and a service, all of which can fail; it simply has no inbound path for ADL to
+reach. This is the **pushed-external** archetype. Jump to
+{ref}`§0.2 <dc-pushed-external>`.
 
 **Yes** — you have a host, and one of three shapes:
 
@@ -72,6 +83,14 @@ class MyConnection(NetworkConnection):
 That declaration is the whole external half of your retrofit. Layers 4 and 5
 are reported as **not applicable** — a distinct state from `UNSUPPORTED`, which
 means *not implemented yet*. Here there is nothing to implement, now or ever.
+
+```{important}
+If a named remote *machine* pushes to you — one with an OS, a disk and a
+service that can fail — you are {ref}`§0.2 <dc-pushed-external>`, not this
+section. Setting `has_external_source = False` there throws away a layer that
+had a real subject, and the fleet loses the difference between "the machine is
+down" and "nobody submitted anything today".
+```
 
 **Do not implement the four external surfaces "for completeness".** They have
 no subject:
@@ -109,6 +128,58 @@ so nothing offers to.
 
 ---
 
+(dc-pushed-external)=
+
+### 0.2 The pushed-external archetype
+
+Introduced with `adl-agent-plugin`, which is its first implementation.
+
+```python
+class MyConnection(NetworkConnection):
+    # There is a real machine out there ...
+    has_external_source = True
+    # ... but it reaches us; we never reach it.
+    dials_source = False
+```
+
+Two flags, because they answer two questions. `has_external_source` asks
+whether layers 4 and 5 have a subject at all; `dials_source` asks where their
+evidence may come from.
+
+What the second declaration buys you:
+
+- **Layer 4 reports `NOT_APPLICABLE`.** There is no host to resolve and no
+  port to connect to. Do not implement `get_source_endpoint()` — naming an
+  endpoint would have core dial a machine with no inbound path.
+- **Your completed ingestion runs stop being read as external evidence.**
+  This is the load-bearing half. On a dialling plugin a completed run is the
+  strongest layer-4 and layer-5 evidence in the system — real DNS, real
+  authentication, real bytes — and core says so. On a pushed connection a run
+  is a local sweep of what already arrived. Without the declaration, a sweep
+  of data that landed before the machine died mints a fresh layer-5 `OK`
+  reading *"a scheduled run authenticated against the source"*, and because
+  the freshest observation wins, it overrules the source's own report of being
+  dead. The connection reads green precisely when the country is dark.
+
+**Implement `check_source()`** — this is the archetype where it earns its
+place, and where {ref}`§4.2's <dc-check-source>` "make the cheapest read-only
+call" is answered by making none at all: report what the machine last told you
+(a heartbeat, a check-in, a delivery), read from your own rows.
+
+Two consequences follow, both good. The check cannot overrun core's probe
+budget, since it performs no I/O. And because the rule against probing on a
+schedule exists to protect partner hosts from being dialled on a timer, a check
+that dials nothing may be published on a schedule: write a `SourceProbeResult`
+row from your own periodic task and the layer stays current without an operator
+pressing **Probe source**. Publish on change, plus a refresh inside core's
+15-minute freshness window — a verdict, not a time series.
+
+`check_station_source()` still has no subject unless the remote machine reports
+per-station detail you can stand behind; `adl_sources_count` and exception
+stamping follow {ref}`§0.1 <dc-push-fed>`.
+
+---
+
 (dc-matrix)=
 
 ## 1. The matrix
@@ -119,15 +190,15 @@ Find your archetype's column and read down. Each cell links to the rule.
 place, deliberately; *audit* — review what you already have, add nothing new;
 *N/A* — the surface has no subject for this archetype.
 
-| Surface | HTTP/REST | Direct database | File-based | Internal / push-fed |
-|---|---|---|---|---|
-| {ref}`get_source_endpoint() <dc-endpoint>` | implement — data host & port | implement — `db_host`, `db_port` | implement — host & effective port | **N/A** — {ref}`§0.1 <dc-push-fed>` |
-| {ref}`check_source() <dc-check-source>` | implement — {ref}`cheapest read-only data call <dc-check-source-http>` | implement — {ref}`connect, read-only, one round trip <dc-check-source-db>` | implement — {ref}`connect and authenticate <dc-check-source-file>` | **N/A** |
-| {ref}`check_station_source() <dc-station-source>` | implement — {ref}`membership test or station resource <dc-station-source-http>` | implement — {ref}`two queries <dc-station-source-db>` | implement — {ref}`resolve path and list <dc-station-source-file>` | **N/A** |
-| {ref}`adl_sources_count <dc-sources-count>` | implement — parsed entries for the window | implement — `len(rows)` | implement — matching files | **N/A** |
-| {ref}`Exception stamping <dc-stamping>` | implement — {ref}`HTTP status <dc-stamping-http>` | implement — {ref}`SQLSTATE <dc-stamping-db>` | implement — {ref}`reply code <dc-stamping-file>` | decline |
-| {ref}`clean() <dc-clean>` | audit | audit | audit | audit |
-| {ref}`test_connection() <dc-test-connection>` | dispatch channels only | dispatch channels only | dispatch channels only | dispatch channels only |
+| Surface | HTTP/REST | Direct database | File-based | Pushed-external | Internal / push-fed |
+|---|---|---|---|---|---|
+| {ref}`get_source_endpoint() <dc-endpoint>` | implement — data host & port | implement — `db_host`, `db_port` | implement — host & effective port | **N/A** — {ref}`§0.2 <dc-pushed-external>` | **N/A** — {ref}`§0.1 <dc-push-fed>` |
+| {ref}`check_source() <dc-check-source>` | implement — {ref}`cheapest read-only data call <dc-check-source-http>` | implement — {ref}`connect, read-only, one round trip <dc-check-source-db>` | implement — {ref}`connect and authenticate <dc-check-source-file>` | implement — {ref}`what the machine last reported <dc-pushed-external>` | **N/A** |
+| {ref}`check_station_source() <dc-station-source>` | implement — {ref}`membership test or station resource <dc-station-source-http>` | implement — {ref}`two queries <dc-station-source-db>` | implement — {ref}`resolve path and list <dc-station-source-file>` | decline, unless the machine reports per-station | **N/A** |
+| {ref}`adl_sources_count <dc-sources-count>` | implement — parsed entries for the window | implement — `len(rows)` | implement — matching files | implement — items waiting locally | **N/A** |
+| {ref}`Exception stamping <dc-stamping>` | implement — {ref}`HTTP status <dc-stamping-http>` | implement — {ref}`SQLSTATE <dc-stamping-db>` | implement — {ref}`reply code <dc-stamping-file>` | decline | decline |
+| {ref}`clean() <dc-clean>` | audit | audit | audit | audit | audit |
+| {ref}`test_connection() <dc-test-connection>` | dispatch channels only | dispatch channels only | dispatch channels only | dispatch channels only | dispatch channels only |
 
 ```{note}
 `test_connection()` is a **dispatch-channel** surface. It lives on

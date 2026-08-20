@@ -545,6 +545,27 @@ class NetworkConnection(PolymorphicModel, ClusterableModel):
     #: one, since stale data means its observers have gone quiet.
     has_external_source = True
     
+    #: Whether ADL *reaches out* to that source. ``True`` for every plugin
+    #: that dials: ADL opens the connection, presents the credential and
+    #: pulls.
+    #:
+    #: A plugin whose source pushes to ADL instead -- a country server with
+    #: no public IP running an agent that uploads outbound -- sets this
+    #: ``False`` while leaving ``has_external_source`` ``True``. There is a
+    #: real source out there, with a machine and a service that can fail;
+    #: there is simply no host for ADL to dial.
+    #:
+    #: The two flags answer different questions and are read in different
+    #: places. ``has_external_source`` decides whether layers 4 and 5 have a
+    #: subject at all. This one decides where their evidence may come from:
+    #: a connection ADL does not dial reports layer 4 as ``NOT_APPLICABLE``
+    #: (there is no network path of ADL's to probe), and its completed
+    #: ingestion runs are never read as layer-4 or layer-5 evidence, because
+    #: such a run touched no network -- it swept what had already arrived.
+    #: Layer 5 stays live and is answered by the plugin's own
+    #: ``check_source()``, from whatever the source last told it.
+    dials_source = True
+    
     name = models.CharField(max_length=255, unique=True, verbose_name=_("Name"), )
     network = models.ForeignKey(Network, on_delete=models.CASCADE, verbose_name=_("Network"))
     plugin = models.CharField(max_length=255, verbose_name=_("Plugin"),
