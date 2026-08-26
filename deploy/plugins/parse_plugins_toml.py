@@ -4,7 +4,7 @@ Parse an ADL plugins.toml manifest and emit install_plugin.sh argument strings,
 one per enabled plugin. Output is read line-by-line by utils.sh and the Dockerfile.
 
 Output per enabled plugin (one line, space-delimited args):
-    --git https://github.com/org/repo.git#v1.2.0
+    --git https://github.com/org/repo.git#1.2.0
     --url https://example.com/plugin.tar.gz
     --url https://example.com/plugin.tar.gz --hash abc123def
     --folder /path/to/local/plugin

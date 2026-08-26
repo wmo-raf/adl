@@ -88,6 +88,26 @@ Tests are Django `TestCase` classes under `adl/src/adl/core/tests/` (factories v
 `factory_boy` in `factories.py`, shared stubs in `helpers.py`). Inside the container the
 equivalent is `adl test --keepdb -t /adl/app/src adl`.
 
+## Release tags
+
+ADL core and `adl-agent` tag releases with a leading `v` (`v0.8.13`) — the
+agent's CI triggers on `v*` and parses the version out of the ref, so the
+prefix is load-bearing there.
+
+**Plugin repos do not.** They tag bare — `0.13.0`, not `v0.13.0` — because a
+`plugins.toml` entry pins the tag verbatim:
+
+```toml
+[[plugins]]
+git = "https://github.com/wmo-raf/adl-ftp-plugin.git"
+tag = "0.13.0"
+```
+
+A `v` present in some plugin repos and absent in others is the character that
+gets missed when someone copies a tag into a manifest. Cut a plugin release
+with `gh release create 0.13.0`, which creates the tag server-side from one
+field, rather than tagging locally with `git tag -a`.
+
 ## Additional Documentation
 
 Check these files when working on the relevant areas:
