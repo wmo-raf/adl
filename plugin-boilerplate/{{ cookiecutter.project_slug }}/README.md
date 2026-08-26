@@ -90,3 +90,35 @@ The `adl`command is shorthand for `python manage.py` command. You can use it to 
 inside the container.
 
 
+
+## Releasing
+
+Tag releases with a **bare version number** — `0.2.0`, never `v0.2.0`.
+
+An ADL deployment installs this plugin by pinning the tag verbatim in its
+`plugins.toml`:
+
+```toml
+[[plugins]]
+name = "{{ cookiecutter.project_name }}"
+git  = "https://github.com/wmo-raf/{{ cookiecutter.project_slug }}.git"
+tag  = "0.2.0"
+```
+
+Every ADL plugin tags this way, so the field reads the same everywhere and
+there is no stray `v` to drop or add by mistake. (ADL core and `adl-agent`
+tag with a `v`; they are not installed through `plugins.toml`, and the
+agent's CI depends on the prefix. Don't copy their style here.)
+
+Cut the release with `gh`, which creates the tag server-side from the same
+field as the release name:
+
+```bash
+gh release create 0.2.0 --title "{{ cookiecutter.project_name }} 0.2.0" --notes "..."
+```
+
+Prefer this over `git tag -a v0.2.0 && git push origin v0.2.0` — tagging
+locally is where a stray `v` gets typed from muscle memory.
+
+Before tagging, make sure `VERSION` in `plugins/{{ cookiecutter.project_module }}/setup.py`
+matches the tag.
