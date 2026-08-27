@@ -12,6 +12,60 @@ This file starts at 0.8.9. Earlier history is in the git log.
 
 ## [Unreleased]
 
+### Fixed
+
+- **Observations were rejected for arriving behind the newest record ADL held,
+  and their files were stamped so they were never retried.** Timestamp
+  validation compared each record against the resolved window `start_date`,
+  which is derived from the newest observation already stored. That value
+  answers "the newest thing I hold"; the check read it as "everything older, I
+  already hold". Those are the same statement only when a station's history has
+  no holes, so any record arriving to fill a gap was discarded — and for a
+  file-staging plugin the file was still stamped `processed_at` with
+  `values_saved = 0`, which is never re-read. The lower bound is now the
+  station link's **Collection Start Date** (`get_first_collection_date()`), the
+  one an operator actually sets, and records below the high-water mark are
+  saved normally.
+
+  This most visibly affected the ADL Agent, which uploads newest-first *by
+  design* so that history fills in behind, making a gap the normal state rather
+  than the exception: after the first current file landed, every backlog file
+  behind it was dropped on arrival. It also silently disabled re-processing —
+  re-decoding a file older than the station's newest record produced nothing.
+
+- The `end_date` upper bound on timestamp validation has been removed. For
+  every plugin using the default `get_default_end_date` it was unreachable
+  (`end_date` always falls after `now`, so the future-timestamp check bound
+  first), and for a plugin overriding it to floor at the current hour it
+  discarded up to an hour of the freshest data returned. `observation_time` in
+  the future is still rejected — that check is unchanged and is now the only
+  upper bound.
+
+### Changed
+
+- `Plugin.save_records()` no longer takes `start_date` and `end_date`. They
+  were only ever read by the two bound checks above and are now unused. No
+  plugin in the ADL plugin set calls this method directly; the window is still
+  resolved and still passed to `get_station_data()` exactly as before.
+
+### Upgrade notes
+
+No migrations.
+
+Ingestion now accepts records older than the newest one already stored. Two
+consequences worth knowing before upgrading:
+
+- **Stations with no Collection Start Date configured have no lower bound at
+  all.** If a source is known to emit bad historical timestamps, set that field
+  on the station link — it is the supported way to express "never store data
+  before this date".
+- **Data already dropped is not recovered by upgrading.** For file-staging
+  plugins, the affected files are the ones stamped as processed with zero
+  values saved; re-processing them re-runs the drain and lands their data.
+  Re-process *after* upgrading, never before — a re-process against the old
+  code re-stamps the files and destroys the only marker identifying which ones
+  were affected.
+
 ## [0.8.13] — 2026-08-20
 
 A release about telling silence apart from health. Two shapes of connection

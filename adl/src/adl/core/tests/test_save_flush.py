@@ -48,9 +48,7 @@ class SaveFlushTestCase(TestCase):
         }
 
     def save(self, source, **kwargs):
-        return self.plugin.save_records(
-            self.link, source, self.window_start, self.window_end, **kwargs
-        )
+        return self.plugin.save_records(self.link, source, **kwargs)
 
 
 class InterruptionFlushTests(SaveFlushTestCase):
