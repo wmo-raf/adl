@@ -342,8 +342,19 @@ class Plugin(Instance):
     
         .. warning::
             Records with a missing or non-:class:`datetime` ``observation_time``,
-            timestamps outside ``[start_date, end_date]``, or future timestamps are
-            silently dropped by :meth:`save_records`. No exception is raised.
+            timestamps before the station link's configured collection start
+            date, or future timestamps are silently dropped by
+            :meth:`save_records`. No exception is raised.
+
+        .. note::
+            ``start_date`` and ``end_date`` shape what you *request* from the
+            source; they are not an acceptance rule. A record older than
+            ``start_date`` is still saved, provided it is not before the
+            station's collection start date. This is deliberate: ``start_date``
+            is derived from the newest observation already stored, so rejecting
+            against it would discard exactly the records that fill a gap behind
+            it — the normal case for a source that delivers newest-first, or one
+            that pushes files to ADL rather than being asked.
             """
         raise NotImplementedError
     
@@ -584,8 +595,7 @@ class Plugin(Instance):
             station,
             variable_mappings: List,
             tz,
-            start_date,
-            end_date,
+            collection_start_date,
             log: TaskLogger
     ) -> Tuple[List[Any], Dict[str, List], Optional[datetime]]:
         """
@@ -593,9 +603,16 @@ class Plugin(Instance):
         objects for each variable mapping that resolves successfully.
     
         Returns ``([], {}, None)`` for any record that fails validation
-        (missing or invalid ``observation_time``, out-of-window timestamp,
-        future timestamp). Unit conversion failures on individual mappings are
-        also silently skipped.
+        (missing or invalid ``observation_time``, a timestamp before
+        ``collection_start_date``, or a future timestamp). Unit conversion
+        failures on individual mappings are also silently skipped.
+
+        ``collection_start_date`` is the station link's configured collection
+        start date (``get_first_collection_date()``), or ``None`` when none is
+        set — in which case there is no lower bound at all. It is deliberately
+        *not* the resolved window ``start_date``: that is a high-water mark of
+        what has already been saved, and using it here would reject any record
+        arriving to fill a hole behind it.
         """
         from adl.core.models import ObservationRecord
         
@@ -627,17 +644,11 @@ class Plugin(Instance):
         # Normalize to aware station-local time
         obs_time = make_record_timezone_aware(obs_time, tz)
         
-        if obs_time < start_date:
+        if collection_start_date and obs_time < collection_start_date:
             log.warning(
-                "Rejected timestamp %s before start_date %s for station %s",
-                obs_time, start_date, station.name
-            )
-            return [], {}, None
-        
-        if obs_time > end_date:
-            log.warning(
-                "Rejected timestamp %s after end_date %s for station %s",
-                obs_time, end_date, station.name
+                "Rejected observation %s for station %s: before the collection "
+                "start date %s",
+                obs_time, station.name, collection_start_date
             )
             return [], {}, None
         
@@ -715,8 +726,7 @@ class Plugin(Instance):
             station_link,
             chunk_records: List[Dict[str, Any]],
             variable_mappings: List,
-            start_date,
-            end_date,
+            collection_start_date,
             log: TaskLogger
     ) -> Tuple[int, Optional[datetime], Optional[datetime]]:
         """
@@ -739,7 +749,8 @@ class Plugin(Instance):
         
         for record in chunk_records:
             obs_records, qc_results, obs_time = self._process_single_record(
-                record, station_link, station, variable_mappings, tz, start_date, end_date, log
+                record, station_link, station, variable_mappings, tz,
+                collection_start_date, log
             )
             
             if obs_time:
@@ -783,8 +794,6 @@ class Plugin(Instance):
             self,
             station_link,
             station_records: Iterable[Dict[str, Any]],
-            start_date,
-            end_date,
             chunk_size: Optional[int] = None
     ) -> Tuple[int, Optional[datetime], Optional[datetime]]:
         """
@@ -798,8 +807,10 @@ class Plugin(Instance):
         For each record the method:
     
         1. Validates and normalizes ``observation_time`` to a timezone-aware
-           station-local datetime. Records with a missing, non-:class:`datetime`,
-           out-of-window, or future timestamp are silently dropped.
+           station-local datetime. Records with a missing or
+           non-:class:`datetime` timestamp, a timestamp before the station
+           link's configured collection start date, or a future timestamp are
+           silently dropped.
         2. Iterates the station link's variable mappings and looks up
            ``record[mapping.source_parameter_name]`` for each one.
         3. Converts the value from ``mapping.source_parameter_unit`` to the ADL
@@ -817,12 +828,6 @@ class Plugin(Instance):
             and timezone are used for normalization.
         :param station_records: An iterable (list or generator) of raw record dicts
             as returned by :meth:`get_station_data`.
-        :param start_date: The inclusive start of the accepted time window. Records
-            before this are silently dropped.
-        :type start_date: datetime
-        :param end_date: The inclusive end of the accepted time window. Records
-            after this are silently dropped.
-        :type end_date: datetime
         :param chunk_size: Number of records to process per database batch.
             Defaults to :attr:`SAVE_CHUNK_SIZE`.
         :type chunk_size: int, optional
@@ -835,7 +840,7 @@ class Plugin(Instance):
         
         tally = _SaveTally()
         for chunk_result in self._iter_save_records(
-                station_link, station_records, start_date, end_date, chunk_size
+                station_link, station_records, chunk_size
         ):
             tally.add(*chunk_result)
         return tally.as_tuple()
@@ -844,8 +849,6 @@ class Plugin(Instance):
             self,
             station_link,
             station_records: Iterable[Dict[str, Any]],
-            start_date,
-            end_date,
             chunk_size: Optional[int] = None,
     ) -> Generator[Tuple[int, Optional[datetime], Optional[datetime]], None, None]:
         """
@@ -871,6 +874,10 @@ class Plugin(Instance):
             log.warning("No variable mappings for station %s.", station.name)
             return
 
+        # Resolved once per run rather than per record: it is an overridable
+        # method on the station link, and a plugin is free to make it a query.
+        collection_start_date = self._get_station_first_collection_date(station_link)
+        
         chunk_size = chunk_size or self.SAVE_CHUNK_SIZE
         tally = _SaveTally()
         exhausted = False
@@ -879,7 +886,7 @@ class Plugin(Instance):
             # Process in chunks - works with both generators and lists
             for chunk in self._chunk_iterator(station_records, chunk_size):
                 chunk_result = self._save_chunk(
-                    station_link, chunk, variable_mappings, start_date, end_date, log
+                    station_link, chunk, variable_mappings, collection_start_date, log
                 )
                 tally.add(*chunk_result)
                 log.debug(
@@ -1013,7 +1020,7 @@ class Plugin(Instance):
             # source raises part-way, the tally still holds what was
             # persisted before the exception reaches the handlers below.
             for chunk_result in self._iter_save_records(
-                    station_link, station_records, start_date, end_date
+                    station_link, station_records
             ):
                 tally.add(*chunk_result)
             

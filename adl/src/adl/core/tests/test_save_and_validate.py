@@ -1,6 +1,7 @@
 from datetime import datetime, timedelta, timezone as py_tz
 
 from django.test import TestCase
+from django.utils import timezone as dj_timezone
 
 from adl.core.models import ObservationRecord
 from .factories import (
@@ -34,7 +35,7 @@ class SaveAndValidateTests(TestCase):
         self.plugin.records = [{"observation_time": ts, "temp_K": 293.15}]
 
         total_saved, earliest, latest = self.plugin.save_records(
-            self.link, self.plugin.records, self.window_start, self.window_end
+            self.link, self.plugin.records
         )
         self.assertEqual(total_saved, 1)
         self.assertIsNotNone(earliest)
@@ -50,7 +51,7 @@ class SaveAndValidateTests(TestCase):
         self.plugin.records = [{"observation_time": ts, "temp_K": "oops"}]
 
         total_saved, earliest, latest = self.plugin.save_records(
-            self.link, self.plugin.records, self.window_start, self.window_end
+            self.link, self.plugin.records
         )
         self.assertEqual(total_saved, 0)
         self.assertEqual(ObservationRecord.objects.count(), 0)
@@ -59,18 +60,55 @@ class SaveAndValidateTests(TestCase):
         self.plugin.records = [{"temp_K": 300.0}]  # no observation_time
 
         total_saved, earliest, latest = self.plugin.save_records(
-            self.link, self.plugin.records, self.window_start, self.window_end
+            self.link, self.plugin.records
         )
         self.assertEqual(total_saved, 0)
         self.assertEqual(ObservationRecord.objects.count(), 0)
 
-    def test_out_of_window_record_is_dropped(self):
-        # A valid record whose timestamp falls before the accepted window
-        ts = self.window_start - timedelta(hours=2)
+    def test_record_before_the_collection_start_date_is_dropped(self):
+        # The collection start date is the only lower bound: an operator
+        # saying "never store anything older than this".
+        collection_start = datetime(2025, 1, 1, 0, 0, tzinfo=py_tz.utc)
+        self.link.get_first_collection_date = lambda: collection_start
+
+        ts = collection_start - timedelta(hours=2)
         self.plugin.records = [{"observation_time": ts, "temp_K": 293.15}]
 
         total_saved, earliest, latest = self.plugin.save_records(
-            self.link, self.plugin.records, self.window_start, self.window_end
+            self.link, self.plugin.records
+        )
+        self.assertEqual(total_saved, 0)
+        self.assertEqual(ObservationRecord.objects.count(), 0)
+
+    def test_record_older_than_stored_data_is_saved(self):
+        """A gap behind the newest record must still be fillable.
+
+        This is the regression this whole change exists for. ``start_date``
+        is resolved from the newest observation already stored, so validating
+        against it rejected exactly the records that fill a hole behind it —
+        silently discarding the backlog of any source that delivers
+        newest-first or pushes files to ADL rather than being asked.
+        """
+        newest = datetime(2025, 6, 1, 12, 0, tzinfo=py_tz.utc)
+        self.plugin.records = [{"observation_time": newest, "temp_K": 293.15}]
+        self.plugin.save_records(self.link, self.plugin.records)
+        self.assertEqual(ObservationRecord.objects.count(), 1)
+
+        # A week older than anything held, and with no collection start date
+        # configured there is no lower bound to fall foul of.
+        backfill = newest - timedelta(days=7)
+        self.plugin.records = [{"observation_time": backfill, "temp_K": 294.15}]
+        total_saved, _, _ = self.plugin.save_records(self.link, self.plugin.records)
+
+        self.assertEqual(total_saved, 1)
+        self.assertEqual(ObservationRecord.objects.count(), 2)
+
+    def test_future_record_is_dropped(self):
+        ts = dj_timezone.now() + timedelta(hours=2)
+        self.plugin.records = [{"observation_time": ts, "temp_K": 293.15}]
+
+        total_saved, _, _ = self.plugin.save_records(
+            self.link, self.plugin.records
         )
         self.assertEqual(total_saved, 0)
         self.assertEqual(ObservationRecord.objects.count(), 0)
@@ -80,11 +118,11 @@ class SaveAndValidateTests(TestCase):
 
         # Insert
         self.plugin.records = [{"observation_time": ts, "temp_K": 293.15}]  # ~20C
-        self.plugin.save_records(self.link, self.plugin.records, self.window_start, self.window_end)
+        self.plugin.save_records(self.link, self.plugin.records)
 
         # Update same natural key => 294.15K (~21C)
         self.plugin.records = [{"observation_time": ts, "temp_K": 294.15}]
-        self.plugin.save_records(self.link, self.plugin.records, self.window_start, self.window_end)
+        self.plugin.save_records(self.link, self.plugin.records)
 
         self.assertEqual(ObservationRecord.objects.count(), 1)
         rec = ObservationRecord.objects.get()

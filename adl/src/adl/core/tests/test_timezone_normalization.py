@@ -1,4 +1,4 @@
-from datetime import datetime, timezone as py_tz
+from datetime import datetime
 
 from django.test import TestCase
 
@@ -24,9 +24,7 @@ class TimezoneNormalizationTests(TestCase):
 
         naive_local = datetime(2025, 1, 1, 12, 0)  # naive, assumed station-local
         plugin.records = [{"observation_time": naive_local, "temp_K": 300.0}]
-        window_start = datetime(2025, 1, 1, 0, 0, tzinfo=py_tz.utc)
-        window_end = datetime(2025, 1, 2, 0, 0, tzinfo=py_tz.utc)
-        plugin.save_records(link, plugin.records, window_start, window_end)
+        plugin.save_records(link, plugin.records)
 
         rec = ObservationRecord.objects.get()
         # Should be 09:00 UTC after interpreting naive as Africa/Nairobi time
