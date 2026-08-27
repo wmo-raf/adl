@@ -12,6 +12,16 @@ This file starts at 0.8.9. Earlier history is in the git log.
 
 ## [Unreleased]
 
+## [0.8.14] — 2026-08-27
+
+A release about a claim core was making on evidence that did not support it.
+Ingestion refused any observation older than the newest one it already held,
+mistaking a high-water mark for a guarantee that everything below it had
+arrived. Wherever a station's history had a hole, the records sent to fill it
+were dropped — permanently, since the file that carried them was stamped as
+processed. The floor is now the Collection Start Date, a claim an operator
+actually made. A patch bump; no migrations, and no plugin has to be edited.
+
 ### Fixed
 
 - **Observations were rejected for arriving behind the newest record ADL held,
@@ -34,12 +44,13 @@ This file starts at 0.8.9. Earlier history is in the git log.
   re-decoding a file older than the station's newest record produced nothing.
 
 - The `end_date` upper bound on timestamp validation has been removed. For
-  every plugin using the default `get_default_end_date` it was unreachable
-  (`end_date` always falls after `now`, so the future-timestamp check bound
-  first), and for a plugin overriding it to floor at the current hour it
-  discarded up to an hour of the freshest data returned. `observation_time` in
-  the future is still rejected — that check is unchanged and is now the only
-  upper bound.
+  every plugin using the default `get_default_end_date` it was unreachable:
+  `end_date` always falls after `now`, so the future-timestamp check bound
+  first. A plugin overriding it to floor at the current hour could reach it,
+  but only in principle — such a plugin passes the same `end_date` to its
+  source, so the response is bounded at the request. Dead code that read as a
+  live guard. `observation_time` in the future is still rejected — that check
+  is unchanged and is now the only upper bound.
 
 ### Changed
 
