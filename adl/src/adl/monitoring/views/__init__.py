@@ -16,7 +16,7 @@ from wagtail.admin.paginator import WagtailPaginator
 from adl.core.broker_connection import bounded_broker_connection, bounded_inspect
 from adl.core.models import NetworkConnection, DispatchChannel, StationLink
 from adl.core.tasks import INGESTION_BATCH_TASK_NAME
-from adl.core.utils import get_object_or_none
+from adl.core.utils import get_object_or_none, get_station_link_view_data_url
 from ..constants import NETWORK_PLUGIN_TASK_NAME
 from ..health import configuration_drift
 from ..models import StationLinkActivityLog
@@ -291,6 +291,7 @@ def station_link_monitoring(request, link_id):
         "direction": direction,
         "station_link": link,
         "configuration_drift": drift if drift.drifted else None,
+        "view_data_url": get_station_link_view_data_url(link),
     }
     return render(request, "monitoring/station_link_monitoring.html", context)
 

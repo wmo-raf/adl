@@ -18,8 +18,9 @@ from .models import (
 from .utils import (
     get_dispatch_channel_more_buttons,
     get_connection_list_more_buttons,
-    get_extra_model_admin_link_buttons,
     get_extra_model_admin_header_buttons,
+    get_station_link_list_more_buttons,
+    get_station_link_view_data_url,
 )
 
 ADLET_MODELS = []
@@ -89,7 +90,7 @@ class AdletIndexView(generic.IndexView):
 class StationLinkIndexView(AdletIndexView):
     def get_list_more_buttons(self, instance):
         buttons = super().get_list_more_buttons(instance)
-        buttons.extend(get_extra_model_admin_link_buttons(instance))
+        buttons.extend(get_station_link_list_more_buttons(instance))
         return buttons
 
 
@@ -213,9 +214,17 @@ class StationChooserViewSet(ChooserViewSet):
 
 class StationLinkInspectView(generic.InspectView):
     def get_header_buttons(self):
-        # The plugin's extra pages for this station link, beside Edit/Delete —
-        # the same links StationLinkIndexView puts on the row menu
-        buttons = get_extra_model_admin_header_buttons(self.object)
+        # View Data plus the plugin's extra pages for this station link,
+        # beside Edit/Delete — the same links StationLinkIndexView puts on
+        # the row menu
+        buttons = [
+            HeaderButton(
+                _("View Data"),
+                url=get_station_link_view_data_url(self.object),
+                icon_name="table",
+            )
+        ]
+        buttons.extend(get_extra_model_admin_header_buttons(self.object))
         buttons.extend(super().get_header_buttons())
         return buttons
     

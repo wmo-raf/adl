@@ -1,11 +1,13 @@
 <script setup>
 import Button from 'primevue/button';
+import Message from 'primevue/message';
 
 import {useStationChartStore} from '@/stores/stationChart'
 
 import ChartPanel from '@/components/chart-view/ChartPanel.vue'
 import {onMounted} from "vue";
 import {useNetworkStore} from "@/stores/network.js";
+import {useChartUrlState} from "@/composables/useChartUrlState.js";
 
 
 const props = defineProps({
@@ -23,6 +25,7 @@ const props = defineProps({
 const networkStore = useNetworkStore()
 
 const chartStore = useStationChartStore()
+const urlState = useChartUrlState()
 
 const addChart = () => {
   chartStore.addChart()
@@ -31,12 +34,21 @@ const addChart = () => {
 
 onMounted(() => {
   networkStore.loadNetworkConnections()
+  urlState.initFromUrl()
 })
 
 </script>
 
 <template>
   <div>
+
+    <Message v-if="urlState.warnings.value.length && !urlState.warningsDismissed.value"
+             severity="warn" :closable="true" class="url-warnings"
+             @close="urlState.dismissWarnings">
+      <ul class="url-warnings-list">
+        <li v-for="warning in urlState.warnings.value" :key="warning">{{ warning }}</li>
+      </ul>
+    </Message>
 
     <ChartPanel
         v-for="chart in chartStore.charts"
@@ -55,6 +67,15 @@ onMounted(() => {
 </template>
 
 <style scoped>
+
+.url-warnings {
+  margin-bottom: 20px;
+}
+
+.url-warnings-list {
+  margin: 0;
+  padding-left: 18px;
+}
 
 .add-chart-container {
   display: flex;

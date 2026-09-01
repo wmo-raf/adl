@@ -1,6 +1,7 @@
 <script setup>
 import {onMounted} from "vue";
 import Panel from 'primevue/panel';
+import Message from 'primevue/message';
 
 import Tabs from 'primevue/tabs';
 import TabList from 'primevue/tablist';
@@ -16,6 +17,7 @@ import TimeSeriesDataTable from "@/components/table-view/TimeSeriesDataTable.vue
 
 import {useDataParameterStore} from "@/stores/dataParameter.js";
 import {useStationStore} from "@/stores/station.js";
+import {useTableUrlState} from "@/composables/useTableUrlState.js";
 
 
 const props = defineProps({
@@ -32,14 +34,24 @@ const props = defineProps({
 
 const stationStore = useStationStore()
 const dataParameterStore = useDataParameterStore()
+const urlState = useTableUrlState()
 
 onMounted(() => {
   dataParameterStore.loadDataParameters()
+  urlState.initFromUrl()
 })
 
 </script>
 
 <template>
+  <Message v-if="urlState.warnings.value.length && !urlState.warningsDismissed.value"
+           severity="warn" :closable="true" class="url-warnings"
+           @close="urlState.dismissWarnings">
+    <ul class="url-warnings-list">
+      <li v-for="warning in urlState.warnings.value" :key="warning">{{ warning }}</li>
+    </ul>
+  </Message>
+
   <Panel>
     <div class="tv-header">
       <NetworkConnectionSelect/>
@@ -73,6 +85,15 @@ onMounted(() => {
 </template>
 
 <style scoped>
+
+.url-warnings {
+  margin-bottom: 20px;
+}
+
+.url-warnings-list {
+  margin: 0;
+  padding-left: 18px;
+}
 
 .tv-header {
   display: flex;

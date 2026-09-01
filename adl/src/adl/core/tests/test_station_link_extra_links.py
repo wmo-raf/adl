@@ -13,11 +13,16 @@ from adl.core.tests.factories import StationLinkFactory
 from adl.core.utils import (
     get_extra_model_admin_header_buttons,
     get_extra_model_admin_link_buttons,
+    get_station_link_list_more_buttons,
+    get_station_link_view_data_url,
 )
 from adl.core.viewsets import StationLinkInspectView
 
 
 class _LinkWithPages:
+    id = 7
+    network_connection_id = 3
+
     def get_extra_model_admin_links(self):
         return [
             {"label": "Direct fetch files", "url": "/x/files/",
@@ -28,6 +33,9 @@ class _LinkWithPages:
 
 
 class _LinkWithoutPages:
+    id = 7
+    network_connection_id = 3
+
     def get_extra_model_admin_links(self):
         return []
 
@@ -81,9 +89,25 @@ class StationLinkInspectHeaderTests(SimpleTestCase):
         labels = [getattr(b, "label", None) for b in buttons]
         self.assertIn("Direct fetch files", labels)
 
-    def test_no_links_adds_no_header_buttons(self):
+    def test_view_data_is_the_only_header_button_without_plugin_links(self):
         view = self._view_for(_LinkWithoutPages())
+        header_buttons = [
+            b for b in view.get_header_buttons() if isinstance(b, HeaderButton)
+        ]
+        self.assertEqual([b.label for b in header_buttons], ["View Data"])
+        self.assertEqual(header_buttons[0].url, get_station_link_view_data_url(_LinkWithoutPages()))
+
+
+class ViewDataLinkTests(SimpleTestCase):
+    def test_url_deep_links_the_viewer_table(self):
         self.assertEqual(
-            [b for b in view.get_header_buttons() if isinstance(b, HeaderButton)],
-            [],
+            get_station_link_view_data_url(_LinkWithPages()),
+            "/viewer/table/?connection=3&station=7",
         )
+
+    def test_row_menu_offers_view_data_before_plugin_links(self):
+        buttons = get_station_link_list_more_buttons(_LinkWithPages())
+        self.assertEqual(
+            [b.label for b in buttons], ["View Data", "Direct fetch files"]
+        )
+        self.assertIsInstance(buttons[0], ListingButton)
