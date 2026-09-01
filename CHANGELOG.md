@@ -12,6 +12,47 @@ This file starts at 0.8.9. Earlier history is in the git log.
 
 ## [Unreleased]
 
+## [0.8.15] — 2026-09-01
+
+A release about getting to the data without re-selecting it. The data viewer's
+table and chart pages previously booted empty on every visit — whatever you
+were looking at, the URL never knew. Both pages now read their state from the
+URL and keep it there as you work, so a view can be bookmarked, shared, or
+linked to from anywhere in the admin — and the admin now does exactly that,
+with "View Data" links on every surface that names a station. One PR (#308).
+
+### Added
+
+- **The data viewer table is deep-linkable.** `/viewer/table/` reads
+  `connection`, `station` (station-link id), `category` and `from`/`to`
+  (`YYYY-MM-DD`) from the URL on load, and reflects filter changes back with
+  `history.replaceState` — the Back button still returns to the page you came
+  from. Values equal to their defaults are omitted, so `?station=42` is a
+  complete, canonical link that always means "that station's latest day".
+  `station` wins over a mismatched `connection`. Invalid or stale params fall
+  back per-param to defaults, dates clamp to the station's archive, and
+  everything dropped or adjusted is listed in one dismissible banner.
+
+- **Chart views are shareable.** `/viewer/chart/` encodes each panel as a
+  repeatable packed param —
+  `chart=<connectionId>:<stationLinkId>:<parameterId>:<from>:<to>`, empty
+  segments meaning defaults — and writes every configured panel back, so a
+  multi-panel comparison view survives a copy-paste. Same correction and
+  fallback semantics as the table.
+
+- **"View Data" links across the admin.** The monitoring dashboard's
+  connection-activity rows (previously a link to a blank table) and
+  dispatch-channel rows (previously dead) now open the viewer pre-filtered to
+  the station, as do three new entry points on station links: the index row
+  more-menu, the inspect page header, and the station-link monitoring page.
+  All of them build the URL through one shared helper,
+  `get_station_link_view_data_url()`.
+
+### Upgrade notes
+
+- No migrations, and no plugin has to be edited. The rebuilt viewer bundles
+  ship in the image; there is nothing to run beyond deploying the release.
+
 ## [0.8.14] — 2026-08-27
 
 A release about a claim core was making on evidence that did not support it.
