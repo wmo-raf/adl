@@ -8,9 +8,11 @@ import DatePicker from 'primevue/datepicker';
 
 import {useStationTimeseriesDataStore} from "@/stores/stationTimeseriesData.js";
 import {useStationStore} from "@/stores/station.js";
+import {computeDefaultDateRange, useTableUrlState} from "@/composables/useTableUrlState.js";
 
 const stationStore = useStationStore()
 const stationTimeseriesDataStore = useStationTimeseriesDataStore()
+const urlState = useTableUrlState()
 
 const dt = ref();
 const exportCSV = () => {
@@ -49,22 +51,12 @@ const dataCategories = computed(() => {
 
 
 watch(() => stationStore.selectedStationLinkDetail, (newStationDetail) => {
-  if (newStationDetail?.data_dates) {
-    const {latest_time, earliest_time} = newStationDetail.data_dates;
+  const defaults = computeDefaultDateRange(newStationDetail?.data_dates)
 
-    if (!latest_time || !earliest_time) {
-      return;
-    }
-
-    const end = new Date(latest_time)
-
-    // Default to 1 day before the end date, or the earliest date if less than 1 day of data
-    let start = new Date(end)
-    start.setDate(end.getDate() - 1)
-
-    if (start < new Date(earliest_time)) {
-      start = new Date(earliest_time)
-    }
+  if (defaults) {
+    // Deep-link dates from the URL (one-shot) win over the default range
+    const urlDates = urlState.consumePendingDates(newStationDetail.data_dates)
+    const {start, end} = urlDates || defaults
 
     stationTimeseriesDataStore.setStartDate(start)
     stationTimeseriesDataStore.setEndDate(end)
@@ -100,7 +92,9 @@ watch(
 
 watch(() => stationStore.selectedStationDataCategories, (newDataCategories) => {
   if (newDataCategories && !!newDataCategories.length) {
-    stationTimeseriesDataStore.selectDataCategoryId(newDataCategories[0].id)
+    // Deep-link category from the URL (one-shot) wins over the first category
+    const urlCategory = urlState.consumePendingCategory(newDataCategories)
+    stationTimeseriesDataStore.selectDataCategoryId(urlCategory ?? newDataCategories[0].id)
   }
 }, {immediate: true})
 

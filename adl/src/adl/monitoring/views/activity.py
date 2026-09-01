@@ -80,7 +80,7 @@ class NetworkConnectionActivityView(APIView):
                 
                 # URLs
                 "logs_url": monitor_url,
-                "data_viewer_url": data_viewer_url_base,  # You might want to append params here usually
+                "data_viewer_url": f"{data_viewer_url_base}?connection={connection.id}&station={sl.id}",
             })
         
         # The stored ingestion-diagnostic verdict — the sweep's row, read
@@ -173,7 +173,10 @@ class DispatchChannelMonitoringView(APIView):
                 "last_collected": sl.last_sent_obs,
                 "last_collected_human": naturaltime(sl.last_sent_obs) if sl.last_sent_obs else None,
                 "logs_url": monitor_url,
-                "data_viewer_url": "#",
+                "data_viewer_url": (
+                    reverse("viewer_table")
+                    + f"?connection={sl.network_connection.id}&station={sl.id}"
+                ),
             })
         
         heartbeat = getattr(channel, "heartbeat", None)
