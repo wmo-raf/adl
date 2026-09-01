@@ -5,22 +5,25 @@ import {useNetworkStore} from '@/stores/network.js'
 import {useStationStore} from '@/stores/station.js'
 import {useStationTimeseriesDataStore} from '@/stores/stationTimeseriesData.js'
 import {fetchStationLinkDetail} from '@/services/adlService.js'
+import {
+    dismissWarnings,
+    parseLocalDate,
+    replaceUrlParams,
+    waitFor,
+    warn,
+    warnings,
+    warningsDismissed,
+} from './urlStateShared.js'
 
 // Query params owned by the table view. Any other param present in the URL
 // (including future `chart`) is preserved untouched by write-back.
 export const TABLE_URL_PARAMS = ['connection', 'station', 'category', 'from', 'to']
 
-// CHART URL SCHEME (design only — not implemented yet):
-//   chart=<connectionId>:<stationLinkId>:<parameterId>:<from>:<to>   (repeatable, one per panel)
-// Empty segments mean "use the default"; dates are YYYY-MM-DD local.
-//   e.g. ?chart=3:42:17:2026-01-01:&chart=3:55:17::
-
-const DATE_RE = /^\d{4}-\d{2}-\d{2}$/
-const SEED_TIMEOUT_MS = 15000
+// The chart page's `chart=` packed param is implemented in
+// useChartUrlState.js; table write-back leaves it (and any other foreign
+// param) untouched.
 
 // --- module-scope singleton state (shared by TableView and TimeSeriesDataTable) ---
-const warnings = ref([])
-const warningsDismissed = ref(false)
 const isSeeding = ref(false)
 // reactive so waitFor() can watch for the pending filters being consumed
 const pending = reactive({station: null, connection: null, category: null, from: null, to: null})
@@ -50,48 +53,6 @@ export function computeDefaultDateRange(dataDates) {
     }
 
     return {start, end}
-}
-
-function warn(message) {
-    warnings.value.push(message)
-}
-
-function parseLocalDate(value) {
-    if (!DATE_RE.test(value)) {
-        return null
-    }
-    const [year, month, day] = value.split('-').map(Number)
-    const date = new Date(year, month - 1, day)
-    // Reject impossible dates like 2026-02-31, which Date() silently rolls over
-    if (date.getFullYear() !== year || date.getMonth() !== month - 1 || date.getDate() !== day) {
-        return null
-    }
-    return date
-}
-
-// Resolves when predicate() is truthy, or with false after timeoutMs.
-function waitFor(predicate, timeoutMs = SEED_TIMEOUT_MS) {
-    return new Promise((resolve) => {
-        if (predicate()) {
-            resolve(true)
-            return
-        }
-
-        const timer = setTimeout(() => {
-            stop()
-            resolve(false)
-        }, timeoutMs)
-
-        // no `immediate` — the callback can only run after watch() returns,
-        // so `stop` is always assigned by the time it is called
-        const stop = watch(predicate, (value) => {
-            if (value) {
-                clearTimeout(timer)
-                stop()
-                resolve(true)
-            }
-        })
-    })
 }
 
 function parseUrl() {
@@ -251,9 +212,7 @@ function syncUrl(networkStore, stationStore, timeseriesStore) {
         }
     }
 
-    const qs = params.toString()
-    const url = window.location.pathname + (qs ? `?${qs}` : '') + window.location.hash
-    window.history.replaceState(null, '', url)
+    replaceUrlParams(params)
 }
 
 function startWriteBack(networkStore, stationStore, timeseriesStore) {
@@ -360,10 +319,6 @@ async function initFromUrl() {
 
     isSeeding.value = false
     startWriteBack(networkStore, stationStore, timeseriesStore)
-}
-
-function dismissWarnings() {
-    warningsDismissed.value = true
 }
 
 export function useTableUrlState() {
