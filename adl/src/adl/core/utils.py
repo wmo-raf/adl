@@ -324,6 +324,30 @@ def get_extra_model_admin_header_buttons(instance):
     ]
 
 
+def get_station_link_view_data_url(station_link):
+    """
+    URL to the data viewer table deep-linked to this station link.
+    The viewer consumes the ``connection``/``station`` query params
+    client-side; ``station`` is the StationLink id.
+    """
+    return (
+        reverse("viewer_table")
+        + f"?connection={station_link.network_connection_id}&station={station_link.id}"
+    )
+
+
+def get_station_link_list_more_buttons(station_link):
+    buttons = [
+        ListingButton(
+            gettext("View Data"),
+            url=get_station_link_view_data_url(station_link),
+            icon_name="table",
+        )
+    ]
+    buttons.extend(get_extra_model_admin_link_buttons(station_link))
+    return buttons
+
+
 def get_connection_list_more_buttons(connection):
     buttons = [
         ListingButton(

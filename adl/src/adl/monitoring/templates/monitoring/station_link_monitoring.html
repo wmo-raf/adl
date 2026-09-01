@@ -14,12 +14,30 @@
             height: 16px;
             width: 16px;
         }
+
+        .view-data-button {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .view-data-button svg {
+            height: 14px;
+            width: 14px;
+        }
     </style>
 {% endblock %}
 
 
 {% block main_content %}
     <div style="margin-top: 40px">
+
+        <div style="display: flex; justify-content: flex-end; margin-bottom: 20px;">
+            <a href="{{ view_data_url }}" class="button button-small button-secondary view-data-button">
+                {% icon name="table" %}
+                {% trans "View Data" %}
+            </a>
+        </div>
 
         {% if configuration_drift %}
             {% comment %}

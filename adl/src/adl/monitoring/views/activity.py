@@ -11,6 +11,7 @@ from adl.core.models import (
     DispatchChannel,
     StationChannelDispatchStatus
 )
+from adl.core.utils import get_station_link_view_data_url
 from adl.monitoring.constants import LAYER_LABELS
 from adl.monitoring.models import StationLinkActivityLog
 from adl.monitoring.status import (
@@ -42,8 +43,6 @@ class NetworkConnectionActivityView(APIView):
         stations_count = station_links.count()
         stations_output = []
         summary = {"active": 0, "warning": 0, "error": 0}
-        data_viewer_url_base = reverse("viewer_table")
-        
         for sl in station_links:
             # 1. Determine PIPELINE and DATA Status
             status = compute_station_status(
@@ -80,7 +79,7 @@ class NetworkConnectionActivityView(APIView):
                 
                 # URLs
                 "logs_url": monitor_url,
-                "data_viewer_url": f"{data_viewer_url_base}?connection={connection.id}&station={sl.id}",
+                "data_viewer_url": get_station_link_view_data_url(sl),
             })
         
         # The stored ingestion-diagnostic verdict — the sweep's row, read
@@ -173,10 +172,7 @@ class DispatchChannelMonitoringView(APIView):
                 "last_collected": sl.last_sent_obs,
                 "last_collected_human": naturaltime(sl.last_sent_obs) if sl.last_sent_obs else None,
                 "logs_url": monitor_url,
-                "data_viewer_url": (
-                    reverse("viewer_table")
-                    + f"?connection={sl.network_connection.id}&station={sl.id}"
-                ),
+                "data_viewer_url": get_station_link_view_data_url(sl),
             })
         
         heartbeat = getattr(channel, "heartbeat", None)
