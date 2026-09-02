@@ -9,6 +9,17 @@ button — only when no scheduled run arrives in time. ``--probe`` and
 ``--station-check`` run the on-demand source checks exactly as the buttons
 do and persist their results the same way, so the captured screens show
 what an operator pressing those buttons would see.
+
+``--present-interval`` exists because the two things the capture needs pull
+the connection's interval in opposite directions. Waiting for a real beat
+tick wants it as short as possible; every freshness threshold in the
+monitoring UI is a multiple of it (a station's data is "fresh" for
+``interval x 4``), so a 1-minute interval marks any real AWS source stale
+minutes after a successful run. So: collect on a fast interval, then set the
+interval an operator would actually configure before the verdict is stored
+and the screens are captured. Nothing about the state is faked — the data
+really was collected and the verdict really is recomputed against the
+interval the screenshots show.
 """
 
 import time
@@ -42,6 +53,10 @@ class Command(BaseCommand):
         parser.add_argument("--probe", action="store_true", help="Run the connection-scope source probe.")
         parser.add_argument("--station-check", action="append", default=[], metavar="STATION_ID",
                             help="Run the station-scope check for this station (repeatable).")
+        parser.add_argument("--present-interval", type=int,
+                            help="Set the connection's processing interval (minutes) after "
+                                 "collecting, so the captured screens show realistic freshness "
+                                 "thresholds. See this command's docstring.")
         parser.add_argument("--evaluate", action="store_true",
                             help="Evaluate and store the connection's health verdict now, as the "
                                  "5-minute housekeeping sweep would.")
@@ -58,6 +73,8 @@ class Command(BaseCommand):
             self.probe(connection)
         for station_id in options["station_check"]:
             self.station_check(connection, station_id)
+        if options["present_interval"]:
+            self.present_interval(connection, options["present_interval"])
         if options["evaluate"]:
             checklist, _ = evaluate_and_store_connection_health(connection)
             self.stdout.write(f"  verdict: {checklist.status} — {checklist.headline_message}")
@@ -118,6 +135,16 @@ class Command(BaseCommand):
                 return True
             time.sleep(3)
         return False
+
+    def present_interval(self, connection, minutes):
+        """Re-point the connection at a realistic interval, schedule entry and
+        all. The entry is keyed on the connection, not on the interval, so
+        beat's recorded last tick survives the change and the scheduler layer
+        stays green."""
+        connection.plugin_processing_interval = minutes
+        connection.save()
+        self.stdout.write(f"  presented interval: every {minutes} minute(s) "
+                          f"(data stays fresh for {minutes * 4} minutes)")
 
     # -- on-demand checks, persisted exactly as the buttons persist them ----------
 

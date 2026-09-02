@@ -12,18 +12,22 @@ One plugin at a time (dev stacks share ports). The loop is:
 
 1. **build** the plugin's own dev compose (`dev.Dockerfile` on `adl:latest`),
    plus the mock FTP source in `mock-ftp/`;
-2. **up**, with a generated compose overlay that mounts the plugin repo's
-   `docs/` into the web container, mounts this checkout's seed/prime
-   commands, and — for plugin composes that predate the queue-specific
-   workers — routes the worker to the ingestion queue;
-3. **seed** — `adl seed_docs_demo --fixture docs/screenshots/fixture.json`:
+2. **up**, with a generated compose overlay that publishes the admin on the
+   harness's own port (`CAPTURE_PORT`, default 8765), mounts the plugin
+   repo's `docs/` into the web container, adds any mock services the plugin
+   ships in `docs/screenshots/compose.mock.yml`, and — for plugin composes
+   that predate the queue-specific workers — routes their single worker to
+   the ingestion queue and adds a default-queue worker beside it;
+3. **seed** — `adl seed_docs_demo --fixture docs/screenshots/fixture.json`
+   (the command ships in the core image, so `adl:latest` must be built from a
+   core carrying it — `make build` in this repo):
    admin user, "Demo AWS Network", three stations with WIGOS ids, common
    units and parameters, then the plugin's connection and station links
    from the fixture;
 4. **prime** — `adl docs_capture_prime`: waits for the beat scheduler to fire
    the connection (a real tick consumed by a real worker), runs the on-demand
    source probe and station checks exactly as the diagnostic buttons do,
-   and stores the health verdict;
+   sets the connection's *presented* interval, and stores the health verdict;
 5. **capture** — `capture.py` (the shared Playwright runner in this folder)
    logs in once, runs the plugin's `docs/screenshots.yml` and writes PNGs
    into its `docs/images/`, one per entry (and per language when
@@ -46,7 +50,7 @@ Fixture shape:
 ```json
 {
   "capture": {"connection": "<connection name>", "ingest": true, "probe": true,
-              "station_checks": ["DEMO001"], "wait": 240},
+              "station_checks": ["DEMO001"], "wait": 240, "present_interval": 15},
   "connection": {"model": "app_label.ConnectionModel", "fields": {...},
                  "children": {"variable_mappings": [{...}]}},
   "station_links": [{"model": "app_label.StationLinkModel", "station": "DEMO001",
@@ -59,6 +63,14 @@ Foreign keys are named the way the admin shows them (`"adl_parameter":
 `"$ENV:TOKEN"` reads the environment (`"$ENV:TOKEN|dummy"` with a default);
 `"$NOW-1d"` is a relative datetime. With a fresh database the connection is
 always id 1 and the station links ids 1..n in fixture order.
+
+`present_interval` (default 15) is the processing interval the captured
+screens show. Seed a short interval so a real beat tick arrives inside the
+capture's wait, and let this set the interval an operator would configure
+before anything is captured: every freshness threshold in the monitoring UI
+is a multiple of the interval (a station's data is *fresh* for `interval x 4`),
+so a 1-minute interval paints a perfectly healthy source amber. The verdict is
+recomputed after the change, so the screens agree with themselves.
 
 Credentials go into `credentials.env` at capture time and are never
 committed; mask token fields in credential-form shots with a `javascript`

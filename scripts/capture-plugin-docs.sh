@@ -13,6 +13,8 @@
 # Per-plugin inputs, all in the plugin repo:
 #   docs/screenshots.yml               declarative manifest run by docs/screenshots/capture/capture.py
 #   docs/screenshots/fixture.json      connection + station links + "capture" block
+#                                      (capture.present_interval, default 15, is the interval
+#                                      the captured screens show — see docs_capture_prime)
 #   docs/screenshots/credentials.env   OPTIONAL, git-ignored: live credentials the
 #                                      fixture references as "$ENV:NAME"
 # Environment: CAPTURE_PORT (host port for the admin, default 8765),
@@ -89,6 +91,7 @@ INGEST=$(fixture_get ingest true)
 PROBE=$(fixture_get probe true)
 STATION_CHECKS=$(fixture_get station_checks)
 WAIT=$(fixture_get wait 180)
+PRESENT_INTERVAL=$(fixture_get present_interval 15)
 
 # --- compose overlay: mock source, capture mounts, worker layout fixes -----------
 BASE_COMPOSE=(docker compose --project-directory "$PLUGIN_DIR" -p "$PROJECT" -f "$PLUGIN_COMPOSE")
@@ -193,7 +196,8 @@ done
 log "seeding"
 "${COMPOSE[@]}" exec -T adl adl seed_docs_demo --fixture /adl/docs-capture/screenshots/fixture.json
 
-PRIME=(adl docs_capture_prime --connection "$CONNECTION" --wait "$WAIT" --evaluate)
+PRIME=(adl docs_capture_prime --connection "$CONNECTION" --wait "$WAIT" \
+       --present-interval "$PRESENT_INTERVAL" --evaluate)
 [[ $INGEST = true || $INGEST = True ]] && PRIME+=(--ingest)
 [[ $PROBE = true || $PROBE = True ]] && PRIME+=(--probe)
 for s in $STATION_CHECKS; do PRIME+=(--station-check "$s"); done

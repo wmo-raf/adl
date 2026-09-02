@@ -123,20 +123,37 @@ class Runner:
         return state
 
     def set_language(self, lang):
-        """Switch the admin user's preferred language (the Wagtail admin
-        renders in it), through the same account page an operator uses."""
+        """Switch the admin user's preferred language — the Wagtail admin
+        renders in it — through the same account page an operator uses.
+
+        Raises rather than carrying on in the wrong language: a French run
+        that silently produced English images would overwrite the French set
+        with English ones, which is worse than failing.
+        """
         context = self.new_context(auth=True)
         page = context.new_page()
-        page.goto(f"{self.base_url}/account/")
-        select = page.locator("select[name$='preferred_language']")
-        if select.count() == 0:
-            print(f"  [warn] no preferred-language field on /account/; staying in the default language")
-        else:
-            select.first.select_option(lang)
-            page.click("button[type=submit]")
+        try:
+            page.goto(f"{self.base_url}/account/")
+            select = page.locator("select[name$='preferred_language']").first
+            if select.count() == 0:
+                raise CaptureError(
+                    "no preferred-language field on /account/ — the instance offers a "
+                    "single admin language, so it cannot be captured in another")
+            options = select.evaluate("el => Array.from(el.options).map(o => o.value)")
+            if lang not in options:
+                raise CaptureError(
+                    f"the admin offers no '{lang}' language (has: {', '.join(o for o in options if o)})")
+            select.select_option(lang)
+            # requestSubmit, not a submit-button click: the account page carries
+            # several panels and more than one button
+            select.evaluate("el => el.form.requestSubmit()")
             page.wait_for_load_state("networkidle")
-        self.storage_state = context.storage_state()
-        context.close()
+            chosen = page.locator("select[name$='preferred_language']").first.input_value()
+            if chosen != lang:
+                raise CaptureError(f"the admin language stayed '{chosen}' after asking for '{lang}'")
+            self.storage_state = context.storage_state()
+        finally:
+            context.close()
 
     # -- one entry -----------------------------------------------------------------
 
