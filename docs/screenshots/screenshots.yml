@@ -1,0 +1,347 @@
+# ADL docs screenshot manifest — run by docs/screenshots/capture/capture.py (Playwright)
+#
+# URL MAP — VERIFIED against a live dev instance (v0.8.15, 2026-09-02).
+# The admin is mounted at the site ROOT (no /admin/ prefix):
+#   /                                        dashboard
+#   /network/                                networks list
+#   /station/                                stations list
+#   /connections/                            connections list ("Network Connections")
+#   /connections/select/                     add-connection (plugin chooser)
+#   /network<plugin>/edit/<id>/              connection edit (e.g. /networkftp/edit/3/)
+#   /<plugin>stationlink/                    station links list (e.g. /ftpstationlink/)
+#   /<plugin>stationlink/edit/<id>/          station link edit form
+#   /<plugin>stationlink/inspect/<id>/       station link INSPECT — Collection Status,
+#                                            "Trigger Collection Now", and the
+#                                            "Station Source Check" panel live HERE
+#   /dispatch-channels/                      dispatch channels list
+#   /monitoring/connection/<id>/health/      "Ingestion Diagnostic — <name>" page
+#                                            (layered checks; Probe source / Run
+#                                            ingestion buttons)
+# Plugin-added admin views mount under their own prefix, e.g.
+#   /adl-ftp-plugin/station-links/<id>/direct-fetch-files/
+# Selectors below still need a pass with devtools; URLs are authoritative.
+# Regenerate all:  python docs/screenshots/capture/capture.py docs/screenshots/screenshots.yml --repo-dir . (see capture/README.md)
+# A name may carry a sub-path: user/monitoring/x -> docs/_static/images/user/monitoring/x.png
+# Format: defaults + screenshots entries (name/url/setup/callouts/capture); see capture/README.md
+#
+# Conventions:
+#   - viewport 1440x900 for all admin shots
+#   - crop to a selector wherever possible; padding 12
+#   - annotations via annotate.js helpers: highlight(sel), badge(sel, n)
+
+# --- Dashboard -------------------------------------------------------------
+
+# --- Networks --------------------------------------------------------------
+
+
+# --- Stations --------------------------------------------------------------
+
+# --- Connections -----------------------------------------------------------
+
+# --- Plugins ---------------------------------------------------------------
+
+# --- Dispatch channels (numbered to match the doc's step list) -------------
+
+# --- Plugin repos follow the same shape, e.g. in adl-pulsoweb-plugin: ------
+# - url: http://localhost:8000/connections/pulsoweb/add/
+#   output: docs/images/pulsoweb_connection_form.png
+#   selector: "form"
+#   padding: 12
+
+# --- Pulsoweb metadata explorer (in adl-pulsoweb-plugin/docs/screenshots.yml)
+# Every UI surface a plugin adds gets its own entry: entry-point button
+# highlighted in context, then one shot per page of the walkthrough.
+# - url: http://localhost:8000/connections/
+#   output: docs/images/pulsoweb_view_metadata_button.png
+#   selector: "main"
+#   padding: 12
+#   javascript: |-
+#     highlight('a[href*="adl-pulsoweb-plugin/granularity/"]');
+# - url: http://localhost:8000/adl-pulsoweb-plugin/granularity/1/
+#   output: docs/images/pulsoweb_granularities_list.png
+#   selector: "main"
+#   padding: 12
+# - url: http://localhost:8000/adl-pulsoweb-plugin/granularity/1/M/
+#   output: docs/images/pulsoweb_granularity_detail.png
+#   selector: "main"
+#   padding: 12
+# - url: http://localhost:8000/adl-pulsoweb-plugin/stations/1/TA/
+#   output: docs/images/pulsoweb_stations_list.png
+#   selector: "main"
+#   padding: 12
+
+# --- Core-rendered screens showing plugin output (still the plugin's job
+# to capture, with ITS connection selected in the fixtures):
+# - url: http://localhost:8000/monitoring/connection/1/health/
+#   output: docs/images/pulsoweb_connection_health.png
+#   selector: "main"
+#   padding: 12
+#   javascript: |-
+#     highlight('button[name="probe_source"]');
+# - url: http://localhost:8000/pulsowebstationlink/inspect/1/   # Station Source Check is on the INSPECT page
+#   output: docs/images/pulsoweb_station_source_check.png
+#   selector: ".collection-status"
+#   padding: 12
+
+#   - the annotate.js helpers (highlight/badge) are prepended to every
+#     entry's `javascript` by the `make docs-screenshots` target (Phase 4)
+#   - each doc image carries an HTML comment naming its manifest entry
+
+# === Monitoring & diagnostics (docs/user_guide/monitoring_and_diagnostics.md)
+# Fixture requirements: one ENABLED connection with a genuinely healthy
+# collection cycle (mock FTP source, decision 7), at least one station in
+# error so the dashboard shows all three counters, one connection-scope
+# probe run before capture so layers 4-5 show "on-demand probe" evidence,
+# and one station-scope check run on station link 1.
+
+
+
+# Diagnostic page: one full-width crop per band so the doc can walk it top
+# to bottom. Connection 1 must be the healthy FTP connection.
+
+
+
+
+# Station link surfaces (FTP plugin's station link 1; URL prefix is per plugin)
+
+
+# === Admin access (docs/user_guide/admin_access.md) ==========================
+# The login shot is taken WITHOUT the admin session (auth: false) or it redirects to the home page.
+
+
+# Group 1 must be the seeded "Data operators" group so the object-permission
+# table shows real rows for the fixture's plugin types.
+
+# === Data parameters (docs/user_guide/manage_data_parameters.md) =============
+# Parameter 1 must be the seeded "Temperature" with one Range Check block.
+
+# === REST API (docs/api.md) =================================================
+
+# === Data viewer (docs/user_guide/data_viewer.md) ===========================
+# Station link 1 must have at least one day of data; parameter 1 = Temperature.
+
+
+
+
+# === WIS2Box integration (docs/wis2box_integration.md) ======================
+# Requires the fixture's Wis2Box URL to point at a mock stations endpoint
+# (a static JSON served by the capture compose) so all three tables render.
+
+defaults:
+  viewport:
+  - 1440
+  - 900
+  padding: 12
+screenshots:
+- name: user/dashboard
+  url: /
+  capture:
+    selector: .adl-dashboard
+- name: user/network_list
+  url: /network/
+  callouts:
+  - highlight: a[href$="/networks/add/"]
+  capture:
+    selector: main
+- name: user/add_network_form
+  url: /network/create/
+  callouts:
+  - badge:
+      target: '#id_name'
+      n: 1
+  - badge:
+      target: '#id_type'
+      n: 2
+  capture:
+    selector: "#w-editor-form"
+- name: user/stations_loading_options
+  url: /station/
+  capture:
+    selector: main
+- name: user/add_connection_form
+  url: /connections/select/
+  capture:
+    selector: "#w-editor-form"
+- name: user/new/installed_plugins
+  url: /plugins/
+  capture:
+    selector: main
+- name: user/dispatch/01_dc_index
+  url: /dispatch-channels/
+  callouts:
+  - highlight: a[href$="/dispatch-channels/add/"]
+  capture:
+    selector: main
+- name: user/monitoring/dashboard_data_pulling
+  url: /
+  setup:
+  - wait_for: .station-monitor-container .flat-table
+  callouts:
+  - badge:
+      target: .station-monitor-container .connection-name
+      n: 1
+  - badge:
+      target: .station-monitor-container .health-badge
+      n: 2
+  - badge:
+      target: .station-monitor-container .meta-badge
+      n: 3
+  - badge:
+      target: .station-monitor-container .status-summary-group
+      n: 4
+  capture:
+    selector: .adl-monitoring-tabs
+- name: user/monitoring/connections_list_health_column
+  url: /connections/
+  callouts:
+  - highlight: a[href*="/monitoring/connection/"][href$="/health/"]
+  capture:
+    selector: .c-panels-container
+- name: user/monitoring/ingestion_diagnostic_headline
+  url: /monitoring/connection/1/health/
+  setup:
+  - eval: |
+      document.querySelectorAll('.health-diagnostic h2').forEach((h, i) => {
+        if (i > 0) { let n = h; while (n) { const next = n.nextElementSibling; n.remove(); n = next; } }
+      });
+  callouts:
+  - badge:
+      target: .health-headline .status-badge
+      n: 1
+  - badge:
+      target: .health-headline__layer
+      n: 2
+  - badge:
+      target: .health-headline__message
+      n: 3
+  capture:
+    selector: .health-diagnostic
+- name: user/monitoring/ingestion_diagnostic_internal_layers
+  url: /monitoring/connection/1/health/
+  setup:
+  - eval: |
+      const keep = new Set([1, 2, 3]);
+      const heads = Array.from(document.querySelectorAll('.health-diagnostic h2'));
+      heads.forEach((h, i) => {
+        if (keep.has(i)) return;
+        let n = h;
+        while (n && !(n.tagName === 'H2' && n !== h)) { const next = n.nextElementSibling; n.remove(); n = next; }
+      });
+      document.querySelector('.health-headline')?.remove();
+      document.querySelector('.health-headline__since')?.remove();
+  capture:
+    selector: .health-diagnostic
+- name: user/monitoring/ingestion_diagnostic_external_layers
+  url: /monitoring/connection/1/health/
+  setup:
+  - eval: |
+      const keep = new Set([4, 5]);
+      const heads = Array.from(document.querySelectorAll('.health-diagnostic h2'));
+      heads.forEach((h, i) => {
+        if (keep.has(i)) return;
+        let n = h;
+        while (n && !(n.tagName === 'H2' && n !== h)) { const next = n.nextElementSibling; n.remove(); n = next; }
+      });
+      document.querySelector('.health-headline')?.remove();
+      document.querySelector('.health-headline__since')?.remove();
+  callouts:
+  - highlight: .health-probe-form button
+  capture:
+    selector: .health-diagnostic
+- name: user/monitoring/ingestion_diagnostic_data_and_history
+  url: /monitoring/connection/1/health/
+  setup:
+  - eval: |
+      const keep = new Set([6, 7]);
+      const heads = Array.from(document.querySelectorAll('.health-diagnostic h2'));
+      heads.forEach((h, i) => {
+        if (keep.has(i)) return;
+        let n = h;
+        while (n && !(n.tagName === 'H2' && n !== h)) { const next = n.nextElementSibling; n.remove(); n = next; }
+      });
+      document.querySelector('.health-headline')?.remove();
+      document.querySelector('.health-headline__since')?.remove();
+  callouts:
+  - highlight: .health-run-form button
+  capture:
+    selector: .health-diagnostic
+- name: user/monitoring/station_link_list_inspect_menu
+  url: /ftpstationlink/
+  setup:
+  - click: '.listing [data-controller="w-dropdown"] button'
+  - wait_for: a[href*="/ftpstationlink/inspect/"]
+  callouts:
+  - highlight: a[href*="/ftpstationlink/inspect/"]
+  capture:
+    selector: main
+- name: user/monitoring/station_link_inspect_page
+  url: /ftpstationlink/inspect/1/
+  callouts:
+  - badge:
+      target: .collection-status .manual-trigger__button
+      n: 1
+  - badge:
+      target: .collection-status .collection-status__title
+      n: 2
+  - highlight: .collection-status form[action*="check-source"] button
+  capture:
+    selector: main
+- name: user/admin/login_page
+  url: /login/
+  auth: false
+  capture:
+    selector: main
+- name: user/admin/users_list
+  url: /users/
+  callouts:
+  - highlight: a[href$="/users/add/"]
+  capture:
+    selector: main
+- name: user/admin/group_permissions
+  url: /groups/edit/1/
+  setup:
+  - hover: .listing.listing--permissions
+  callouts:
+  - highlight: .listing.listing--permissions
+  capture:
+    selector: "#w-editor-form"
+- name: user/parameters/qc_checks
+  url: /dataparameter/edit/1/
+  capture:
+    selector: '[data-contentpath="qc_checks"]'
+- name: user/api/swagger_ui
+  url: /api/docs/swagger/
+  setup:
+  - wait_for: .opblock-tag-section
+  capture:
+    selector: .swagger-ui
+- name: user/viewer/table
+  url: /viewer/table/?station=1
+  setup:
+  - wait_for: .p-datatable-tbody tr
+  capture:
+    selector: main
+- name: user/viewer/chart
+  url: '/viewer/chart/?chart=1:1:1::'
+  setup:
+  - wait_for: .highcharts-series
+  capture:
+    selector: main
+- name: user/viewer/map
+  url: /viewer/map/
+  setup:
+  - wait_for: .maplibregl-canvas
+  capture:
+    selector: main
+- name: user/viewer/qc_status
+  url: /viewer/qc/status/
+  setup:
+  - wait_for: .p-datatable-tbody tr
+  capture:
+    selector: main
+- name: user/wis2box/stations_compare
+  url: /wis2box/stations/
+  callouts:
+  - highlight: a[href*="/wis2box/stations/import/"]
+  capture:
+    selector: main
