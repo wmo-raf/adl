@@ -26,6 +26,7 @@ Manifest format::
         - select: { selector: "sel", value: "..." }
         - upload: { selector: "sel", path: "relative/to/repo" }
         - wait: 500                # ms
+        - wait_until: "js predicate"   # poll until true (AJAX-filled selects)
         - eval: "javascript"       # escape hatch for DOM surgery
       callouts:                    # optional; numbers only, never text
         - badge: { target: "sel", n: 1 }
@@ -198,6 +199,12 @@ class Runner:
             page.locator(arg).first.hover()
         elif action == "wait_for":
             page.wait_for_selector(arg, state="visible")
+        elif action == "wait_until":
+            # A JavaScript predicate, for what "visible" cannot express: an
+            # <option> inside a closed <select> is never visible to Playwright,
+            # so a widget that fills itself over AJAX has to be waited on by
+            # asking the DOM a question.
+            page.wait_for_function(f"() => {{ try {{ return !!({arg}); }} catch (e) {{ return false; }} }}")
         elif action == "wait":
             page.wait_for_timeout(int(arg))
         elif action == "fill":
@@ -228,8 +235,21 @@ class Runner:
 
     @staticmethod
     def require(page, selector):
+        """A callout target must exist AND occupy space.
+
+        Wagtail renders several widgets (choosers, in particular) as a hidden
+        input beside the visible control, so a selector that looks right can
+        resolve to a 0x0 element. annotate.js then clamps the badge to the page
+        origin, and the crop silently grows to the whole page instead of
+        failing — the shot looks plausible and is wrong. Refuse it instead.
+        """
         if page.locator(selector).count() == 0:
             raise CaptureError(f"no element matches '{selector}'")
+        box = page.locator(selector).first.bounding_box()
+        if box is None or box["width"] == 0 or box["height"] == 0:
+            raise CaptureError(
+                f"'{selector}' has no visible box — it is probably a hidden input "
+                "behind a chooser widget; point the callout at the visible control")
 
     def shoot(self, page, capture, out):
         selector = capture.get("selector")
@@ -244,6 +264,7 @@ class Runner:
         box = target.bounding_box()
         if box is None:
             raise CaptureError(f"capture selector '{selector}' has no box (hidden?)")
+        box = self.union_with_annotations(page, box)
         clip = {
             "x": max(box["x"] - padding, 0),
             "y": max(box["y"] - padding, 0),
@@ -251,6 +272,27 @@ class Runner:
             "height": box["height"] + 2 * padding,
         }
         page.screenshot(path=str(out), clip=clip)
+
+    @staticmethod
+    def union_with_annotations(page, box):
+        """Grow the crop to hold its own callouts.
+
+        A badge sits outside the field it numbers (to its left), so a crop taken
+        from the capture selector alone slices the badges in half — the shot
+        silently loses the very thing the doc's numbered list refers to. The
+        annotations are part of the picture, so the box is the union of both.
+        """
+        rects = page.evaluate("""() => Array.from(document.querySelectorAll('.adl-annotation'))
+            .map(el => { const r = el.getBoundingClientRect();
+                         return {x: r.left + window.scrollX, y: r.top + window.scrollY,
+                                 width: r.width, height: r.height}; })""")
+        if not rects:
+            return box
+        left = min([box["x"]] + [r["x"] for r in rects])
+        top = min([box["y"]] + [r["y"] for r in rects])
+        right = max([box["x"] + box["width"]] + [r["x"] + r["width"] for r in rects])
+        bottom = max([box["y"] + box["height"]] + [r["y"] + r["height"] for r in rects])
+        return {"x": left, "y": top, "width": right - left, "height": bottom - top}
 
     MAX_HEIGHT = 8000
 

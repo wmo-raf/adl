@@ -53,6 +53,11 @@ MANIFEST="$PLUGIN_DIR/docs/screenshots.yml"
 FIXTURE="$PLUGIN_DIR/docs/screenshots/fixture.json"
 CREDENTIALS="$PLUGIN_DIR/docs/screenshots/credentials.env"
 WORK=$(mktemp -d -t adl-capture-XXXXXX)
+# Run from the plugin directory, the way its README tells an operator to: several
+# plugin composes mount "$PWD/nginx.conf", which compose interpolates from the
+# invoking shell's cwd, not from --project-directory. Every path above is already
+# absolute, so nothing else is affected.
+cd "$PLUGIN_DIR"
 ADMIN_USER=${CAPTURE_ADMIN_USER:-admin}
 ADMIN_PASSWORD=${CAPTURE_ADMIN_PASSWORD:-adl-docs-demo}
 LANGS=${CAPTURE_LANGS:-en}
@@ -76,8 +81,12 @@ if [[ ! -f "$PLUGIN_DIR/.env" ]]; then
   log "created .env from .env.sample"
 fi
 sed -i.bak -e "s/^PLUGIN_BUILD_UID=$/PLUGIN_BUILD_UID=$(id -u)/" \
-           -e "s/^PLUGIN_BUILD_GID=$/PLUGIN_BUILD_GID=$(id -g)/" "$PLUGIN_DIR/.env"
+           -e "s/^PLUGIN_BUILD_GID=$/PLUGIN_BUILD_GID=$(id -g)/" \
+           -e "s/^ADL_DB_PASSWORD=$/ADL_DB_PASSWORD=adl-docs-capture/" "$PLUGIN_DIR/.env"
 rm -f "$PLUGIN_DIR/.env.bak"
+# An empty ADL_DB_PASSWORD leaves the web container dying on "fe_sendauth: no
+# password supplied", which reaches the operator only as "admin did not come up".
+grep -q "^ADL_DB_PASSWORD=." "$PLUGIN_DIR/.env" || die "$PLUGIN_DIR/.env has no ADL_DB_PASSWORD"
 # The admin is published on a port of the harness's own, replacing whatever the
 # plugin compose maps, so a running dev stack on the usual ports is no obstacle.
 PORT=${CAPTURE_PORT:-8765}
@@ -92,6 +101,12 @@ PROBE=$(fixture_get probe true)
 STATION_CHECKS=$(fixture_get station_checks)
 WAIT=$(fixture_get wait 180)
 PRESENT_INTERVAL=$(fixture_get present_interval 15)
+# The mock source writes its samples in local wall-clock time, and the plugin
+# reads them back in the connection's stations timezone. If the two disagree the
+# newest sample lands hours in the future (or the past) and the data-freshness
+# layer reports something no operator would ever see, so take the sample clock
+# from the fixture's own connection.
+SAMPLE_TZ=$(python3 -c "import json,sys; print(json.load(open(sys.argv[1])).get('connection',{}).get('fields',{}).get('stations_timezone') or 'Africa/Nairobi')" "$FIXTURE")
 
 # --- compose overlay: mock source, capture mounts, worker layout fixes -----------
 BASE_COMPOSE=(docker compose --project-directory "$PLUGIN_DIR" -p "$PROJECT" -f "$PLUGIN_COMPOSE")
@@ -108,7 +123,18 @@ services:
     image: adl-docs-mock-ftp
     container_name: ${PROJECT}-mock-ftp
     environment:
-      SAMPLE_TZ: Africa/Nairobi
+      SAMPLE_TZ: $SAMPLE_TZ
+EOF
+# Each service is emitted exactly once: a second "mock_ftp:" key here would be a
+# duplicate mapping key, which docker compose rejects outright.
+if [[ -d "$PLUGIN_DIR/docs/screenshots/mock-ftp" ]]; then
+cat <<EOF
+    volumes:
+      # plugin-provided samples: a generate.py here runs at start (see mock-ftp/server.py)
+      - $PLUGIN_DIR/docs/screenshots/mock-ftp:/srv/plugin-samples:ro
+EOF
+fi
+cat <<EOF
   adl:
     ports: !override
       - "$PORT:8000"
@@ -120,14 +146,8 @@ services:
       CAPTURE_ADMIN_USER: $ADMIN_USER
       CAPTURE_ADMIN_PASSWORD: $ADMIN_PASSWORD
 EOF
-if [[ -d "$PLUGIN_DIR/docs/screenshots/mock-ftp" ]]; then
-cat <<EOF
-  mock_ftp:
-    volumes:
-      # plugin-provided samples: a generate.py here runs at start (see mock-ftp/server.py)
-      - $PLUGIN_DIR/docs/screenshots/mock-ftp:/srv/plugin-samples:ro
-EOF
-fi
+# Credentials belong to the web container, which is where seed_docs_demo resolves
+# the fixture's \$ENV: references — so this block must stay attached to "adl:".
 if [[ -f "$CREDENTIALS" ]]; then
 cat <<EOF
     env_file:
@@ -135,11 +155,28 @@ cat <<EOF
       - $CREDENTIALS
 EOF
 fi
+LEGACY_WORKER=0
 if grep -qx adl_celery_worker <<<"$SERVICES" && ! grep -qx adl_celery_worker_adl <<<"$SERVICES"; then
+  LEGACY_WORKER=1
   log "plugin compose predates the queue-specific workers: routing its worker to the ingestion queue and adding a housekeeping worker"
+fi
+
+# The plugin composes wait on adl:8000 with the image's default 30s budget, which
+# the web container's first boot (migrations + collectstatic) routinely overruns.
+# The celery services then exit, nothing restarts them, and no scheduled run ever
+# fires — the scheduler layer of the diagnostic is red for a reason that is purely
+# an artefact of capture. Give them room, and restart them if they still lose the race.
+while read -r svc; do
+  [[ -n "$svc" && "$svc" == *celery* ]] || continue
+  echo "  $svc:"
+  echo "    restart: on-failure"
+  [[ $LEGACY_WORKER = 1 && "$svc" = adl_celery_worker ]] && echo "    command: celery-worker-adl"
+  echo "    environment:"
+  echo "      WAIT_TIMEOUT: 300"
+done <<<"$SERVICES"
+
+if [[ $LEGACY_WORKER = 1 ]]; then
 cat <<EOF
-  adl_celery_worker:
-    command: celery-worker-adl
   capture_worker_default:
     image: $IMAGE
     command: celery-worker-default
@@ -150,7 +187,8 @@ cat <<EOF
       REDIS_URL: redis://adl_redis:6379/0
       PLUGIN_RUNTIME_SETUP_MARKER: 0
       WAIT_HOSTS: adl_db:5432,adl_redis:6379,adl:8000
-      WAIT_TIMEOUT: 120
+      WAIT_TIMEOUT: 300
+    restart: on-failure
     depends_on:
       - adl
     volumes:

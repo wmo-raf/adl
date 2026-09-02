@@ -44,6 +44,13 @@ UNITS = [
     ("Metre per second", "m/s"),
     ("Degree", "degree"),
     ("Watt per square metre", "W/m^2"),
+    # Imperial units, for sources that report in them (Davis/WeatherLink sends
+    # °F, inHg and mph by default). A plugin fixture may only name a unit that
+    # exists here, and the point of the demo seed is to serve those fixtures.
+    ("Fahrenheit", "degF"),
+    ("Inch of mercury", "inHg"),
+    ("Mile per hour", "mph"),
+    ("Inch", "in"),
 ]
 
 PARAMETERS = [
