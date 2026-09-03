@@ -72,10 +72,11 @@ is a multiple of the interval (a station's data is *fresh* for `interval x 4`),
 so a 1-minute interval paints a perfectly healthy source amber. The verdict is
 recomputed after the change, so the screens agree with themselves.
 
-Credentials go into `credentials.env` at capture time and are never
-committed; mask token fields in credential-form shots with a `javascript`
-entry that blanks the input. Dummy credentials still capture every form and
-the honest failure diagnostics.
+Credentials are the exception, not the rule: a plugin's demo runs against a
+mock of its source (see *Mocking the source*), so a normal capture needs none.
+When you do point a fixture at a live account, the values go into
+`credentials.env`, are never committed, and token fields are masked in
+credential-form shots with a `fill` step that overwrites the input.
 
 ## Manifest format
 
@@ -98,10 +99,61 @@ screenshots:
     selector: "form"                 # crop; padding from defaults
 ```
 
-Setup steps: `click`, `hover`, `wait_for`, `wait` (ms), `fill`, `select`,
-`upload`, `eval` (JavaScript escape hatch). `auth: false` on an entry captures
+Setup steps: `click`, `hover`, `wait_for`, `wait` (ms), `wait_until` (a JS
+predicate, polled), `fill`, `select`, `upload`, `eval` (JavaScript escape
+hatch). Use `wait_until` for a widget that fills itself over AJAX: an
+`<option>` inside a closed `<select>` is never *visible*, so `wait_for` on one
+times out. Anchor a callout to the control an operator can see, never to a
+chooser's hidden input — a target with no box is refused, because clamping the
+badge to the page origin silently grows the crop to the whole page. `auth: false` on an entry captures
 it without the admin session (the login page). Plugin repos carry only this
 YAML — never capture code.
+
+## Mocking the source
+
+A capture should not need a live account. Every plugin's demo runs against a
+mock of its source, so the loop is reproducible from the repos alone, needs no
+credentials, exposes no country's data, and can run in CI:
+
+| Source kind | Mock | Lives in |
+|---|---|---|
+| FTP / SFTP | the `mock-ftp/` server below | core, samples per plugin |
+| A vendor database | a database container seeded with the tables the plugin reads | the plugin |
+| An HTTP API | a stdlib stub serving recorded payloads | the plugin |
+
+Only the FTP server lives here, and only because it is a *protocol* nine
+plugins share. Anything that encodes one vendor's routes, schema or field
+names belongs in that plugin's own repo, wired in through
+`docs/screenshots/compose.mock.yml`, which this script merges into the stack.
+Core stays vendor-agnostic; a mock earns its way in here by being shared.
+
+**Record the payloads, never invent them.** A hand-written catalogue will
+happily serve parameter codes the real API does not have, every screenshot
+will look green, and the guide will document a fiction — this is not
+hypothetical, it is how a drafted PulsoWeb guide came to document mnemonic
+codes for an API that numbers them. Record once against a live account, then
+anonymise: keep vendor catalogue content verbatim (it is identical for every
+customer and is what the guides teach operators to read) and replace station
+names, station and hardware ids, uuids and coordinates with demo values.
+
+Two things a stub must do that a static response file cannot, which is why
+these are small servers rather than canned JSON:
+
+- **synthesise readings at request time**, so the newest observation is always
+  "now" and the freshness layer of the diagnostic is honest;
+- **check the credential it was given**, so the failure diagnostics in a
+  guide's feedback catalogue can be captured deliberately.
+
+Give the stub a dotted network alias under `.test` (`api.weatherlink.test`).
+A bare service name is not a valid URL to Django, so a connection whose
+`api_base_url` is a `URLField` rejects it — and the hostname is visible in
+every captured diagnostic, where a real-looking demo name reads better than a
+container name.
+
+A fixture keeps `$ENV:` overrides for the base URL and credentials, so
+mock-by-default does not remove the option of proving a plugin against the
+real service: drop the values into `docs/screenshots/credentials.env` and the
+same fixture dials the vendor.
 
 ## Mock FTP source
 

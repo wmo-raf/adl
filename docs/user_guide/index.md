@@ -13,6 +13,8 @@ The general flow of setting up the application is as follows:
 6. **Manage Plugins**: Depending on the installed plugins, configure how a plugin interacts with the stations and
    data parameters.
 7. **Manage Dispatch Channels**: Configure dispatch channels for sending data to external systems or services.
+8. **Monitoring & Diagnostics**: Once data is flowing, use the dashboard, the per-connection Ingestion Diagnostic
+   and the per-station source check to find out which layer failed when it stops.
 
 Index
 ------
@@ -28,5 +30,7 @@ manage_data_parameters
 manage_connections
 manage_plugins
 manage_dispatch_channels
+monitoring_and_diagnostics
+data_viewer
 dispatch_troubleshooting
 ```

@@ -1,3 +1,5 @@
+import os
+
 SECRET_KEY = "docs-build-only"
 DEBUG = False
 USE_TZ = True
@@ -75,3 +77,11 @@ AUTHENTICATION_BACKENDS = [
     "django.contrib.auth.backends.ModelBackend",
     "allauth.account.auth_backends.AuthenticationBackend",
 ]
+
+# Local builds on macOS (Homebrew) need explicit library paths for Django's GIS
+# layer; Read the Docs finds its apt-installed libraries without them. Example:
+#   GDAL_LIBRARY_PATH=/opt/homebrew/lib/libgdal.dylib \
+#   GEOS_LIBRARY_PATH=/opt/homebrew/lib/libgeos_c.dylib \
+#   python -m sphinx -b html docs docs/_build/html
+GDAL_LIBRARY_PATH = os.environ.get("GDAL_LIBRARY_PATH")
+GEOS_LIBRARY_PATH = os.environ.get("GEOS_LIBRARY_PATH")

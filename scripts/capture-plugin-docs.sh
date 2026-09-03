@@ -91,6 +91,11 @@ grep -q "^ADL_DB_PASSWORD=." "$PLUGIN_DIR/.env" || die "$PLUGIN_DIR/.env has no 
 # plugin compose maps, so a running dev stack on the usual ports is no obstacle.
 PORT=${CAPTURE_PORT:-8765}
 BASE_URL="http://localhost:$PORT"
+# The capture talks to the web container directly, so the plugin's nginx proxy
+# has no reason to claim the developer's port 80 -- and if anything else on the
+# machine holds it, the whole stack fails to start. Compose interpolation takes
+# the shell's value over the project .env, and 0 asks Docker for an ephemeral one.
+export ADL_WEB_PROXY_PORT=0
 
 # --- the capture block of the fixture -------------------------------------------
 fixture_get() { python3 -c "import json,sys; c=json.load(open(sys.argv[1])).get('capture',{}); v=c.get(sys.argv[2], sys.argv[3] if len(sys.argv)>3 else ''); print(' '.join(v) if isinstance(v,list) else v)" "$FIXTURE" "$@"; }

@@ -26,4 +26,5 @@ maxdepth: 1
 caption: Reference
 ---
 models_reference
+monitoring_module
 ```

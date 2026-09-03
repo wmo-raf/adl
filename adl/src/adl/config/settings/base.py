@@ -18,7 +18,6 @@ from pathlib import Path
 import dj_database_url
 import django.conf.locale
 import environ
-
 from adl.version import VERSION
 
 PROJECT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -394,7 +393,7 @@ for plugin in [*ADL_PLUGIN_NAMES]:
 
 VUE_FRONTEND_USE_TYPESCRIPT = False
 VUE_FRONTEND_USE_DEV_SERVER = DEBUG
-VUE_FRONTEND_DEV_SERVER_URL = 'http://localhost:5173'
+VUE_FRONTEND_DEV_SERVER_URL = env.str("VUE_FRONTEND_DEV_SERVER_URL", default="http://localhost:5173")
 VUE_FRONTEND_DEV_SERVER_PATH = '/static/vue/src'
 VUE_FRONTEND_STATIC_PATH = 'vue'
 

@@ -88,6 +88,8 @@ specific to FTP/SFTP protocols. Check the documentation for your chosen channel 
 instructions.
 ```
 
+(dispatch-parameter-mappings)=
+
 ### Part C: Parameter Mappings
 
 Map ADL data parameters to the format expected by the destination system:
@@ -237,6 +239,8 @@ your destination system expects. This ensures compatibility across different sys
 ### Step 4: Save the Dispatch Channel
 
 Click the **Create** button to save your dispatch channel configuration.
+
+(linking-stations-to-dispatch-channels)=
 
 ## Linking Stations to Dispatch Channels
 

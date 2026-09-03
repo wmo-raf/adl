@@ -1,204 +1,299 @@
+(core-concepts)=
+
 # 🧠 Core Concepts
 
-This section introduces the core ideas behind **ADL (Automated Data Loader)** to help you quickly understand how data
-moves through the system and where plugins, models, and admin screens fit in.
+ADL collects observations from many different station networks, stores them
+in one schema, and forwards them to the systems that need them. This page
+gives you the mental model behind the admin: what the objects are, how they
+relate, and what happens between a scheduled tick and a record in the
+database. Read it once before configuring anything; every other page assumes
+it.
 
----
-
-## 1) The Big Picture
-
-ADL is a **Django-based platform** that ingests observations from many upstream sources, normalizes them into a common
-schema, and makes them available for analysis, visualization, and downstream dispatch (e.g., WIS2).
-
-At a high level:
-
-1. **Plugins** know how to talk to external systems (APIs, files, brokers) and produce time-stamped records.
-2. **Core models** (Station, Parameter, Unit, ObservationRecord, etc.) provide a canonical structure in the database.
-3. **Schedulers** (Celery Beat/Worker) invoke plugins on intervals, handle batches, and support backfills.
-4. **Dispatch channels** can publish/forward curated data to external targets (e.g., WIS2Box).
+## The big picture
 
 ```{mermaid}
 flowchart LR
-  subgraph Upstream
-    A[Source API/Feed]
+  subgraph SRC["Data sources"]
+    FTP[FTP / SFTP server]
+    API[Vendor REST API]
+    DB[(Vendor database)]
+    APP[Mobile collector / agent]
   end
 
-  subgraph ADL Core
-    P[Plugin] --> N[Normalization Unit & Mapping] --> S[Observation Record TimescaleDB]
-    S --> A1[Aggregations]
-    S --> Q[Query Admin UI]
+  subgraph ADL["ADL core"]
+    direction TB
+    PL[Plugins] --> NORM[Validate · map · convert units · QC]
+    NORM --> OBS[(Observation records\nTimescaleDB)]
+    OBS --> AGG[Hourly aggregates]
+    OBS --> VIEW[Data viewer · API · monitoring]
   end
 
-  subgraph Downstream
-    D[Dispatch Channel e.g. WIS2Box]
+  subgraph DST["Destinations"]
+    W2B[WIS2Box]
+    S3[S3 / MinIO]
+    OUT[FTP / partner systems]
   end
 
-  A --> P
-  A1 --> D
+  FTP & API & DB --> PL
+  APP --> OBS
+  OBS & AGG --> DC[Dispatch channels] --> W2B & S3 & OUT
 ```
 
----
+Three things to hold on to:
 
-## 2) Core Data Model
+1. **Plugins do the source-specific work.** The core never knows what an FTP
+   file or a vendor API looks like; a plugin turns it into time-stamped
+   records. Destinations work the same way through dispatch channels.
+2. **Everything lands in one place first.** Every observation becomes an
+   *observation record* — one station, one parameter, one time, one value in
+   that parameter's unit — before anything else can happen to it.
+3. **In and out are decoupled.** Ingestion stores; dispatch reads what was
+   stored. Data goes nowhere unless a dispatch channel says so (see
+   [Data flow and access control](data-flow-and-access-control.md)).
 
-Understanding a few key models clarifies how ADL thinks about networks and measurements.
+## The objects and how they relate
 
-### Network
+```{mermaid}
+erDiagram
+  NETWORK ||--o{ STATION : "groups"
+  NETWORK ||--o{ CONNECTION : "scopes"
+  CONNECTION ||--o{ STATION_LINK : "has"
+  STATION ||--o{ STATION_LINK : "is linked by"
+  STATION_LINK }o--o{ VARIABLE_MAPPING : "source variable → parameter"
+  CONNECTION }o--o{ VARIABLE_MAPPING : "(or at connection level)"
+  DATA_PARAMETER ||--o{ VARIABLE_MAPPING : "target"
+  UNIT ||--o{ DATA_PARAMETER : "stored in"
+  STATION ||--o{ OBSERVATION_RECORD : ""
+  CONNECTION ||--o{ OBSERVATION_RECORD : ""
+  DATA_PARAMETER ||--o{ OBSERVATION_RECORD : ""
+  DISPATCH_CHANNEL }o--o{ CONNECTION : "reads from"
+  DISPATCH_CHANNEL ||--o{ PARAMETER_MAPPING : "parameter → destination name/unit"
+  DISPATCH_CHANNEL ||--o{ CHANNEL_STATION : "per-station enable/disable"
+```
 
-Represents a family of stations (e.g., “ADCON Automatic Weather Stations”). Purely organizational.
+| Object | What it is | Admin location | Guide |
+|---|---|---|---|
+| **Network** | A named group of stations sharing a vendor or collection method. Organisational only. | Sidebar → Networks | [Manage Networks](user_guide/manage_networks.md) |
+| **Station** | A physical observing site: name, WIGOS identifier, location, heights, type. Belongs to one network. | Sidebar → Stations | [Manage Stations](user_guide/manage_stations.md) |
+| **Unit** | A measurement unit the unit registry can convert between (`°C`, `hPa`, `mm`). | Settings → Units | [Manage Data Parameters](user_guide/manage_data_parameters.md) |
+| **Data parameter** | One variable ADL stores — *Air Temperature*, *Precipitation* — with the unit it is stored in and its quality-control rules. | Settings → Data Parameters | [Manage Data Parameters](user_guide/manage_data_parameters.md) |
+| **Connection** | One upstream integration: which plugin, its credentials and settings, how often to run. Belongs to one network. | Sidebar → Connections | [Manage Connections](user_guide/manage_connections.md) |
+| **Station link** | Binds one station to one connection and carries the *source-side* station identifier, timezone and collection start date. | Sidebar → *\<Plugin\> Station Links* | [Manage Connections](user_guide/manage_connections.md) |
+| **Variable mapping** | "Source variable *X* in unit *U* is ADL parameter *P*". Lives on the connection, the station link, or both, depending on the plugin. | On the connection or station link form | [Manage Plugins](user_guide/manage_plugins.md) |
+| **Observation record** | The stored measurement: `(time, station, connection, parameter) → value`. Unique on that key, so re-ingesting the same time updates rather than duplicates. | Data viewer; *View Data* on a station link | — |
+| **Dispatch channel** | One destination: its type (WIS2Box, S3, FTP…), credentials, schedule, which connections it reads, and parameter mappings to the destination's names and units. | Sidebar → Dispatch Channels | [Manage Dispatch Channels](user_guide/manage_dispatch_channels.md) |
 
-### Station
+The chain to remember is **Network → Connection → Station link → Variable
+mapping → Observation record → Dispatch channel**. If a station collects
+nothing, the fault is somewhere along that chain, and the
+[Ingestion Diagnostic](user_guide/monitoring_and_diagnostics.md) tells you
+which link.
 
-A physical observing point (with location, identifiers such as WIGOS, heights, metadata). Stations belong to a
-Network.
+## A worked example, end to end
 
-### NetworkConnection
+A national service has twelve Davis Vantage Pro2 stations whose logger
+software uploads a CSV file per station every ten minutes to the service's
+own FTP server. The GBON subset must reach WIS2Box. Here is the complete
+configuration, in the order you would do it.
 
-Configuration for a **specific upstream integration** (credentials, cadence, timezone defaults, batch size, daily vs
-hourly data, etc.). A `NetworkConnection` points to a **Plugin type** that will perform the actual collection.
+**1. Units and parameters.** Load the predefined parameters
+(*Temperature* in °C, *Relative Humidity* in %, *Atmospheric Pressure* in
+hPa, *Wind Speed* in m/s, *Wind Direction* in degrees, *Precipitation* in
+mm) with *conversion units* ticked, which also creates Kelvin, Pascal and
+kg/m² for WIS2Box.
 
-### StationLink
+**2. Network.** *Davis AWS Network*, type *Automatic Weather Stations*.
 
-Binds one Station to a NetworkConnection and adds **per-station** connection details (e.g., remote station code,
-per-station timezone, enable/disable, optional first-collection date). Plugins typically iterate over the `StationLink`
-set of a `NetworkConnection`.
+**3. Stations.** Import the twelve stations from OSCAR Surface into the
+network; each arrives with its WIGOS identifier and coordinates.
 
-### Unit & DataParameter
+**4. Plugin.** Install `adl-ftp-plugin` (pinned to a release tag in
+`plugins.toml`) and rebuild. *FTP Connection* now appears as a connection
+type.
 
-- **Unit** defines canonical unit symbols (backed by a unit registry).
-- **DataParameter** names a measurable variable (e.g., `air_temperature`) and which **Unit** ADL uses as canonical. It
-  also supports optional **conversion contexts** for tricky cases (e.g., precipitation mass/area equivalence).
+**5. Connection.** *Davis FTP*, network *Davis AWS Network*, plugin *FTP*,
+interval **10** minutes, stations timezone *Africa/Nairobi*. Plugin fields:
+host, port, username, password, the remote folder, the file-name pattern
+and the decoder for Davis CSV.
 
-### ObservationRecord
+**6. Variable mappings** on the connection (the same CSV columns for every
+station):
 
-The atomic measurement in ADL, keyed by `(time, station, connection, parameter)` with a `value`. Stored in TimescaleDB
-for efficient time-series operations. Flags whether a record is daily (`is_daily`).
+| ADL parameter | Source variable | Source unit |
+|---|---|---|
+| Temperature | `temp_out` | °F |
+| Relative Humidity | `hum_out` | % |
+| Atmospheric Pressure | `bar` | inHg |
+| Wind Speed | `wind_speed` | mph |
+| Wind Direction | `wind_dir` | degree |
+| Precipitation | `rain` | in |
 
-### Aggregations (HourlyObsAgg)
+Only mapped columns are stored; the CSV's other columns are ignored.
 
-A view for hourly summaries (min/max/avg/sum, counts). Used by analytics and dispatch.
+**7. Station links.** One *FTP Station Link* per station: the ADL station,
+the connection, the station's sub-folder or file prefix on the FTP server,
+and *Collection Start Date* set to the beginning of the month to backfill.
 
----
+**8. First run.** Open the connection's Ingestion Diagnostic, press
+**Probe source now** (DNS, TCP, login and folder listing pass), then **Run
+ingestion now**. Within a minute each station's Inspect page shows *Records
+Fetched* and the dashboard turns green.
 
-## 3) Plugin Architecture (Extension Point)
+**9. Dispatch.** Create a *WIS2Box Upload* channel reading from *Davis FTP*,
+map *Temperature* → `air_temperature` in Kelvin, *Atmospheric Pressure* →
+`pressure` in Pascal, *Precipitation* → `precipitation` in kg/m², and so on;
+disable the non-GBON stations on the channel's station list. Every ten
+minutes the channel sends what is new.
 
-Plugins are Django apps that extend the `Plugin` base class and register themselves in the **plugin registry**. The base
-class provides:
+From here on the system runs itself. What follows explains what happens on
+each of those ten-minute ticks.
 
-- **Date-window helpers**: Picks `[start_date, end_date)` for each station (resuming from last saved data if present).
-- **Normalization & saving**: Converts source values to canonical units and upserts ObservationRecords.
-- **Orchestration**: Iterates station links, handles disabled stations, and returns per-station counts.
+## What happens on a tick
 
-### Contract: `get_station_data(station_link, start_date, end_date)`
+```{mermaid}
+sequenceDiagram
+  participant Beat as Celery Beat
+  participant W as Ingestion worker
+  participant P as Plugin
+  participant S as Source
+  participant DB as Database
 
-- Inputs are **aware datetimes** in the **station timezone** (base will normalize if naive).
-- Return an **iterable of dicts**; each dict must include `observation_time` and may include any number of
-  source-parameter fields whose names match your station’s variable mappings (e.g., `temp_K`).
-- The base class takes care of unit conversion and upserting.
+  Beat->>W: run connection (every N minutes)
+  W->>W: heartbeat · split enabled station links into batches
+  loop each station link (locked)
+    W->>W: choose window [start, end)
+    W->>P: get_station_data(link, start, end)
+    P->>S: fetch (FTP list/read · API call · SQL)
+    S-->>P: raw records
+    P-->>W: {observation_time, var: value, ...}
+    W->>W: validate · map variables · convert units · QC
+    W->>DB: upsert observation records
+    W->>DB: activity log (count, window, outcome)
+  end
+```
 
-### Variable Mapping
+1. **Beat fires** the connection's schedule entry every *Interval* minutes.
+2. **The coordinator** on the ingestion worker stamps a heartbeat, takes the
+   connection's enabled station links, and splits them into batches of
+   *Processing Batch Size*. Each station is **locked** while it runs, so an
+   overlapping tick skips it rather than double-fetching.
+3. **The window** for each station is computed (next section) and handed to
+   the plugin with the station link.
+4. **The plugin fetches** from the source and yields records shaped
+   `{"observation_time": …, "<source variable>": value, …}`.
+5. **The core normalises**: records are validated, each source variable is
+   looked up in the variable mappings (unmapped keys are dropped), the value
+   is converted from the mapping's source unit to the parameter's unit, QC
+   checks run, and the record is **upserted** on `(time, station,
+   connection, parameter)`.
+6. **An activity log row** records the outcome per station: how many source
+   items were offered, how many records were saved, the window, and any
+   error. These rows are what the dashboard and the diagnostic read.
+7. Each station's run is bounded by the connection's *Ingestion Timeout*; a
+   hung source fails that station's run instead of wedging the worker.
 
-Each StationLink provides a mapping from **source field name & unit** → **ADL DataParameter**. Example: `temp_K` (
-Kelvin) → `air_temperature` (Celsius). This drives conversion and saving.
+## Time windows, timezones and backfill
 
----
+- **Timezones.** Plugins work in the **station's timezone** (the
+  connection's *Stations Timezone*, or the station link's own when *Use
+  Connection Timezone* is unticked). The database stores UTC. A naive
+  `observation_time` from a plugin is taken as station-local; an aware one is
+  converted without changing the instant.
+- **The window** is half-open, `[start, end)`. `end` is the top of the
+  current hour in the station's timezone. `start` is the **later** of the
+  latest saved observation for that station and the station link's
+  *Collection Start Date*. With no saved data and no start date, the plugin's
+  default window applies — usually the previous hour, sometimes the previous
+  day; the field's help text says which.
+- **Backfill.** Set *Collection Start Date* in the past before the first run.
+- **Skipping a backlog.** Move *Collection Start Date* forward past the
+  latest saved record; the next run resumes from there and the gap is logged
+  as skipped. The date only ever moves collection forward — see
+  {ref}`station-links-choosing-where-collection-starts`.
+- **Late data.** Because records are upserted on their unique key, a source
+  that re-sends an old timestamp updates the existing row rather than
+  creating a duplicate.
+- **Daily data.** Ticking *Is Daily Data* on the connection marks its records
+  as daily and relaxes the freshness thresholds on the dashboard to 26 and
+  48 hours.
 
-## 4) Time, Timezones & Windows
+## Dispatch
 
-**Golden rules:**
+```{mermaid}
+flowchart LR
+  T[Beat tick every\nData Check Interval] --> R[Read records not yet sent\nper station, oldest first,\nup to Max Records per Dispatch]
+  R --> M[Apply parameter mappings\nname + unit per destination]
+  M --> A{Send aggregated?}
+  A -- no --> S[send_station_data]
+  A -- hourly --> H[Hourly aggregate\nmin / max / avg / sum] --> S
+  S --> L[Activity log · push]
+```
 
-- Plugins work in the **station’s timezone**; the database stores UTC.
-- Default window is **the previous hour** up to the **top of the next hour** (closed-open `[start, end)`).
-- ADL resumes from the **later** of the **latest saved observation time** and the station's configured
-  **collection start date** (when the plugin offers one). The start date is a floor: on the first run it is the start
-  of the backfill; moving it forward past the latest saved record makes the next run resume from the new date and skip
-  the gap. It never moves the window backwards.
-- If there are no database records and no start date, ADL uses the default previous-hour window.
-- For daily feeds, the `NetworkConnection.is_daily_data` flag marks saved rows accordingly.
+A dispatch channel is the mirror image of a connection. It is enabled or
+disabled, runs every *Data Check Interval* minutes, reads from one or more
+connections, and can start from a fixed *Starting date*. Per run and per
+station it sends at most *Maximum Records per Dispatch* (default 500),
+oldest first, so a backlog drains across runs. Each send is bounded by the
+*Dispatch Timeout*.
 
-### Naive vs Aware datetimes
+**Parameter mappings** translate each ADL parameter into the destination's
+field name and unit (Temperature → `air_temperature` in K). With **Send
+Aggregated Data** ticked, the channel sends hourly summaries instead of raw
+records, and each mapping chooses the measure (average, sum, min, max).
 
-- If a plugin returns naive `observation_time`, ADL interprets it as **station-local** and makes it aware.
-- If the plugin returns aware datetimes (UTC or otherwise), ADL converts them to station-local **without shifting the
-  instant**.
+**Station selection** is per channel: every station on the chosen
+connections is included unless disabled on the channel's station list. A
+station can be in several channels, one, or none.
 
----
+## Monitoring in one paragraph
 
-## 5) Scheduling & Execution
+The home page shows every connection's stored **health verdict** and every
+station's pipeline and data-freshness colour. The verdict comes from the
+**Ingestion Diagnostic**, which names the first failing layer of six —
+Scheduler, Worker & queue, Station locks, Network path, Source, Data — from
+the heartbeats, schedule entries, locks, activity logs and probe results the
+system already holds. The two external layers are checked on demand with
+**Probe source now**, never on a timer; a station's own identity at the
+source is checked with **Check station source now** on its Inspect page.
+Dispatch has its own *Test connection*, *Dispatch now* and lock tools. All of
+this, with every message the core can show, is in
+[Monitoring & Diagnostics](user_guide/monitoring_and_diagnostics.md) and
+[Dispatch Troubleshooting](user_guide/dispatch_troubleshooting.md).
 
-- **Celery Beat** triggers periodic runs (e.g., every 15 minutes) according to `plugin_processing_interval` on the
-  `NetworkConnection`.
-- **Celery Workers** execute the fetch/save jobs and can scale horizontally.
-- Manual runs can be initiated via `NetworkConnection.collect_data()` (useful for backfills or debugging).
-- Plugins should respect upstream **rate limits** and add **retry/backoff** for transient failures.
+## Services on the box
 
----
+| Container | Role |
+|---|---|
+| `adl` | The web application (admin, API, data viewer). Runs migrations and collects static files on start. |
+| `adl_celery_beat` | The scheduler. Fires connection and channel ticks. |
+| `adl_celery_worker_adl` | Consumes the **ingestion** queue: runs plugins. |
+| `adl_celery_worker_dispatch` | Consumes the **dispatch** queue: runs channels. |
+| `adl_celery_worker_default` | Housekeeping: activity-log sweeps, health evaluation, nightly cleanup. |
+| `adl_db` | PostgreSQL with TimescaleDB and PostGIS. |
+| `adl_redis` | Message broker and cache (locks, cooldowns). |
+| `adl_web_proxy` | Nginx in front of the app, on `ADL_WEB_PROXY_PORT`. |
+| `adl_pg_tileserv` | Vector tiles for the map viewer. |
 
-## 6) Dispatch Channels (Downstream)
+Separate workers per queue mean a flood of ingestion work cannot starve
+dispatch, and vice versa. See [Routine operations](operations/routine_operations.md).
 
-After ingestion, ADL can **publish** data to external systems via **Dispatch Channels**. A channel selects parameters,
-optionally uses aggregations (e.g., hourly), and pushes records onward. Example: **Wis2BoxUpload** connects to a WIS2
-storage endpoint and uploads observations.
+## Glossary
 
-Dispatch entities:
-
-- **DispatchChannel**: base configuration (enabled, interval, optional start date, aggregated vs raw).
-- **DispatchChannelParameterMapping**: maps ADL parameters into the channel’s expected field names/units and selects the
-  aggregation measure (avg/sum/min/max).
-- **Station selection**: choose which stations are allowed for the channel.
-
----
-
-## 7) Observability & Operations
-
-- **Logging**: Plugins and core components log key events (window bounds, station ids, counts, warnings on validation).
-- **Idempotency**: Upserts based on the unique key avoid duplicates; late data updates the same unique row.
-- **Troubleshooting**: Check plugin logs for window computations, mapping issues, and unit conversion warnings.
-
-Operational tips:
-
-- Use conservative timeouts and a `requests` retry adapter in API clients.
-- For performance: paginate upstream requests, stream/process in chunks, rely on TimescaleDB indexes for readbacks.
-
----
-
-## 8) Security & Configuration
-
-- **Access control** is managed by Django/Wagtail admin permissions; admin-only URLs for plugin helpers (widgets,
-  metadata views) should remain authenticated.
-- **Licensing & data policy**: Respect source terms; document attribution requirements in plugin README.
-
----
-
-## 9) Developer Workflow
-
-1. **Create a plugin** from the boilerplate (cookiecutter) or copy the sample.
-2. Implement `get_station_data` and register the plugin in `AppConfig.ready()`.
-3. Add models for `NetworkConnection` and `StationLink` as needed; create migrations.
-4. Add admin widgets/views only if they improve operator UX.
-5. Run locally with Docker Compose (ADL core + your plugin) and iterate.
-
----
-
-## 10) Glossary
-
-- **Plugin**: A Django app implementing `get_station_data` to fetch and normalize upstream data.
-- **Network**: A grouping of stations.
-- **Station**: An observing site (location/metadata).
-- **NetworkConnection**: Configuration for a specific upstream integration; references a Plugin type.
-- **StationLink**: Binds a Station to a NetworkConnection and adds per-station connection details.
-- **DataParameter**: Canonical variable name with a canonical Unit.
-- **Unit**: Measurement unit used by ADL; convertible via the unit registry.
-- **ObservationRecord**: The core time-series row `(time, station, connection, parameter, value)`.
-- **Dispatch Channel**: A mechanism to publish records to external systems.
-
----
-
-## 11) Mental Model (TL;DR)
-
-- A **Connection** + **StationLinks** define *what* to pull and *from where*.
-- A **Plugin** defines *how* to pull and *how to map* the fields.
-- ADL chooses a **time window**, the plugin returns rows, and ADL **upserts** them.
-- Optional **Dispatch** moves curated data out to other systems.
-
-If you understand the *Connection → StationLink → Plugin → ObservationRecord* chain, you understand ADL.
+- **Plugin** — an installable package that implements one source type
+  (ingestion) and/or one destination type (dispatch).
+- **Connection** — configuration for one upstream integration; picks the
+  plugin and holds its credentials and schedule.
+- **Station link** — binds a station to a connection; carries the
+  source-side station identifier and collection start date.
+- **Variable mapping** — source variable + source unit → ADL parameter.
+- **Observation record** — the stored `(time, station, connection,
+  parameter) → value` row.
+- **Dispatch channel** — one outbound destination with its own schedule,
+  station selection and parameter mappings.
+- **Tick** — one scheduled run of a connection or channel.
+- **Window** — the `[start, end)` time range a station's run asks the source
+  for.
+- **Health verdict** — the stored result of the Ingestion Diagnostic: a
+  status and the first failing layer.
+- **Source check / probe** — the on-demand checks behind the Network path and
+  Source layers.
