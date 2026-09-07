@@ -93,10 +93,11 @@ screenshots:
     - wait_for: ".dropdown.show"
     - fill: { selector: "#id_password", value: "••••••••" }   # never show a credential
   callouts:                          # numbers only, never text (docs are translated)
-    - badge: { target: "#id_host", n: 1 }
+    - badge: { target: "#id_host", n: 1 }   # side: right to place it after
     - highlight: ".health-probe-form button"
   capture:
     selector: "form"                 # crop; padding from defaults
+    max_height: 900                  # optional; cap a very tall crop
 ```
 
 Setup steps: `click`, `hover`, `wait_for`, `wait` (ms), `wait_until` (a JS
@@ -106,8 +107,23 @@ hatch). Use `wait_until` for a widget that fills itself over AJAX: an
 times out. Anchor a callout to the control an operator can see, never to a
 chooser's hidden input — a target with no box is refused, because clamping the
 badge to the page origin silently grows the crop to the whole page. `auth: false` on an entry captures
-it without the admin session (the login page). Plugin repos carry only this
-YAML — never capture code.
+it without the admin session (the login page).
+
+Cropping a Wagtail panel: use `#panel-<relation>-section`, the element that
+holds the panel's header and its rows together. An InlinePanel's formset
+(`#id_<relation>-FORMS`) starts *below* the header, so cropping to it slices
+the heading off the top of the shot. Beware `:has()`/xpath tricks that match on
+the class `w-panel` — they also match `w-panel__content`, the inner div, which
+has the same problem.
+
+`max_height` caps a crop whose content is mostly repetition — a list page
+running to thousands of pixels of identical rows, where the doc only needs
+enough of them to show the table's shape. It cuts the bottom off, so only use
+it where the surrounding prose says the list continues, and prefer a tighter
+`selector` when the height comes from empty space rather than content. A cap
+that would remove a numbered badge is refused rather than applied.
+
+Plugin repos carry only this YAML — never capture code.
 
 ## Mocking the source
 

@@ -23,7 +23,8 @@ LOG_ARGS ?= --tail 100
 	dev-up dev-down dev-stop dev-restart dev-build dev-ps dev-logs \
 	dev-app-logs dev-worker-logs dev-beat-logs \
 	dev-shell dev-worker-shell dev-beat-shell \
-	dev-migrate dev-makemigrations dev-createsuperuser
+	dev-migrate dev-makemigrations dev-createsuperuser \
+	docs-screenshots
 
 # ======================
 # PROD
@@ -144,3 +145,21 @@ dev-test:
 	  -e "DATABASE_URL=timescalegis://$$ADL_DB_USER:$$ADL_DB_PASSWORD@adl_db:5432/$$ADL_DB_NAME" \
 	  $(APP) adl test --keepdb -t /adl/app/src $(TEST_ARGS)
 
+
+# ======================
+# DOCS
+# ======================
+
+# Regenerate the core user-guide screenshot set from docs/screenshots/screenshots.yml.
+#
+# The core's own screenshots show a connection collecting from a real source —
+# the health column, the Ingestion Diagnostic ladder, the station Inspect page —
+# and core alone has no ingestion plugin. The FTP plugin's capture stack is that
+# instance: a mock FTP source with sample files, a genuine collection cycle
+# before capture, and the /ftpstationlink/ URLs the core manifest already uses.
+# So the core set is captured against it. Point PLUGIN_STACK elsewhere only if
+# the FTP plugin checkout lives somewhere other than a sibling adl-plugins/.
+PLUGIN_STACK ?= ../adl-plugins/adl-ftp-plugin
+
+docs-screenshots:
+	./scripts/capture-plugin-docs.sh $(PLUGIN_STACK) --core $(CAPTURE_ARGS)

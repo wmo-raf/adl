@@ -29,11 +29,17 @@ Manifest format::
         - wait_until: "js predicate"   # poll until true (AJAX-filled selects)
         - eval: "javascript"       # escape hatch for DOM surgery
       callouts:                    # optional; numbers only, never text
-        - badge: { target: "sel", n: 1 }
+        - badge: { target: "sel", n: 1, side: left }  # side: right to
+                                   #   put the badge after the target instead
         - highlight: "sel"         # or { target: "sel" }
       capture:
         selector: "sel"            # crop; omit for the viewport
         padding: 12                # overrides defaults
+        max_height: 900            # cap a very tall crop (long lists/tables);
+                                   #   the shot is cut off at the bottom, so
+                                   #   only use it where the doc says the list
+                                   #   continues. Refused if it would cut a
+                                   #   callout.
         full_page: false
 
 A name may include a sub-path (``user/monitoring/x``). Images directory: ``--images-dir`` or, under ``--repo-dir``, ``docs/_static/images``
@@ -224,8 +230,15 @@ class Runner:
         (kind, arg), = callout.items()
         if kind == "badge":
             target, n = arg["target"], int(arg["n"])
+            # A badge sits to the left of its target by default. Where the
+            # target butts up against the element before it — a message that
+            # starts right after a status pill — that lands the badge on top of
+            # its neighbour; `side: right` puts it after the target instead.
+            side = arg.get("side", "left")
+            if side not in ("left", "right"):
+                raise CaptureError(f"badge side must be left or right, not {side!r}")
             self.require(page, target)
-            page.evaluate("([s, n]) => badge(s, n)", [target, n])
+            page.evaluate("([s, n, side]) => badge(s, n, {side})", [target, n, side])
         elif kind == "highlight":
             target = arg["target"] if isinstance(arg, dict) else arg
             self.require(page, target)
@@ -271,7 +284,33 @@ class Runner:
             "width": box["width"] + 2 * padding,
             "height": box["height"] + 2 * padding,
         }
+        self.cap_height(page, clip, capture.get("max_height"))
         page.screenshot(path=str(out), clip=clip)
+
+    @staticmethod
+    def cap_height(page, clip, max_height):
+        """Truncate a crop that is mostly repetition.
+
+        A page listing every observation code for a granularity runs to
+        thousands of pixels of identical rows; the doc only needs enough of
+        them to show the shape of the table. Capping is deliberate truncation,
+        so it must never silently remove a numbered badge the prose refers to —
+        refuse instead, the way require() refuses a 0x0 callout target.
+        """
+        if not max_height or clip["height"] <= max_height:
+            return
+        cut = clip["y"] + max_height
+        lost = page.evaluate(
+            """cut => Array.from(document.querySelectorAll('.adl-annotation'))
+                .filter(el => el.getBoundingClientRect().bottom + window.scrollY > cut)
+                .length""",
+            cut,
+        )
+        if lost:
+            raise CaptureError(
+                f"max_height {max_height} would cut off {lost} callout(s); "
+                "raise it or move the callouts into the kept region")
+        clip["height"] = max_height
 
     @staticmethod
     def union_with_annotations(page, box):

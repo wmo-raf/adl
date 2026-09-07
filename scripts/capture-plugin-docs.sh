@@ -3,7 +3,15 @@
 # Regenerate one plugin's documentation screenshots against a seeded, genuinely
 # healthy dev instance of that plugin (docs/screenshots/capture/README.md).
 #
-#   scripts/capture-plugin-docs.sh <plugin-repo-path> [--skip-build] [--keep-up] [--no-capture]
+#   scripts/capture-plugin-docs.sh <plugin-repo-path> [--skip-build] [--keep-up]
+#                                  [--no-capture] [--core] [--only <entry name>]...
+#
+# --core runs the ADL CORE manifest (docs/screenshots/screenshots.yml) against
+# the given plugin's stack, writing into the core's docs/_static/images. The
+# core's own user-guide screenshots need a real connection with a real source,
+# which core alone has not got; the FTP plugin's stack — mock FTP source, a
+# genuine collection cycle — is exactly that instance, and the core manifest's
+# URLs (/ftpstationlink/...) already assume it. See `make docs-screenshots`.
 #
 # The loop: build the plugin's dev stack -> up (plus the mock FTP source) ->
 # seed -> real collection cycle + on-demand source checks -> log in ->
@@ -30,18 +38,24 @@
 # plugin's own format, generated inside the mock FTP source at start).
 set -euo pipefail
 
-usage() { sed -n '2,20p' "$0"; exit 1; }
+usage() { sed -n '2,28p' "$0"; exit 1; }
 [[ $# -ge 1 ]] || usage
 
-SKIP_BUILD=0; KEEP_UP=0; NO_CAPTURE=0
+SKIP_BUILD=0; KEEP_UP=0; NO_CAPTURE=0; CORE=0; ONLY=()
 PLUGIN_DIR=$(cd "$1" && pwd); shift
-for arg in "$@"; do
-  case "$arg" in
+while [[ $# -gt 0 ]]; do
+  case "$1" in
     --skip-build) SKIP_BUILD=1 ;;
     --keep-up) KEEP_UP=1 ;;
     --no-capture) NO_CAPTURE=1 ;;
+    --core) CORE=1 ;;
+    # Re-shoot named entries only. A full run re-renders every image, and the
+    # diagnostic shots carry live timestamps, so fixing one crop otherwise
+    # shows up as a diff in unrelated images.
+    --only) shift; [[ $# -gt 0 ]] || usage; ONLY+=(--only "$1") ;;
     *) usage ;;
   esac
+  shift
 done
 
 ADL_DIR=$(cd "$(dirname "$0")/.." && pwd)
@@ -50,6 +64,7 @@ SLUG=$(basename "$PLUGIN_DIR")
 MODULE=$(basename "$(ls -d "$PLUGIN_DIR"/plugins/*/ | head -1)")
 PROJECT="${SLUG}-docs"
 MANIFEST="$PLUGIN_DIR/docs/screenshots.yml"
+CAPTURE_REPO="$PLUGIN_DIR"
 FIXTURE="$PLUGIN_DIR/docs/screenshots/fixture.json"
 CREDENTIALS="$PLUGIN_DIR/docs/screenshots/credentials.env"
 WORK=$(mktemp -d -t adl-capture-XXXXXX)
@@ -71,6 +86,12 @@ for candidate in docker-compose.yml docker-compose.dev.yml; do
   [[ -f "$PLUGIN_DIR/$candidate" ]] && { PLUGIN_COMPOSE="$PLUGIN_DIR/$candidate"; break; }
 done
 [[ -n "$PLUGIN_COMPOSE" ]] || die "$PLUGIN_DIR has no docker-compose.yml / docker-compose.dev.yml"
+if [[ $CORE = 1 ]]; then
+  # capture.py picks docs/_static/images under a repo-dir that has it (the core)
+  # and docs/images otherwise (a plugin), so the output path follows from this.
+  MANIFEST="$ADL_DIR/docs/screenshots/screenshots.yml"
+  CAPTURE_REPO="$ADL_DIR"
+fi
 [[ -f "$FIXTURE" ]] || die "missing $FIXTURE"
 [[ -f "$MANIFEST" || $NO_CAPTURE = 1 ]] || die "missing $MANIFEST"
 command -v python3 >/dev/null || die "python3 is required"
@@ -129,6 +150,12 @@ services:
     container_name: ${PROJECT}-mock-ftp
     environment:
       SAMPLE_TZ: $SAMPLE_TZ
+  # Stands in for a wis2box instance's station catalogue, so the WIS2Box
+  # Stations comparison page has all three of its tables populated.
+  mock_wis2box:
+    build: $CAPTURE_DIR/mock-wis2box
+    image: adl-docs-mock-wis2box
+    container_name: ${PROJECT}-mock-wis2box
 EOF
 # Each service is emitted exactly once: a second "mock_ftp:" key here would be a
 # duplicate mapping key, which docker compose rejects outright.
@@ -145,6 +172,7 @@ cat <<EOF
       - "$PORT:8000"
     depends_on:
       - mock_ftp
+      - mock_wis2box
     volumes:
       - $PLUGIN_DIR/docs:/adl/docs-capture:ro
     environment:
@@ -239,6 +267,32 @@ done
 log "seeding"
 "${COMPOSE[@]}" exec -T adl adl seed_docs_demo --fixture /adl/docs-capture/screenshots/fixture.json
 
+# The Vue viewer builds its API URLs from the Wagtail Site record, which is
+# localhost:80 out of the box. The capture stack is published on $PORT, so every
+# viewer API call would be cross-origin, the browser would block it, and the
+# connection/station pickers would sit empty at "No available options" — the
+# table and chart shots then capture a blank panel and look plausible. Point the
+# site at the port the instance is actually served on.
+log "pointing the Wagtail site at localhost:$PORT (the viewer reads its API base from it)"
+"${COMPOSE[@]}" exec -T adl adl shell -c "
+from wagtail.models import Site
+Site.objects.filter(is_default_site=True).update(hostname='localhost', port=$PORT)
+" >/dev/null
+
+# Point the WIS2Box settings at the mock catalogue above; without a URL the
+# comparison page renders only its "configure me" state.
+log "pointing WIS2Box settings at the mock catalogue"
+"${COMPOSE[@]}" exec -T adl adl shell -c "
+from django.core.cache import cache
+from wagtail.models import Site
+from adl.wis2box.models import Wis2BoxSettings
+site = Site.objects.get(is_default_site=True)
+s, _ = Wis2BoxSettings.objects.get_or_create(site=site)
+s.wis2box_url = 'http://mock_wis2box'
+s.save()
+cache.delete('wis2box_stations')
+" >/dev/null
+
 PRIME=(adl docs_capture_prime --connection "$CONNECTION" --wait "$WAIT" \
        --present-interval "$PRESENT_INTERVAL" --evaluate)
 [[ $INGEST = true || $INGEST = True ]] && PRIME+=(--ingest)
@@ -262,6 +316,10 @@ if [[ ! -x "$VENV/bin/python" ]]; then
 fi
 log "capturing (languages: $LANGS)"
 "$VENV/bin/python" "$CAPTURE_DIR/capture.py" "$MANIFEST" \
-  --base-url "$BASE_URL" --repo-dir "$PLUGIN_DIR" --lang "$LANGS" \
-  --username "$ADMIN_USER" --password "$ADMIN_PASSWORD"
-log "done — images in $PLUGIN_DIR/docs/images/"
+  --base-url "$BASE_URL" --repo-dir "$CAPTURE_REPO" --lang "$LANGS" \
+  --username "$ADMIN_USER" --password "$ADMIN_PASSWORD" "${ONLY[@]+"${ONLY[@]}"}"
+if [[ $CORE = 1 ]]; then
+  log "done — images in $ADL_DIR/docs/_static/images/"
+else
+  log "done — images in $PLUGIN_DIR/docs/images/"
+fi
