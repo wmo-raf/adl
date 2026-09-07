@@ -42,7 +42,7 @@ installation
 operations/index
 api
 wis2box_integration
-plugins_list
+plugins/index
 environmental_variables
 ssl-setup-nginx-proxy-manager
 wis2box-adl-nginx-proxy-manager

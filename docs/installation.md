@@ -160,7 +160,7 @@ you can install them later at any time.
 
 ADL does not bundle any plugins — each data source has its own plugin that
 you install separately. Before installing, check the
-[Available Plugins](plugins_list.md) page to find the right plugin for your
+[Available Plugins](plugins/index.md) page to find the right plugin for your
 weather station network or data source.
 
 ```{warning}

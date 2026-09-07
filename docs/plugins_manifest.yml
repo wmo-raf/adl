@@ -1,0 +1,98 @@
+# Roster of plugin repositories whose docs are aggregated into this site.
+#
+# scripts/aggregate_plugin_docs.py reads this file, copies each repo's
+# docs/guide.md + docs/images/ into docs/plugins/<slug>/, and generates
+# docs/plugins/index.md from it. See docs-plan/README.md,
+# "Aggregation conventions", for the rules a plugin guide must follow.
+#
+# Per entry:
+#   repo         required. Clone URL. The slug (basename minus .git) is the
+#                directory name under docs/plugins/ and the cross-reference key.
+#   ref          git ref to clone in --source git mode. Default "main".
+#                Pin to a release tag once a plugin's guide is stable.
+#   docs         true  -> the repo carries docs/guide.md; it is copied and
+#                        added to the toctree.
+#                false -> not documented yet; listed in the index table with a
+#                        link to the repository instead of to a guide.
+#   name, connects_to, category, country, country_flag, choose_when
+#                display metadata. For docs: true entries these come from the
+#                guide's own front matter and must NOT be repeated here.
+#                For docs: false entries they are the only source, so give them.
+
+canonical_docs_url: https://adl-tool.readthedocs.io
+
+plugins:
+  # --- documented (batch 1) ------------------------------------------------
+  - repo: https://github.com/wmo-raf/adl-pulsoweb-plugin.git
+    ref: main
+    docs: true
+
+  - repo: https://github.com/wmo-raf/adl-weatherlink-plugin.git
+    ref: main
+    docs: true
+
+  - repo: https://github.com/wmo-raf/adl-adcon-db-plugin.git
+    ref: main
+    docs: true
+
+  - repo: https://github.com/anam-bf/adl-ftp-adcon-bf-plugin.git
+    ref: main
+    docs: true
+
+  - repo: https://github.com/wmo-raf/adl-ftp-adcon-som-plugin.git
+    ref: main
+    docs: true
+
+  # --- not documented yet --------------------------------------------------
+  - repo: https://github.com/wmo-raf/adl-ftp-plugin.git
+    ref: main
+    docs: false
+    name: ADL FTP Plugin
+    connects_to: >-
+      FTP/SFTP storage endpoints — supports multiple decoder formats
+      (Campbell TOA5, Siap+Micros, Vaisala, ADCON, Pulsonic, Seba, and more)
+    category: general
+    choose_when: >-
+      Your stations send data to an FTP or SFTP server. It supports multiple
+      file formats; check whether a country-specific decoder exists for your
+      vendor.
+
+  - repo: https://github.com/wmo-raf/adl-tahmo-plugin.git
+    ref: main
+    docs: false
+    name: ADL TAHMO Plugin
+    connects_to: "[TAHMO](https://tahmo.org) API"
+    category: general
+    choose_when: Your stations are part of the TAHMO network.
+
+  - repo: https://github.com/wmo-raf/adl-cimawebdrops-plugin.git
+    ref: main
+    docs: false
+    name: ADL CIMAWebDrops Plugin
+    connects_to: CIMA WebDrops API
+    category: general
+
+  - repo: https://github.com/wmo-raf/adl-earthnetworks-plugin.git
+    ref: main
+    docs: false
+    name: ADL EarthNetworks Plugin
+    connects_to: EarthNetworks API
+    category: general
+
+  - repo: https://github.com/seychelles-met/adl-vaisala-sc-ftp-decoder.git
+    ref: main
+    docs: false
+    name: ADL Vaisala SC FTP Decoder
+    connects_to: FTP decoder for Vaisala Avimet AWS
+    category: country
+    country: Seychelles
+    country_flag: "🇸🇨"
+
+  - repo: https://github.com/inam-mz/adl-mz-nesa-decoder.git
+    ref: main
+    docs: false
+    name: ADL NESA MZ Decoder
+    connects_to: FTP decoder for NESA stations
+    category: country
+    country: Mozambique
+    country_flag: "🇲🇿"

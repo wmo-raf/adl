@@ -43,7 +43,7 @@ names a missing dependency or an incompatible ADL core version.
 
 ## Finding and installing a plugin
 
-[Available Plugins](../plugins_list.md) lists every plugin maintained for
+[Available Plugins](../plugins/index.md) lists every plugin maintained for
 ADL, what it connects to, and which to choose for common data sources.
 
 Plugins are installed on the server, not from the admin. Three methods
