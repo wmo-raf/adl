@@ -535,36 +535,40 @@ titlesonly: true
 
 
 def run_sphinx(outdir: Path) -> int:
-    """Build the site and gate on warnings coming from the plugin tree.
+    """Build the site with -W: any warning, anywhere, fails.
 
-    The core docs carry pre-existing warnings (screenshots not yet regenerated),
-    so -W would fail for reasons unrelated to aggregation. Gate on the plugins/
-    tree only: an aggregated guide must build clean.
+    The whole site builds warning-free, so this is the same gate Read the Docs
+    applies (.readthedocs.yaml sets fail_on_warning). Warnings from the plugin
+    tree are called out separately because those are the ones an aggregation
+    change causes, and they name a path under docs/plugins/ that exists only
+    during a build — the file to fix is in the plugin repo.
     """
     result = subprocess.run(
-        [sys.executable, "-m", "sphinx", "-b", "html", str(DOCS_DIR), str(outdir)],
+        [sys.executable, "-m", "sphinx", "-W", "-b", "html", str(DOCS_DIR), str(outdir)],
         capture_output=True,
         text=True,
     )
     sys.stderr.write(result.stderr)
     if result.returncode != 0:
-        print("sphinx-build failed", file=sys.stderr)
+        plugin_warnings = [
+            line
+            for line in result.stderr.splitlines()
+            if "WARNING" in line and f"{OUT_DIR}{os.sep}" in line
+        ]
+        if plugin_warnings:
+            print(
+                f"\n{len(plugin_warnings)} of the warnings come from an aggregated "
+                f"plugin guide — fix them in the plugin repo, not in "
+                f"{OUT_DIR.relative_to(REPO_ROOT)}, which is regenerated:",
+                file=sys.stderr,
+            )
+            for line in plugin_warnings:
+                print(f"  {line}", file=sys.stderr)
+        else:
+            print("sphinx-build failed", file=sys.stderr)
         return result.returncode
 
-    plugin_warnings = [
-        line
-        for line in result.stderr.splitlines()
-        if "WARNING" in line and f"{OUT_DIR}{os.sep}" in line
-    ]
-    if plugin_warnings:
-        print(
-            f"{len(plugin_warnings)} warning(s) from aggregated plugin docs:",
-            file=sys.stderr,
-        )
-        for line in plugin_warnings:
-            print(f"  {line}", file=sys.stderr)
-        return 1
-    print(f"sphinx-build clean for {OUT_DIR.relative_to(REPO_ROOT)}; output in {outdir}")
+    print(f"sphinx-build clean (-W); output in {outdir}")
     return 0
 
 

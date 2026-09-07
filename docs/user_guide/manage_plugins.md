@@ -19,7 +19,7 @@ The home page shows a **Plugins** counter. Click it to open the **Installed
 Plugins** page at `/plugins/`. There is no sidebar entry; this counter is the
 way in.
 
-![Installed Plugins page](../_static/images/user/new/installed_plugins.png)
+![Installed Plugins page](../_static/images/user/plugins/installed_plugins.png)
 
 Each installed plugin is a card with:
 

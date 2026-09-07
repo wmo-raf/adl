@@ -141,20 +141,22 @@ performs no network calls to the source.
 
 ### The headline
 
-The top line has three parts:
+The top line has:
 
 1. A **status badge** — one of the states in the table below.
-2. The **first failing layer**, in bold, when there is one (for example
-   **Scheduler**). Everything below that layer in the ladder was not
-   evaluated.
-3. The **headline message** — the message of the check that set the verdict,
+2. The **headline message** — the message of the check that set the verdict,
    or *All checks passed.*
+3. Under it, *In this state since `<date>` · last recorded `<date>`*.
+   **Since** moves only when the verdict changes, so a long-standing failure
+   shows how long it has been failing. **Last recorded** is when the periodic
+   evaluation last ran. Before the first evaluation the line reads *No verdict
+   recorded yet — the periodic sweep has not run since this connection was
+   created.*
 
-Under it: *In this state since `<date>` · last recorded `<date>`*. **Since** moves
-only when the verdict changes, so a long-standing failure shows how long it
-has been failing. **Last recorded** is when the periodic evaluation last ran.
-Before the first evaluation the line reads *No verdict recorded yet — the
-periodic sweep has not run since this connection was created.*
+When a layer **has** failed, its name appears in bold between the badge and
+the message (for example **Scheduler**) — the connection above is healthy, so
+there is nothing to name. Everything below the named layer in the ladder was
+not evaluated.
 
 If the most recent ingestion run was started with **Run ingestion now**, a
 caption says so: *The most recent ingestion run was triggered manually at

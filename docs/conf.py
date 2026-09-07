@@ -78,6 +78,9 @@ exclude_patterns = [
     # developer notes, not a site page.
     "screenshots/**",
     "**/.venv/**",
+    # Instructions for the engineering skills, kept next to the docs they
+    # describe. Not site pages, and nothing links to them.
+    "agents/**",
 ]
 
 # -- HTML output -------------------------------------------------------------

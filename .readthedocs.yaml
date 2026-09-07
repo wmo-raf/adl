@@ -26,6 +26,10 @@ build:
 # Build documentation in the "docs/" directory with Sphinx
 sphinx:
   configuration: docs/conf.py
+  # The build is warning-free as of the Phase 4 screenshot regeneration, so a
+  # new warning is a regression: a missing image, a cross-reference to a page
+  # that moved, a plugin guide that broke on aggregation. Fail on it.
+  fail_on_warning: true
 
 # Optionally, but recommended,
 # declare the Python requirements required to build your documentation

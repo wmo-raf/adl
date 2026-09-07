@@ -136,15 +136,15 @@ screenshots:
 - name: user/dashboard
   url: /
   capture:
-    selector: .adl-dashboard
+    selector: .w-dashboard
 - name: user/network_list
   url: /network/
   callouts:
-  - highlight: a[href$="/networks/add/"]
+  - highlight: a[href$="/network/new/"]
   capture:
     selector: main
 - name: user/add_network_form
-  url: /network/create/
+  url: /network/new/
   callouts:
   - badge:
       target: '#id_name'
@@ -161,15 +161,16 @@ screenshots:
 - name: user/add_connection_form
   url: /connections/select/
   capture:
-    selector: "#w-editor-form"
-- name: user/new/installed_plugins
+    # the plugin chooser is a listing, not an edit form
+    selector: .listing
+- name: user/plugins/installed_plugins
   url: /plugins/
   capture:
     selector: main
 - name: user/dispatch/01_dc_index
   url: /dispatch-channels/
   callouts:
-  - highlight: a[href$="/dispatch-channels/add/"]
+  - highlight: a[href$="/dispatch-channels/select/"]
   capture:
     selector: main
 - name: user/monitoring/dashboard_data_pulling
@@ -205,14 +206,20 @@ screenshots:
         if (i > 0) { let n = h; while (n) { const next = n.nextElementSibling; n.remove(); n = next; } }
       });
   callouts:
+  # .health-headline__layer names the first failing layer and exists only when
+  # a layer HAS failed; these shots come from a healthy instance (docs plan
+  # decision 7), so the healthy headline is what gets numbered.
   - badge:
       target: .health-headline .status-badge
       n: 1
   - badge:
-      target: .health-headline__layer
-      n: 2
-  - badge:
       target: .health-headline__message
+      n: 2
+      # the message begins immediately after the status pill, so a left-hand
+      # badge would sit on top of the pill that badge 1 points at
+      side: right
+  - badge:
+      target: .health-headline__since
       n: 3
   capture:
     selector: .health-diagnostic
@@ -294,17 +301,19 @@ screenshots:
 - name: user/admin/users_list
   url: /users/
   callouts:
-  - highlight: a[href$="/users/add/"]
+  - highlight: a[href$="/users/new/"]
   capture:
     selector: main
 - name: user/admin/group_permissions
   url: /groups/edit/1/
-  setup:
-  - hover: .listing.listing--permissions
-  callouts:
-  - highlight: .listing.listing--permissions
   capture:
-    selector: "#w-editor-form"
+    # the permissions panel, not the whole form; the full object-permissions
+    # table is ~1800px of one row per model, so show the first screenful.
+    # No highlight: the crop is the permissions table, so there is nothing to
+    # single out — and a highlight spanning the whole table would be cut by the
+    # cap, which the runner refuses.
+    selector: '#object-permissions-section'
+    max_height: 700
 - name: user/parameters/qc_checks
   url: /dataparameter/edit/1/
   capture:
@@ -315,18 +324,48 @@ screenshots:
   - wait_for: .opblock-tag-section
   capture:
     selector: .swagger-ui
+# The viewer pages take no server-side query parameters — the selection is made
+# in the page, so the shot has to make it too. The pickers read their options
+# from the API at the Wagtail site's root URL, which the capture harness points
+# at the port the stack is published on; without that they sit empty and these
+# shots would capture a blank panel.
 - name: user/viewer/table
-  url: /viewer/table/?station=1
+  url: /viewer/table/
   setup:
+  - click: ':nth-match(.p-select, 1)'
+  - wait_for: '[role=option]'
+  - click: '[role=option]'
+  - wait: 1200
+  - click: ':nth-match(.p-select, 2)'
+  - wait_for: '[role=option]'
+  - click: '[role=option]'
   - wait_for: .p-datatable-tbody tr
   capture:
-    selector: main
+    selector: '#table-view'
+    max_height: 1150
 - name: user/viewer/chart
-  url: '/viewer/chart/?chart=1:1:1::'
+  url: /viewer/chart/
   setup:
+  - click: '#chart-view button'
+  - wait_for: .p-select
+  - click: ':nth-match(.p-select, 1)'
+  - wait_for: '[role=option]'
+  - click: '[role=option]'
+  - wait: 1200
+  - click: ':nth-match(.p-select, 2)'
+  - wait_for: '[role=option]'
+  - click: '[role=option]'
+  - wait: 1200
+  - click: ':nth-match(.p-select, 3)'
+  - wait_for: '[role=option]'
+  - click: '[role=option]'
   - wait_for: .highcharts-series
+  - wait: 1500
   capture:
-    selector: main
+    selector: '#chart-view'
+    # one filled panel; below it the page always offers an empty panel and an
+    # "Add Chart" dropzone, which are not what this figure is showing
+    max_height: 700
 - name: user/viewer/map
   url: /viewer/map/
   setup:
