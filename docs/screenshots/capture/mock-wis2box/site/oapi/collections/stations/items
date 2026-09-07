@@ -1,0 +1,49 @@
+{
+  "type": "FeatureCollection",
+  "numberMatched": 3,
+  "numberReturned": 3,
+  "features": [
+    {
+      "id": "DEMO001",
+      "type": "Feature",
+      "geometry": {"type": "Point", "coordinates": [36.74, -1.25, 1820.0]},
+      "properties": {
+        "wigos_station_identifier": "DEMO001",
+        "name": "Kabete Demo AWS",
+        "territory_name": "Demoland",
+        "facility_type": "Land (fixed)",
+        "status": "operational",
+        "topics": ["surface-weather-observations"],
+        "url": "https://oscar.wmo.int/surface/#/search/station/stationReportDetails/0-20000-0-DEMO001"
+      }
+    },
+    {
+      "id": "DEMO002",
+      "type": "Feature",
+      "geometry": {"type": "Point", "coordinates": [35.60, 3.12, 506.0]},
+      "properties": {
+        "wigos_station_identifier": "DEMO002",
+        "name": "Lodwar Demo AWS",
+        "territory_name": "Demoland",
+        "facility_type": "Land (fixed)",
+        "status": "operational",
+        "topics": ["surface-weather-observations"],
+        "url": "https://oscar.wmo.int/surface/#/search/station/stationReportDetails/0-20000-0-DEMO002"
+      }
+    },
+    {
+      "id": "DEMO900",
+      "type": "Feature",
+      "geometry": {"type": "Point", "coordinates": [37.05, 0.42, 1120.0]},
+      "properties": {
+        "wigos_station_identifier": "DEMO900",
+        "name": "Meru Demo AWS",
+        "territory_name": "Demoland",
+        "facility_type": "Land (fixed)",
+        "status": "operational",
+        "topics": ["surface-weather-observations"],
+        "url": "https://oscar.wmo.int/surface/#/search/station/stationReportDetails/0-20000-0-DEMO900"
+      }
+    }
+  ]
+}

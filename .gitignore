@@ -183,3 +183,6 @@ backup/
 .vscode
 plugins.toml
 .claude/worktrees/
+
+# Plugin docs aggregated at build time by scripts/aggregate_plugin_docs.py
+docs/plugins/

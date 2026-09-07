@@ -61,6 +61,8 @@ source_suffix = {
     ".md": "markdown",
 }
 
+myst_heading_anchors = 3
+
 myst_enable_extensions = [
     "attrs_inline",
 ]
@@ -68,7 +70,18 @@ myst_enable_extensions = [
 # -- General -----------------------------------------------------------------
 
 templates_path = ["_templates"]
-exclude_patterns = ["_build", "Thumbs.db", ".DS_Store"]
+exclude_patterns = [
+    "_build",
+    "Thumbs.db",
+    ".DS_Store",
+    # The screenshot runner vendors its own virtualenv and its README is
+    # developer notes, not a site page.
+    "screenshots/**",
+    "**/.venv/**",
+    # Instructions for the engineering skills, kept next to the docs they
+    # describe. Not site pages, and nothing links to them.
+    "agents/**",
+]
 
 # -- HTML output -------------------------------------------------------------
 

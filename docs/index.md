@@ -39,7 +39,10 @@ architecture
 technology
 core_concepts
 installation
-plugins_list
+operations/index
+api
+wis2box_integration
+plugins/index
 environmental_variables
 ssl-setup-nginx-proxy-manager
 wis2box-adl-nginx-proxy-manager

@@ -160,7 +160,7 @@ you can install them later at any time.
 
 ADL does not bundle any plugins — each data source has its own plugin that
 you install separately. Before installing, check the
-[Available Plugins](plugins_list.md) page to find the right plugin for your
+[Available Plugins](plugins/index.md) page to find the right plugin for your
 weather station network or data source.
 
 ```{warning}
@@ -358,7 +358,7 @@ To upgrade a plugin to a newer release tag, update the `tag` field in
 [[plugins]]
 name = "FTP Plugin"
 git = "https://github.com/wmo-raf/adl-ftp-plugin.git"
-tag = "v1.3.0"   # updated from v1.2.0
+tag = "1.3.0"   # updated from 1.2.0 — plugin tags carry no leading "v"
 ```
 
 ```bash
@@ -369,7 +369,7 @@ make up
 If you use `ADL_PLUGIN_GIT_REPOS`, update the tag there instead:
 
 ```bash
-ADL_PLUGIN_GIT_REPOS=https://github.com/wmo-raf/adl-ftp-plugin.git#v1.3.0
+ADL_PLUGIN_GIT_REPOS=https://github.com/wmo-raf/adl-ftp-plugin.git#1.3.0
 make build
 make up
 ```

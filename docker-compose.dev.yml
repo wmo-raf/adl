@@ -18,10 +18,11 @@ services:
       DEBUG: "True"
       MIGRATE_ON_STARTUP: "true"
       COLLECT_STATICFILES_ON_STARTUP: "true"
+      VUE_FRONTEND_DEV_SERVER_URL: ${VUE_FRONTEND_DEV_SERVER_URL:-http://localhost:5173}
     volumes:
       - ./adl:/adl/app
     ports:
-      - "8000:8000"
+      - "8004:8000"
 
   adl_celery_worker_default:
     image: adl:dev
