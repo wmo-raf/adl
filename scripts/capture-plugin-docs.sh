@@ -31,6 +31,10 @@
 #                                      through its own code. Runs inside the web
 #                                      container after seed_docs_demo and before
 #                                      priming, via `adl shell <`.
+#   docs/screenshots/pre_seed.py       OPTIONAL: the same, but run BEFORE the fixture --
+#                                      for a row the fixture's connection requires and
+#                                      cannot create itself (the agent plugin's
+#                                      connection has a non-null FK to a device).
 # Environment: CAPTURE_PORT (host port for the admin, default 8765),
 #   CAPTURE_ADMIN_USER / CAPTURE_ADMIN_PASSWORD (seeded admin login),
 #   CAPTURE_LANGS (comma-separated admin languages to capture, default "en").
@@ -222,11 +226,13 @@ while read -r svc; do
   echo "      WAIT_TIMEOUT: 300"
 done <<<"$SERVICES"
 
-if [[ $LEGACY_WORKER = 1 ]]; then
+# A worker the plugin's own compose does not provide. Both extra queues are
+# added the same way; only the command and the service name differ.
+extra_worker() {
 cat <<EOF
-  capture_worker_default:
+  capture_worker_$1:
     image: $IMAGE
-    command: celery-worker-default
+    command: celery-worker-$1
     env_file:
       - $PLUGIN_DIR/.env
     environment:
@@ -241,6 +247,18 @@ cat <<EOF
     volumes:
       - $PLUGIN_DIR/plugins/$MODULE:/adl/plugins/$MODULE
 EOF
+}
+
+[[ $LEGACY_WORKER = 1 ]] && extra_worker default
+
+# Dispatch runs on its own queue. A compose with no worker consuming it leaves
+# `docs_capture_prime --dispatch` enqueueing tasks nothing ever picks up: the
+# run reports "0 station(s) with a last-sent time" and the channel screens are
+# captured empty. Several plugin composes have no dispatch worker at all, so
+# this is gated on the service being absent rather than on the legacy layout.
+if ! grep -qx adl_celery_worker_dispatch <<<"$SERVICES"; then
+  log "plugin compose has no dispatch worker: adding one for the dispatch queue"
+  extra_worker dispatch
 fi
 } > "$OVERLAY"
 
@@ -278,6 +296,13 @@ for i in $(seq 1 120); do
 done
 
 # --- seed and prime ---------------------------------------------------------------------
+# A row the fixture's own connection needs before it can be created: the
+# fixture names foreign keys, it does not create their targets.
+if [[ -f "$PLUGIN_DIR/docs/screenshots/pre_seed.py" ]]; then
+  log "running the plugin's pre-seed script"
+  "${COMPOSE[@]}" exec -T adl adl shell < "$PLUGIN_DIR/docs/screenshots/pre_seed.py"
+fi
+
 log "seeding"
 "${COMPOSE[@]}" exec -T adl adl seed_docs_demo --fixture /adl/docs-capture/screenshots/fixture.json
 
