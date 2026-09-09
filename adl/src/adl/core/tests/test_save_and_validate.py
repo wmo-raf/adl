@@ -56,6 +56,60 @@ class SaveAndValidateTests(TestCase):
         self.assertEqual(total_saved, 0)
         self.assertEqual(ObservationRecord.objects.count(), 0)
 
+    def test_reject_nan_value(self):
+        """
+        A NaN is a float, so the numeric type check admits it. Several
+        decoders produce one for every empty or unparseable cell (pandas
+        ``to_numeric(..., errors="coerce")``), and stored as a number it is
+        indistinguishable from a reading that was actually taken.
+        """
+        ts = datetime(2025, 1, 1, 12, 0, tzinfo=py_tz.utc)
+        self.plugin.records = [{"observation_time": ts, "temp_K": float("nan")}]
+
+        total_saved, earliest, latest = self.plugin.save_records(
+            self.link, self.plugin.records
+        )
+        self.assertEqual(total_saved, 0)
+        self.assertEqual(ObservationRecord.objects.count(), 0)
+
+    def test_reject_infinite_values(self):
+        ts = datetime(2025, 1, 1, 12, 0, tzinfo=py_tz.utc)
+        self.plugin.records = [
+            {"observation_time": ts, "temp_K": float("inf")},
+            {"observation_time": ts + timedelta(hours=1), "temp_K": float("-inf")},
+        ]
+
+        total_saved, earliest, latest = self.plugin.save_records(
+            self.link, self.plugin.records
+        )
+        self.assertEqual(total_saved, 0)
+        self.assertEqual(ObservationRecord.objects.count(), 0)
+
+    def test_a_nan_does_not_discard_the_readings_beside_it(self):
+        """
+        The guard is per value, not per record: one absent sensor must not
+        cost the other parameters observed at the same instant.
+        """
+        unit_k = self.unit_k
+        param_dewpoint = DataParameterFactory(name="dew_point", unit=unit_k)
+        self.link.get_variable_mappings = lambda: [
+            make_mapping(self.param_temp, unit_k),
+            make_mapping(param_dewpoint, unit_k, source_name="dewpoint_K"),
+        ]
+
+        ts = datetime(2025, 1, 1, 12, 0, tzinfo=py_tz.utc)
+        self.plugin.records = [
+            {"observation_time": ts, "temp_K": float("nan"), "dewpoint_K": 293.15}
+        ]
+
+        total_saved, earliest, latest = self.plugin.save_records(
+            self.link, self.plugin.records
+        )
+        self.assertEqual(total_saved, 1)
+
+        rec = ObservationRecord.objects.get()
+        self.assertEqual(rec.parameter_id, param_dewpoint.id)
+
     def test_missing_observation_time_is_skipped(self):
         self.plugin.records = [{"temp_K": 300.0}]  # no observation_time
 
