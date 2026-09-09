@@ -25,6 +25,12 @@
 #                                      the captured screens show — see docs_capture_prime)
 #   docs/screenshots/credentials.env   OPTIONAL, git-ignored: live credentials the
 #                                      fixture references as "$ENV:NAME"
+#   docs/screenshots/seed.py           OPTIONAL: extra seeding the fixture JSON cannot
+#                                      express -- rows behind an API (a paired agent
+#                                      device), uploads, or state a plugin only reaches
+#                                      through its own code. Runs inside the web
+#                                      container after seed_docs_demo and before
+#                                      priming, via `adl shell <`.
 # Environment: CAPTURE_PORT (host port for the admin, default 8765),
 #   CAPTURE_ADMIN_USER / CAPTURE_ADMIN_PASSWORD (seeded admin login),
 #   CAPTURE_LANGS (comma-separated admin languages to capture, default "en").
@@ -125,6 +131,11 @@ CONNECTION=$(fixture_get connection)
 INGEST=$(fixture_get ingest true)
 PROBE=$(fixture_get probe true)
 STATION_CHECKS=$(fixture_get station_checks)
+# Newline-separated, unlike the space-joined lists above: a dispatch channel is
+# named the way the admin shows it ("Demo MinIO Upload"), so splitting on spaces
+# would turn one channel into three that do not exist.
+fixture_get_lines() { python3 -c "import json,sys; c=json.load(open(sys.argv[1])).get('capture',{}); v=c.get(sys.argv[2], []); print('\n'.join(v if isinstance(v,list) else [v]))" "$FIXTURE" "$@"; }
+DISPATCH_CHANNELS=$(fixture_get_lines dispatch)
 WAIT=$(fixture_get wait 180)
 PRESENT_INTERVAL=$(fixture_get present_interval 15)
 # The mock source writes its samples in local wall-clock time, and the plugin
@@ -150,15 +161,12 @@ services:
     container_name: ${PROJECT}-mock-ftp
     environment:
       SAMPLE_TZ: $SAMPLE_TZ
-  # Stands in for a wis2box instance's station catalogue, so the WIS2Box
-  # Stations comparison page has all three of its tables populated.
-  mock_wis2box:
-    build: $CAPTURE_DIR/mock-wis2box
-    image: adl-docs-mock-wis2box
-    container_name: ${PROJECT}-mock-wis2box
 EOF
 # Each service is emitted exactly once: a second "mock_ftp:" key here would be a
-# duplicate mapping key, which docker compose rejects outright.
+# duplicate mapping key, which docker compose rejects outright. So this block has
+# to be written while mock_ftp is still the open service — emitting it after the
+# next "mock_wis2box:" key would silently attach the mount to *that* service, and
+# the plugin's generator would never run.
 if [[ -d "$PLUGIN_DIR/docs/screenshots/mock-ftp" ]]; then
 cat <<EOF
     volumes:
@@ -167,6 +175,12 @@ cat <<EOF
 EOF
 fi
 cat <<EOF
+  # Stands in for a wis2box instance's station catalogue, so the WIS2Box
+  # Stations comparison page has all three of its tables populated.
+  mock_wis2box:
+    build: $CAPTURE_DIR/mock-wis2box
+    image: adl-docs-mock-wis2box
+    container_name: ${PROJECT}-mock-wis2box
   adl:
     ports: !override
       - "$PORT:8000"
@@ -293,11 +307,20 @@ s.save()
 cache.delete('wis2box_stations')
 " >/dev/null
 
+# Extra seeding the declarative fixture cannot express (see seed.py above).
+# It runs after seed_docs_demo so it can build on the seeded rows, and before
+# priming so anything it creates is part of the cycle the screens show.
+if [[ -f "$PLUGIN_DIR/docs/screenshots/seed.py" ]]; then
+  log "running the plugin's post-seed script"
+  "${COMPOSE[@]}" exec -T adl adl shell < "$PLUGIN_DIR/docs/screenshots/seed.py"
+fi
+
 PRIME=(adl docs_capture_prime --connection "$CONNECTION" --wait "$WAIT" \
        --present-interval "$PRESENT_INTERVAL" --evaluate)
 [[ $INGEST = true || $INGEST = True ]] && PRIME+=(--ingest)
 [[ $PROBE = true || $PROBE = True ]] && PRIME+=(--probe)
 for s in $STATION_CHECKS; do PRIME+=(--station-check "$s"); done
+while IFS= read -r c; do [[ -n $c ]] && PRIME+=(--dispatch "$c"); done <<< "$DISPATCH_CHANNELS"
 log "priming: ${PRIME[*]}"
 "${COMPOSE[@]}" exec -T adl "${PRIME[@]}"
 

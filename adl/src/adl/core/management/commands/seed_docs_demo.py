@@ -6,12 +6,14 @@ Run on a **fresh** database. The base seed is the same for every plugin —
 an admin user, one network, three stations with WIGOS identifiers and the
 common data parameters — so every guide's screenshots share one world. The
 per-plugin part comes from a fixture file (``--fixture``) describing one
-connection of the plugin's type and its station links; see the plugin
-guides' ``docs/screenshots/fixture.json`` for the shape.
+connection of the plugin's type and its station links -- and, for a plugin
+that pushes data out, its dispatch channels; see the plugin guides'
+``docs/screenshots/fixture.json`` for the shape.
 
 Same input, same rows, same ids: with a fresh database the connection is
-always id 1 and the station links are ids 1..n in fixture order, which is
-what the screenshot manifests rely on.
+always id 1, the station links are ids 1..n in fixture order and the
+dispatch channels 1..n likewise, which is what the screenshot manifests
+rely on.
 """
 
 import json
@@ -28,6 +30,7 @@ from django.utils import timezone as dj_timezone
 
 from adl.core.models import (
     DataParameter,
+    DispatchChannel,
     Network,
     NetworkConnection,
     Station,
@@ -51,6 +54,9 @@ UNITS = [
     ("Inch of mercury", "inHg"),
     ("Mile per hour", "mph"),
     ("Inch", "in"),
+    # KMD/KCSAP loggers report wind in knots; the KCSAP decoder declares
+    # "knot" as the file unit, so a fixture mapping wind speed has to name it.
+    ("Knot", "knot"),
 ]
 
 PARAMETERS = [
@@ -118,7 +124,8 @@ def resolve_fk(field, value):
         return target.objects.get(station_id=value)
     if issubclass(target, Unit):
         return target.objects.filter(symbol=value).first() or target.objects.get(name=value)
-    if issubclass(target, (DataParameter, Network, NetworkConnection, StationLink)):
+    if issubclass(target, (DataParameter, Network, NetworkConnection, StationLink,
+                          DispatchChannel)):
         return target.objects.get(name=value) if hasattr(target, "name") else target.objects.get(pk=value)
     if any(f.name == "name" for f in target._meta.fields):
         return target.objects.get(name=value)
@@ -281,4 +288,46 @@ class Command(BaseCommand):
                 "children": replace_children(link, link_spec.get("children")),
             })
 
+        result["dispatch_channels"] = [
+            self.apply_dispatch_channel(spec, connection)
+            for spec in fixture.get("dispatch_channels", [])
+        ]
+
         return result
+
+    def apply_dispatch_channel(self, spec, default_connection):
+        """
+        Seed one dispatch channel -- the outbound half of a plugin, which a
+        dispatch plugin's guide screenshots need configured and linked before
+        anything can be captured.
+
+        ``network_connections`` is the many-to-many that decides which
+        stations a channel sends for. It is named by connection name and
+        defaults to the connection this fixture seeded, so a dispatch-only
+        plugin's fixture can borrow whatever ingestion connection is
+        supplying the data without repeating its name.
+        """
+        model = apps.get_model(spec["model"])
+        fields = build_fields(model, spec.get("fields"))
+
+        channel = model.objects.filter(name=fields["name"]).first() or model()
+        for name, value in fields.items():
+            setattr(channel, name, value)
+        channel.full_clean(exclude=["network_connections"])
+        channel.save()
+
+        # M2M has to wait for a pk, so it is set after the save rather than
+        # through build_fields.
+        names = spec.get("network_connections")
+        if names is None:
+            connections = [default_connection] if default_connection else []
+        else:
+            connections = [NetworkConnection.objects.get(name=n) for n in names]
+        channel.network_connections.set(connections)
+
+        return {
+            "id": channel.id,
+            "name": channel.name,
+            "network_connections": [c.name for c in connections],
+            "children": replace_children(channel, spec.get("children")),
+        }

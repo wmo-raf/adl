@@ -10,6 +10,12 @@ button — only when no scheduled run arrives in time. ``--probe`` and
 do and persist their results the same way, so the captured screens show
 what an operator pressing those buttons would see.
 
+``--dispatch`` runs a real dispatch cycle for a channel, so a dispatch
+plugin's guide can show a station-links page with genuine last-sent times
+rather than an untouched channel. It enqueues the same task the channel's
+own schedule entry would and waits for the per-station activity logs to
+reach a terminal state.
+
 ``--present-interval`` exists because the two things the capture needs pull
 the connection's interval in opposite directions. Waiting for a real beat
 tick wants it as short as possible; every freshness threshold in the
@@ -27,9 +33,14 @@ import time
 from django.core.management.base import BaseCommand, CommandError
 from django.utils import timezone as dj_timezone
 
-from adl.core.models import NetworkConnection, ObservationRecord
+from adl.core.models import DispatchChannel, NetworkConnection, ObservationRecord
 from adl.core.source_checks import run_source_probe, run_station_source_check
-from adl.core.tasks import INGESTION_QUEUE_NAME, run_network_plugin
+from adl.core.tasks import (
+    DISPATCH_QUEUE_NAME,
+    INGESTION_QUEUE_NAME,
+    perform_channel_dispatch,
+    run_network_plugin,
+)
 from adl.monitoring.constants import PROBE_LAYER_IDS
 from adl.monitoring.health import evaluate_and_store_connection_health
 from adl.monitoring.models import SourceProbeResult, StationLinkActivityLog
@@ -53,6 +64,9 @@ class Command(BaseCommand):
         parser.add_argument("--probe", action="store_true", help="Run the connection-scope source probe.")
         parser.add_argument("--station-check", action="append", default=[], metavar="STATION_ID",
                             help="Run the station-scope check for this station (repeatable).")
+        parser.add_argument("--dispatch", action="append", default=[], metavar="CHANNEL",
+                            help="Run a dispatch cycle for this channel, by name (repeatable), "
+                                 "so the captured screens show real last-sent times.")
         parser.add_argument("--present-interval", type=int,
                             help="Set the connection's processing interval (minutes) after "
                                  "collecting, so the captured screens show realistic freshness "
@@ -73,11 +87,63 @@ class Command(BaseCommand):
             self.probe(connection)
         for station_id in options["station_check"]:
             self.station_check(connection, station_id)
+        for channel_name in options["dispatch"]:
+            self.dispatch(channel_name, options["wait"])
         if options["present_interval"]:
             self.present_interval(connection, options["present_interval"])
         if options["evaluate"]:
             checklist, _ = evaluate_and_store_connection_health(connection)
             self.stdout.write(f"  verdict: {checklist.status} — {checklist.headline_message}")
+
+    # -- dispatch cycle --------------------------------------------------------
+
+    def dispatch(self, channel_name, wait):
+        """
+        Run one real dispatch cycle for a channel and wait for it to land.
+
+        Same enqueue the channel's own schedule entry makes, so what the
+        screenshots show is a channel that genuinely sent: the station-links
+        page reads its last-sent times from StationChannelDispatchStatus rows
+        that only a real dispatch writes.
+        """
+        try:
+            channel = DispatchChannel.objects.get(name=channel_name)
+        except DispatchChannel.DoesNotExist:
+            raise CommandError(f"No dispatch channel named {channel_name!r}.")
+
+        links = list(channel.stations_allowed_to_send())
+        if not links:
+            self.stdout.write(self.style.WARNING(
+                f"Channel '{channel.name}' has no station links allowed to send — nothing to "
+                "dispatch. Check the fixture's network_connections and that observations exist."))
+            return
+
+        since = dj_timezone.now()
+        perform_channel_dispatch.apply_async(args=[channel.id], queue=DISPATCH_QUEUE_NAME)
+
+        deadline = time.monotonic() + wait
+        while time.monotonic() < deadline:
+            done = StationLinkActivityLog.objects.filter(
+                station_link__in=links, direction="push", time__gte=since, status__in=TERMINAL,
+            ).values("station_link_id").distinct().count()
+            if done >= len(links):
+                break
+            time.sleep(2)
+        else:
+            self.stdout.write(self.style.WARNING(
+                f"Not every station finished dispatching for '{channel.name}' within {wait}s; "
+                "capturing what landed."))
+
+        for log in StationLinkActivityLog.objects.filter(
+                station_link__in=links, direction="push", time__gte=since, status__in=TERMINAL,
+        ).order_by("station_link_id", "-time").distinct("station_link_id"):
+            self.stdout.write(f"  {log.station_link}: {log.status} — {log.message or ''} "
+                              f"({log.records_count} records)")
+
+        sent = channel.dispatch_statuses.exclude(last_sent_obs_time=None).count()
+        self.stdout.write(self.style.SUCCESS(
+            f"Dispatch cycle done for '{channel.name}': "
+            f"{sent} station(s) with a last-sent time."))
 
     # -- collection cycle ------------------------------------------------------
 
