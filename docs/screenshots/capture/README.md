@@ -116,6 +116,33 @@ the heading off the top of the shot. Beware `:has()`/xpath tricks that match on
 the class `w-panel` — they also match `w-panel__content`, the inner div, which
 has the same problem.
 
+`fitMain()` is for `selector: main`. The admin stretches its scroll container
+to the viewport, so a list page with three rows crops to three rows and 500px of
+nothing. Call it from a setup step — `- eval: "fitMain()"` — and `main`
+collapses onto its content, keeping the slim header (the page title, which is
+what says *which* list the shot is of) that a crop to `#listing-results` would
+lose. It is opt-in rather than automatic because turning it on for every shot
+would redraw every image already captured.
+
+`maskLabels()` and `maskText()` hide identifiers belonging to a live account.
+Most plugins capture against a mock and need neither. TAHMO, EarthNetworks and
+FieldClimate hard-code their vendor's host, so a mock cannot be pointed at by
+URL and their sets are captured against a real account instead — which puts that
+account's station names and codes on screen, a country's whole roster in the
+case of a metadata page. Rewrite them from a setup step:
+
+```yaml
+setup:
+- eval: "maskLabels('#id_tahmo_station_code option', 'Demo Station {n} (TA{n5})')"
+- eval: "maskText('main', 'found upstream as \"[^\"]*\"', 'found upstream as \"Demo Station 1\"')"
+```
+
+`{n}` is the 1-based position and `{n5}` the same zero-padded to five digits;
+an `<option>` with an empty value is skipped so a `---------` placeholder
+survives. **Identifiers only.** Never mask a status, a count, a reading or the
+meaning of a message: capturing a real instance is worth doing because the
+screen is true, and one doctored verdict makes every other shot untrustworthy.
+
 `max_height` caps a crop whose content is mostly repetition — a list page
 running to thousands of pixels of identical rows, where the doc only needs
 enough of them to show the table's shape. It cuts the bottom off, so only use

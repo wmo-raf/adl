@@ -66,4 +66,65 @@
   window.settle = function () {
     document.querySelectorAll('.messages').forEach(m => m.remove());
   };
+
+  // -- masking identifiers from a live account --------------------------------
+  //
+  // A capture normally runs against a mock and nothing needs hiding. Three
+  // plugins hard-code their vendor's host, so their sets can only be captured
+  // against a real account, and the pages then carry that account's station
+  // names and codes — a country's whole roster, published in the docs. These
+  // rewrite those strings just before the shot, the way a `fill` step already
+  // overwrites a password field.
+  //
+  // For identifiers only. Never use either to change a status, a count, a
+  // reading, or what a message means: capturing a real instance is worth doing
+  // precisely because the screen is true, and a doctored verdict would make
+  // every other shot untrustworthy too.
+
+  // Renumber a set of labels — <option>s, table cells — from a template.
+  // {n} is the 1-based position, {n5} the same zero-padded to five digits:
+  //   maskLabels('#id_station option', 'Demo Station {n} (TA{n5})')
+  // An <option> with an empty value is left alone, so a "---------" placeholder
+  // survives.
+  window.maskLabels = function (selector, template) {
+    let n = 0;
+    document.querySelectorAll(selector).forEach(function (el) {
+      if (el.tagName === 'OPTION' && el.value === '') return;
+      n += 1;
+      el.textContent = template
+        .replace(/\{n5\}/g, String(n).padStart(5, '0'))
+        .replace(/\{n\}/g, String(n));
+    });
+  };
+
+  // Rewrite text matching a regex, anywhere under `selector`. For prose that
+  // quotes an identifier — a source-check message naming the upstream station.
+  window.maskText = function (selector, pattern, replacement) {
+    const root = document.querySelector(selector) || document.body;
+    const re = new RegExp(pattern, 'g');
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+    const nodes = [];
+    while (walker.nextNode()) nodes.push(walker.currentNode);
+    nodes.forEach(function (node) {
+      node.nodeValue = node.nodeValue.replace(re, replacement);
+    });
+  };
+
+  // Collapse <main> onto its content, for `capture: {selector: main}`.
+  //
+  // The admin stretches its scroll container to the viewport, so a page with
+  // three rows on it crops to three rows plus 500px of nothing. There is no
+  // element wrapping just the slim header and the listing — cropping to
+  // #listing-results loses the page title, which is the context that says
+  // which list the shot is of — so the container is made to fit instead.
+  //
+  // Opt-in from a manifest (`- eval: "fitMain()"`) rather than applied to every
+  // shot: turning it on globally would redraw every image already captured.
+  window.fitMain = function () {
+    const main = document.querySelector('main');
+    if (!main) return;
+    for (const el of [main, main.firstElementChild]) {
+      if (el) { el.style.height = 'auto'; el.style.minHeight = '0'; }
+    }
+  };
 })();
