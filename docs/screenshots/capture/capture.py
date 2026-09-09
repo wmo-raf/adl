@@ -185,6 +185,14 @@ class Runner:
                 self.run_step(page, step)
 
             page.evaluate("settle()")
+            # Before the callouts, not after: expand_viewport() resizes the
+            # viewport, and anything positioned against it moves when it does —
+            # a Wagtail row menu that had flipped above its button drops back
+            # below, a treeselect's open menu shifts. An annotation is placed at
+            # fixed document coordinates, so one applied first stays where the
+            # element used to be, and the shot carries an outline around empty
+            # space. Sizing the page first makes the coordinates final.
+            self.expand_viewport(page)
             for callout in entry.get("callouts") or []:
                 self.apply_callout(page, callout)
 
@@ -273,6 +281,9 @@ class Runner:
         target = page.locator(selector).first
         if target.count() == 0:
             raise CaptureError(f"no element matches capture selector '{selector}'")
+        # Normally already done in capture(), before the callouts were placed;
+        # repeated here because the annotations themselves can extend the page,
+        # and because it is a no-op when the height has not changed.
         self.expand_viewport(page)
         box = target.bounding_box()
         if box is None:

@@ -139,6 +139,9 @@ screenshots:
     selector: .w-dashboard
 - name: user/network_list
   url: /network/
+  setup:
+  # collapse the admin's stretched scroll container onto its content
+  - eval: "fitMain()"
   callouts:
   - highlight: a[href$="/network/new/"]
   capture:
@@ -156,6 +159,9 @@ screenshots:
     selector: "#w-editor-form"
 - name: user/stations_loading_options
   url: /station/
+  setup:
+  # collapse the admin's stretched scroll container onto its content
+  - eval: "fitMain()"
   capture:
     selector: main
 - name: user/add_connection_form
@@ -165,10 +171,16 @@ screenshots:
     selector: .listing
 - name: user/plugins/installed_plugins
   url: /plugins/
+  setup:
+  # collapse the admin's stretched scroll container onto its content
+  - eval: "fitMain()"
   capture:
     selector: main
 - name: user/dispatch/01_dc_index
   url: /dispatch-channels/
+  setup:
+  # collapse the admin's stretched scroll container onto its content
+  - eval: "fitMain()"
   callouts:
   - highlight: a[href$="/dispatch-channels/select/"]
   capture:
@@ -277,6 +289,8 @@ screenshots:
   setup:
   - click: '.listing [data-controller="w-dropdown"] button'
   - wait_for: a[href*="/ftpstationlink/inspect/"]
+  # collapse the admin's stretched scroll container onto its content
+  - eval: "fitMain()"
   callouts:
   - highlight: a[href*="/ftpstationlink/inspect/"]
   capture:
@@ -300,6 +314,9 @@ screenshots:
     selector: main
 - name: user/admin/users_list
   url: /users/
+  setup:
+  # collapse the admin's stretched scroll container onto its content
+  - eval: "fitMain()"
   callouts:
   - highlight: a[href$="/users/new/"]
   capture:

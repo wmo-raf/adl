@@ -43,41 +43,44 @@ plugins:
     ref: main
     docs: true
 
-  # --- not documented yet --------------------------------------------------
+  # --- documented (batch 2) ------------------------------------------------
+  # As above, these carry no display metadata here: it comes from each guide's
+  # adl_plugin front matter, and a second spelling in this file would read as a
+  # second plugin. (That is how the index came to call the CIMA plugin "ADL
+  # CIMAWebDrops Plugin" while its guide is titled "ADL CIMA WebDrops Plugin";
+  # the guide's H1 wins.)
   - repo: https://github.com/wmo-raf/adl-ftp-plugin.git
     ref: main
-    docs: false
-    name: ADL FTP Plugin
-    connects_to: >-
-      FTP/SFTP storage endpoints — supports multiple decoder formats
-      (Campbell TOA5, Siap+Micros, Vaisala, ADCON, Pulsonic, Seba, and more)
-    category: general
-    choose_when: >-
-      Your stations send data to an FTP or SFTP server. It supports multiple
-      file formats; check whether a country-specific decoder exists for your
-      vendor.
+    docs: true
 
   - repo: https://github.com/wmo-raf/adl-tahmo-plugin.git
     ref: main
-    docs: false
-    name: ADL TAHMO Plugin
-    connects_to: "[TAHMO](https://tahmo.org) API"
-    category: general
-    choose_when: Your stations are part of the TAHMO network.
+    docs: true
 
   - repo: https://github.com/wmo-raf/adl-cimawebdrops-plugin.git
     ref: main
-    docs: false
-    name: ADL CIMAWebDrops Plugin
-    connects_to: CIMA WebDrops API
-    category: general
+    docs: true
 
   - repo: https://github.com/wmo-raf/adl-earthnetworks-plugin.git
     ref: main
+    docs: true
+
+  - repo: https://github.com/wmo-raf/adl-siapmicros-polarisweb-plugin.git
+    ref: main
+    docs: true
+
+  # --- not documented yet --------------------------------------------------
+  # adl-fieldclimate-plugin has a guide written and reviewed, but its capture
+  # run is deferred, so it has no images yet and cannot be aggregated. Flip it
+  # to docs: true (and drop the display metadata below, which then comes from
+  # the guide's front matter) once that lands.
+  - repo: https://github.com/wmo-raf/adl-fieldclimate-plugin.git
+    ref: main
     docs: false
-    name: ADL EarthNetworks Plugin
-    connects_to: EarthNetworks API
+    name: ADL FieldClimate Plugin
+    connects_to: Pessl Instruments' FieldClimate API
     category: general
+    choose_when: Your stations are Pessl / METOS loggers reporting to FieldClimate.
 
   - repo: https://github.com/seychelles-met/adl-vaisala-sc-ftp-decoder.git
     ref: main
