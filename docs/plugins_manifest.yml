@@ -82,20 +82,72 @@ plugins:
     category: general
     choose_when: Your stations are Pessl / METOS loggers reporting to FieldClimate.
 
-  - repo: https://github.com/seychelles-met/adl-vaisala-sc-ftp-decoder.git
+  # --- documented (batch 3) ------------------------------------------------
+  # Captured and documented; display metadata comes from each guide's own
+  # adl_plugin front matter, so it must not be repeated here.
+  #
+  # The four batch-3 repos still on docs: false below are parked, not pending:
+  # they are not in production, so their guides sit on a docs/plugin-guide
+  # branch with no captures. See docs-plan/README.md, "Batch 3 status".
+  - repo: https://github.com/wmo-raf/adl-s3-plugin.git
+    ref: main
+    docs: true
+
+  - repo: https://github.com/wmo-raf/adl-agent-plugin.git
+    ref: main
+    docs: true
+
+  - repo: https://github.com/wmo-raf/adl-collector-app-plugin.git
+    ref: main
+    docs: true
+
+  - repo: https://github.com/wmo-raf/adl-eumetsat-dcs-plugin.git
+    ref: main
+    docs: true
+
+  - repo: https://github.com/wmo-raf/adl-microstep-db-plugin.git
     ref: main
     docs: false
-    name: ADL Vaisala SC FTP Decoder
-    connects_to: FTP decoder for Vaisala Avimet AWS
+    name: ADL MicroStep DB Plugin
+    connects_to: A MicroStep-MIS AWS PostgreSQL database
+    category: general
+    choose_when: Your MicroStep-MIS station network stores observations in a PostgreSQL database ADL can reach directly.
+
+  - repo: https://github.com/wmo-raf/adl-kmd-kcsap-ftp-decoder.git
+    ref: main
+    docs: true
+
+  - repo: https://github.com/meteo-burundi/adl-lsi-bi-ftp-decoder.git
+    ref: main
+    docs: false
+    name: ADL LSI BI FTP Decoder
+    connects_to: FTP decoder for LSI Lastem station exports
+    category: country
+    country: Burundi
+    country_flag: "🇧🇮"
+
+  - repo: https://github.com/seychelles-met/adl-bouy-sc-ftp-decoder.git
+    ref: main
+    docs: false
+    name: ADL Bouy SC FTP Decoder
+    connects_to: FTP decoder for Datawell wave-buoy history files
     category: country
     country: Seychelles
     country_flag: "🇸🇨"
 
-  - repo: https://github.com/inam-mz/adl-mz-nesa-decoder.git
+  - repo: https://github.com/wmo-raf/adl-vaisala-sudan-ftp-decoder.git
     ref: main
     docs: false
-    name: ADL NESA MZ Decoder
-    connects_to: FTP decoder for NESA stations
+    name: ADL Vaisala Sudan FTP Decoder
+    connects_to: FTP decoder for Vaisala AWS message logs
     category: country
-    country: Mozambique
-    country_flag: "🇲🇿"
+    country: Sudan
+    country_flag: "🇸🇩"
+
+  - repo: https://github.com/seychelles-met/adl-vaisala-sc-ftp-decoder.git
+    ref: main
+    docs: true
+
+  - repo: https://github.com/inam-mz/adl-mz-nesa-decoder.git
+    ref: main
+    docs: true
