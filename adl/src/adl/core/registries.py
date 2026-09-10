@@ -20,6 +20,7 @@ re-raised, and a plugin can yield :data:`FLUSH` to persist at its own natural
 unit of work (a file, a page) instead of waiting for a chunk to fill.
 """
 
+import math
 import time
 from datetime import timedelta, datetime
 from datetime import timezone as py_tz
@@ -677,6 +678,21 @@ class Plugin(Instance):
             value = rec.values.get(src_name)
             
             if value is None or not isinstance(value, (int, float)):
+                continue
+
+            # NaN and +/-inf are floats, so the check above admits them.
+            # They are not observations: pandas yields NaN for every empty
+            # or unparseable cell (``pd.to_numeric(..., errors="coerce")``
+            # in several decoders), and once stored a NaN is indistinguish-
+            # able from a reading that was actually taken -- it converts,
+            # passes QC and lands in the database. Skip it like any other
+            # absent value. Only a float can be non-finite, so ints are not
+            # passed to isfinite (a huge one would raise OverflowError).
+            if isinstance(value, float) and not math.isfinite(value):
+                log.debug(
+                    "Skipped non-finite value %r for %s on station %s at %s",
+                    value, src_name, station.name, obs_time
+                )
                 continue
             
             # Unit conversion
