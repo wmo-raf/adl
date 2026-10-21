@@ -4,11 +4,6 @@
 {% block extra_css %}
     {{ block.super }}
     <style>
-        /* ── Page wrapper ─────────────────────────────────────────────────── */
-        .wis2box-page-wrapper {
-            margin-top: 40px;
-        }
-
         /* ── Toolbar ──────────────────────────────────────────────────────── */
         .wis2box-toolbar {
             display: flex;
@@ -246,9 +241,11 @@
                 </div>
                 <div style="margin-top: 16px;">
                     <a href="{{ settings_url }}" class="button bicolor button--icon">
-                    <span class="icon-wrapper">
-                        <svg class="icon icon-cog icon" aria-hidden="true"><use href="#icon-cog"></use></svg>
-                    </span>
+                        <span class="icon-wrapper">
+                            <svg class="icon icon-cog icon" aria-hidden="true">
+                                <use href="#icon-cog"></use>
+                            </svg>
+                        </span>
                         {% translate "Configure Wis2Box Settings" %}
                     </a>
                 </div>
@@ -267,10 +264,20 @@
                     </a>
                     <div class="wis2box-toolbar-actions">
                         <a href="{{ refresh_url }}" class="button button-secondary button--icon button-small">
-                        <span class="icon-wrapper">
-                            <svg class="icon icon-rotate" aria-hidden="true"><use href="#icon-rotate"></use></svg>
-                        </span>
+                            <span class="icon-wrapper">
+                                <svg class="icon icon-rotate" aria-hidden="true">
+                                    <use href="#icon-rotate"></use>
+                                </svg>
+                            </span>
                             {% translate "Refresh from Wis2Box" %}
+                        </a>
+                        <a href="{{ export_url }}" class="button button-small button--icon">
+                            <span class="icon-wrapper">
+                                <svg class="icon icon-download" aria-hidden="true">
+                                    <use href="#icon-download"></use>
+                                </svg>
+                            </span>
+                            {% translate "Export for wis2box bulk insert" %}
                         </a>
                     </div>
                 </div>
@@ -354,14 +361,18 @@
                                 <td>{{ row.adl.network.name }}</td>
                                 <td class="col-indicator">
                                     <span class="indicator-yes" title="{% translate 'In ADL' %}">
-                                        <svg class="icon icon-check" aria-hidden="true"><use
-                                                href="#icon-check"></use></svg>
+                                        <svg class="icon icon-check" aria-hidden="true">
+                                            <use
+                                                    href="#icon-check"></use>
+                                        </svg>
                                     </span>
                                 </td>
                                 <td class="col-indicator">
                                     <span class="indicator-yes" title="{% translate 'On Wis2Box' %}">
-                                        <svg class="icon icon-check" aria-hidden="true"><use
-                                                href="#icon-check"></use></svg>
+                                        <svg class="icon icon-check" aria-hidden="true">
+                                            <use
+                                                    href="#icon-check"></use>
+                                        </svg>
                                     </span>
                                 </td>
                             </tr>
@@ -394,14 +405,18 @@
                                 <td>{{ row.adl.network.name }}</td>
                                 <td class="col-indicator">
                                     <span class="indicator-yes" title="{% translate 'In ADL' %}">
-                                        <svg class="icon icon-check" aria-hidden="true"><use
-                                                href="#icon-check"></use></svg>
+                                        <svg class="icon icon-check" aria-hidden="true">
+                                            <use
+                                                    href="#icon-check"></use>
+                                        </svg>
                                     </span>
                                 </td>
                                 <td class="col-indicator">
                                     <span class="indicator-no" title="{% translate 'Not on Wis2Box' %}">
-                                        <svg class="icon icon-cross" aria-hidden="true"><use
-                                                href="#icon-cross"></use></svg>
+                                        <svg class="icon icon-cross" aria-hidden="true">
+                                            <use
+                                                    href="#icon-cross"></use>
+                                        </svg>
                                     </span>
                                 </td>
                             </tr>
@@ -435,14 +450,18 @@
                                 <td>-</td>
                                 <td class="col-indicator">
                                     <span class="indicator-no" title="{% translate 'Not in ADL' %}">
-                                        <svg class="icon icon-cross" aria-hidden="true"><use
-                                                href="#icon-cross"></use></svg>
+                                        <svg class="icon icon-cross" aria-hidden="true">
+                                            <use
+                                                    href="#icon-cross"></use>
+                                        </svg>
                                     </span>
                                 </td>
                                 <td class="col-indicator">
                                     <span class="indicator-yes" title="{% translate 'On Wis2Box' %}">
-                                        <svg class="icon icon-check" aria-hidden="true"><use
-                                                href="#icon-check"></use></svg>
+                                        <svg class="icon icon-check" aria-hidden="true">
+                                            <use
+                                                    href="#icon-check"></use>
+                                        </svg>
                                     </span>
                                 </td>
                                 <td>

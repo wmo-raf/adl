@@ -3,7 +3,7 @@
 {% load i18n wagtailadmin_tags static %}
 
 {% block main_content %}
-    <div style="margin:40px 0;">
+    <div class="stations-csv-page">
         {% if found_existing_local %}
             <div class="help-block help-info" style="margin-bottom: 20px">
                 <svg class="icon icon-info-circle icon" aria-hidden="true">
@@ -102,6 +102,10 @@
     {{ media.css }}
     <link rel="stylesheet" type="text/css" href="{% static 'adl/css/handsontable.full.min.css' %}">
     <style>
+        .stations-csv-page {
+            margin-bottom: 40px;
+        }
+
         #import-warnings ul li.required {
             font-weight: bold;
         }

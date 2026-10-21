@@ -1,18 +1,22 @@
 import json
+import math
 from collections import defaultdict
 
+import requests
 from django.contrib.gis.geos import Point
 from django.shortcuts import render, redirect
 from django.urls import reverse, reverse_lazy
+from django.utils import timezone as dj_timezone
 from django.utils.translation import gettext as _
 from wagtail.admin import messages
 
 from adl.core.forms import OSCARStationImportForm
-from adl.core.models import Station
+from adl.core.models import AdlSettings, Station
 from adl.core.utils import get_wigos_id_parts, extract_digits
 
+from .export import ELIGIBLE, build_wis2box_station_csv, plan_wis2box_export
 from .models import Wis2BoxSettings
-from .utils import get_wis2box_stations_cached
+from .utils import get_wis2box_stations_cached, get_oscar_station_records, get_wis2box_topics
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -178,6 +182,7 @@ def wis2box_stations(request):
     context.update({
         "wis2box_url":        base_url,
         "refresh_url":        reverse("wis2box_stations") + "?refresh=1",
+        "export_url":         reverse("export_wis2box_stations"),
         "matched":            matched,
         "adl_only":           adl_only,
         "wis2box_only":       wis2box_only,
@@ -298,6 +303,181 @@ def import_wis2box_station(request, wigos_id):
     context.update({
         "form":    form,
         "station": station_data,
+    })
+
+    return render(request, template_name, context)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# export_wis2box_stations
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _export_rows(plan):
+    """Template rows for the export table, initialised for a fresh GET."""
+    rows = []
+    for planned in plan:
+        station = planned.station
+        eligible = planned.status == ELIGIBLE
+        barometer = station.barometer_height_above_msl
+        rows.append({
+            "wigos_id":   station.station_id,
+            "name":       planned.values["station_name"] if eligible else station.name,
+            "network":    station.network.name,
+            "eligible":   eligible,
+            "status":     planned.status,
+            "reason":     planned.reason,
+            "elevation":  planned.values.get("elevation"),
+            "barometer":  "" if barometer is None else barometer,
+            "selected":   eligible,
+            "error":      "",
+        })
+    return rows
+
+
+def _parse_barometer_height(raw):
+    try:
+        value = float(raw)
+    except (TypeError, ValueError):
+        return None
+    return value if math.isfinite(value) else None
+
+
+def _apply_export_post(rows, post):
+    """
+    Carry the submitted selection and barometer heights into ``rows`` and
+    validate them. Returns ``(barometer_heights, valid)``: the heights keyed
+    by WIGOS id for the selected rows, and whether every one was valid (an
+    invalid row has its ``error`` set).
+    """
+    selected_ids = set(post.getlist("selected"))
+    barometer_heights = {}
+    valid = True
+
+    for row in rows:
+        raw = post.get(f"barometer_height__{row['wigos_id']}", "").strip()
+        row["barometer"] = raw
+        row["selected"] = row["eligible"] and row["wigos_id"] in selected_ids
+
+        if not row["selected"]:
+            continue
+
+        value = _parse_barometer_height(raw)
+        if value is None:
+            row["error"] = _("Barometer height is required") if not raw else _("Barometer height must be a number")
+            valid = False
+            continue
+
+        barometer_heights[row["wigos_id"]] = value
+
+    return barometer_heights, valid
+
+
+def export_wis2box_stations(request):
+    """
+    Build a station list CSV for ``wis2box metadata station publish-collection``
+    from the ADL stations not yet on wis2box, with OSCAR as the source of
+    every value except the WIGOS id and the barometer height.
+    """
+    template_name = "wis2box/export_wis2box_stations.html"
+
+    context = {
+        "breadcrumbs_items": _breadcrumbs({"url": None, "label": _("Export for wis2box bulk insert")}),
+        "header_title": _("Export for wis2box bulk insert"),
+        "header_icon": "download",
+        "retry_url": request.path,
+    }
+
+    wis2box_settings = Wis2BoxSettings.for_request(request)
+    if not wis2box_settings.wis2box_url:
+        messages.warning(request, _("Please configure the wis2box URL in settings."))
+        return redirect(reverse("wis2box_stations"))
+
+    country = AdlSettings.for_request(request).country
+    if not country:
+        context["blocked_error"] = _("Set the country in ADL Settings before exporting stations for wis2box.")
+        return render(request, template_name, context)
+
+    base_url = wis2box_settings.wis2box_url
+
+    # A stale or empty wis2box list would make stations already on wis2box look
+    # ADL-only, and publishing them would overwrite their metadata — so both
+    # opening the page and generating re-fetch, and any failure blocks the export
+    wis2box_stations_list, fetch_error = get_wis2box_stations_cached(base_url, refresh=True)
+    if fetch_error:
+        context["blocked_error"] = _("Could not fetch stations from wis2box: %(error)s") % {"error": fetch_error}
+        return render(request, template_name, context)
+
+    try:
+        oscar_records = get_oscar_station_records(country)
+    except Exception as exc:
+        context["blocked_error"] = _("Could not fetch stations from OSCAR: %(error)s") % {"error": exc}
+        return render(request, template_name, context)
+
+    plan = plan_wis2box_export(
+        Station.objects.select_related("network").order_by("name"),
+        {s["wigos_id"] for s in wis2box_stations_list},
+        oscar_records,
+    )
+    rows = _export_rows(plan)
+
+    try:
+        topics, topics_error = get_wis2box_topics(base_url), None
+    except (requests.RequestException, ValueError) as exc:
+        topics, topics_error = [], str(exc)
+
+    can_save_barometer = request.user.has_perm("core.change_station")
+
+    if request.method == "POST":
+        topic = request.POST.get("topic", "").strip()
+        save_barometer = can_save_barometer and bool(request.POST.get("save_barometer_heights"))
+        barometer_heights, barometer_valid = _apply_export_post(rows, request.POST)
+        eligible_ids = {r["wigos_id"] for r in rows if r["eligible"]}
+        unexportable = set(request.POST.getlist("selected")) - eligible_ids
+
+        if unexportable:
+            # OSCAR or wis2box changed between opening the page and generating
+            context["form_error"] = _(
+                "%(count)s selected station(s) are no longer exportable: %(ids)s. Review the list and generate again."
+            ) % {"count": len(unexportable), "ids": ", ".join(sorted(unexportable))}
+        elif not barometer_valid:
+            context["form_error"] = _("Fix the highlighted stations before generating the CSV.")
+        elif not barometer_heights:
+            context["form_error"] = _("Select at least one station to export.")
+        elif not topic or (topics and topic not in topics):
+            context["form_error"] = _("Choose the wis2box topic the stations publish to.")
+        else:
+            selected_plan = [p for p in plan if p.station.station_id in barometer_heights]
+
+            if save_barometer:
+                for planned in selected_plan:
+                    planned.station.barometer_height_above_msl = barometer_heights[planned.station.station_id]
+                    planned.station.save(update_fields=["barometer_height_above_msl"])
+
+            csv_filename = f"adl_wis2box_stations_{country.alpha3}_{dj_timezone.localdate():%Y%m%d}.csv"
+            context.update({
+                "csv_text":     build_wis2box_station_csv(selected_plan, barometer_heights),
+                "csv_filename": csv_filename,
+                "csv_count":    len(selected_plan),
+                "barometer_saved": save_barometer,
+            })
+
+        context["topic"] = topic
+        context["save_barometer"] = save_barometer
+    else:
+        context["topic"] = topics[0] if len(topics) == 1 else ""
+        context["save_barometer"] = can_save_barometer
+
+    context.update({
+        "rows":           rows,
+        "total_eligible": sum(1 for r in rows if r["eligible"]),
+        "total_excluded": sum(1 for r in rows if not r["eligible"]),
+        "country":        country,
+        "topics":         topics,
+        "topics_error":   topics_error,
+        "can_save_barometer": can_save_barometer,
+        "ground_clearance":   wis2box_settings.barometer_ground_clearance,
+        # Only offered to users the settings page would not refuse
+        "settings_url":       _settings_url() if request.user.has_perm("wis2box.change_wis2boxsettings") else None,
     })
 
     return render(request, template_name, context)

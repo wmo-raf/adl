@@ -2,11 +2,13 @@
 {% load i18n wagtailadmin_tags static %}
 
 {% block main_content %}
-    <div style="margin-top: 40px;">
+    <div>
 
         {% if wis2box_error %}
             <div class="help-block help-warning">
-                <svg class="icon icon-warning icon" aria-hidden="true"><use href="#icon-warning"></use></svg>
+                <svg class="icon icon-warning icon" aria-hidden="true">
+                    <use href="#icon-warning"></use>
+                </svg>
                 <span>{{ wis2box_error }}</span>
             </div>
 
@@ -16,26 +18,26 @@
                 <h2>{% translate "Station Data from Wis2Box" %}</h2>
                 <table class="listing">
                     <thead>
-                        <tr>
-                            <th>{% translate "WIGOS ID" %}</th>
-                            <th>{% translate "Name" %}</th>
-                            <th>{% translate "Longitude" %}</th>
-                            <th>{% translate "Latitude" %}</th>
-                            <th>{% translate "Elevation" %}</th>
-                            <th>{% translate "Territory" %}</th>
-                            <th>{% translate "Status" %}</th>
-                        </tr>
+                    <tr>
+                        <th>{% translate "WIGOS ID" %}</th>
+                        <th>{% translate "Name" %}</th>
+                        <th>{% translate "Longitude" %}</th>
+                        <th>{% translate "Latitude" %}</th>
+                        <th>{% translate "Elevation" %}</th>
+                        <th>{% translate "Territory" %}</th>
+                        <th>{% translate "Status" %}</th>
+                    </tr>
                     </thead>
                     <tbody>
-                        <tr>
-                            <td>{{ station.wigos_id }}</td>
-                            <td>{{ station.name|default:"-" }}</td>
-                            <td>{{ station.longitude|default:"-" }}</td>
-                            <td>{{ station.latitude|default:"-" }}</td>
-                            <td>{{ station.elevation|default:"-" }}</td>
-                            <td>{{ station.territory|default:"-" }}</td>
-                            <td>{{ station.status|default:"-" }}</td>
-                        </tr>
+                    <tr>
+                        <td>{{ station.wigos_id }}</td>
+                        <td>{{ station.name|default:"-" }}</td>
+                        <td>{{ station.longitude|default:"-" }}</td>
+                        <td>{{ station.latitude|default:"-" }}</td>
+                        <td>{{ station.elevation|default:"-" }}</td>
+                        <td>{{ station.territory|default:"-" }}</td>
+                        <td>{{ station.status|default:"-" }}</td>
+                    </tr>
                     </tbody>
                 </table>
             </div>

@@ -1,0 +1,14 @@
+/*
+ * Admin page layout shared by every ADL admin view, loaded admin-wide by the
+ * insert_global_admin_css hook.
+ */
+
+/*
+ * Breathing space between the slim header and the page body. Function-based
+ * admin views extend wagtailadmin/generic/base.html, which renders the slim
+ * header and then a bare .nice-padding body; 2rem matches the w-mt-8 spacing
+ * Wagtail's own pages use.
+ */
+.w-sticky:has(> .w-slim-header) + .nice-padding {
+    margin-top: 2rem;
+}

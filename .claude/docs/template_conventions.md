@@ -7,7 +7,8 @@ Conventions for all HTML templates in ADL. Referenced from `CLAUDE.md`.
 - **No inline styles** — never use `style="..."` attributes. Extract all CSS into a
   `{% block extra_css %}<style>…</style>{% endblock %}` block and give elements semantic class names.
   When the same vocabulary is needed on more than one page (status badges, pills), escalate to a
-  shared stylesheet loaded by an `insert_global_admin_css` hook rather than copying the block.
+  shared stylesheet in `core/static/adl/css/`, linked from the `insert_global_admin_css` hook in
+  `core/wagtail_hooks.py`, rather than copying the block.
 - **Multi-line comments use `{% comment %}`** — the `{# … #}` syntax is for single-line comments only.
   When a comment spans multiple lines, always use a `{% comment %}…{% endcomment %}` block:
 
@@ -55,11 +56,10 @@ ADL logo and version. That file is infrastructure, not a page. No page template 
 
 - Body goes in `{% block main_content %}` — the base already wraps it in `<div class="nice-padding">`,
   so never add your own `nice-padding` wrapper.
-- **Top breathing space belongs in a global hook, not the page.** ADL does not yet have an
-  `insert_global_admin_css` hook, so existing pages hack it per-page — `dispatch_channel_locks.html`
-  opens with `<div style="margin-top: 40px">`. When the hook is added to `core/wagtail_hooks.py`, it
-  should apply `margin-top: 2rem` (the `w-mt-8` value Wagtail's own pages use) to the slim-header +
-  bare-`nice-padding` pairing, and those per-page hacks come out. Don't add new ones.
+- **Top breathing space is global, not per page.** `adl/css/admin_layout.css`, loaded admin-wide by the
+  `insert_global_admin_css` hook in `core/wagtail_hooks.py`, gives the slim-header + bare-`nice-padding`
+  pairing `margin-top: 2rem` (the `w-mt-8` value Wagtail's own pages use). Don't open a page with a
+  `margin-top` wrapper or give its first element a top margin — that doubles the space.
 
 ### View context contract
 
@@ -141,5 +141,3 @@ These predate the conventions and are recorded so they read as debt, not precede
   Wagtail CSS vars + icons (`monitoring/templates/monitoring/network_monitoring.html`). Wagtail's own
   `{% status %}` / `w-status` component is used nowhere. New pages should use the shared stylesheet;
   retrofitting the three is a separate piece of work.
-- **No `insert_global_admin_css` hook exists yet**, so there is nowhere for shared admin CSS to live.
-  Adding it is the prerequisite for both bullets above.

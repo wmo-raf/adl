@@ -13,6 +13,7 @@ def register_wis2box_urls():
     return [
         path("wis2box/stations/", views.wis2box_stations, name="wis2box_stations"),
         path("wis2box/stations/import/<str:wigos_id>/", views.import_wis2box_station, name="import_wis2box_station"),
+        path("wis2box/stations/export/", views.export_wis2box_stations, name="export_wis2box_stations"),
     ]
 
 
