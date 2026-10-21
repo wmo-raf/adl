@@ -12,6 +12,66 @@ This file starts at 0.8.9. Earlier history is in the git log.
 
 ## [Unreleased]
 
+## [0.8.16] — 2026-10-21
+
+A release about stations flowing the other way. ADL could already pull
+stations from wis2box; it can now hand wis2box the stations it is missing, as
+the CSV `wis2box metadata station publish-collection` reads — with OSCAR, not
+ADL, supplying every value wis2box will check. Alongside it, a data-integrity
+fix: missing cells that decoders turn into NaN are no longer stored as
+observations. Two code PRs (#312, #316), plus documentation work (#310, #311,
+#313).
+
+### Added
+
+- **Export ADL stations for wis2box bulk insert.** A new page off wis2box
+  Stations lists the stations in ADL but not on wis2box and matches each to
+  OSCAR by WIGOS identifier (primary or secondary). ADL contributes only the
+  identifier: name, coordinates and elevation come from OSCAR, and its facility
+  type, region and territory labels are mapped to the WMDR codes wis2box
+  validates against. Stations OSCAR does not know, or whose record wis2box would
+  reject, are listed with the reason and cannot be selected — one bad row would
+  otherwise abort the whole import. Barometer height, which OSCAR does not
+  carry, is entered per station or filled as elevation plus a ground clearance,
+  and can be saved back to the station (users with change-station permission
+  only). The page previews the CSV for copying, downloads it, and spells out the
+  `publish-collection` command for a topic chosen from wis2box's own datasets.
+  It re-fetches wis2box on open and on generate, and refuses to export from a
+  stale or failed station list rather than risk overwriting stations wis2box
+  already holds.
+
+- **Barometer ground clearance setting.** wis2box Settings gains a ground
+  clearance next to the URL; it prefills the export page's clearance.
+
+### Fixed
+
+- **Non-finite values are no longer stored as observations.** NaN and ±inf
+  passed the numeric check and were written like real readings — and decoders
+  that read files with pandas produce NaN for every empty cell. They are now
+  skipped per value, so the other parameters in the same record are still
+  saved (#312).
+
+- **The wis2box station list is no longer truncated at 500.** wis2box's API
+  pages at 500 items by default; ADL now asks for up to 10,000, so stations on
+  larger wis2box instances no longer show as ADL-only.
+
+### Changed
+
+- **Admin pages share one top spacing.** The space under the admin header now
+  comes from a shared stylesheet, `adl/css/admin_layout.css`, matching the
+  2rem Wagtail uses on its own pages, instead of a 40px margin repeated per
+  page. ADL's own pages sit 8px higher; Wagtail's are unchanged.
+
+### Upgrade notes
+
+- Ships one migration, `wis2box.0002`, which adds a nullable column to wis2box
+  Settings. Nothing to do before running it.
+- Adds a static file, `adl/css/admin_layout.css`. Deployments that serve static
+  files through the proxy need `collectstatic` — automatic with
+  `COLLECT_STATICFILES_ON_STARTUP=true` — or the stylesheet 404s and admin
+  pages lose their top spacing.
+- No plugin has to be edited.
+
 ## [0.8.15] — 2026-09-01
 
 A release about getting to the data without re-selecting it. The data viewer's
