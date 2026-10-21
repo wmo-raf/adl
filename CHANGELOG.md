@@ -12,7 +12,11 @@ This file starts at 0.8.9. Earlier history is in the git log.
 
 ## [Unreleased]
 
-## [0.8.16] — 2026-10-21
+## [0.8.17] — 2026-10-21
+
+> 0.8.16 was never tagged: its tag name was reserved by GitHub's immutable
+> releases after a release for it was published and deleted. 0.8.17 is the
+> same code; this is the first tagged release of everything below.
 
 A release about stations flowing the other way. ADL could already pull
 stations from wis2box; it can now hand wis2box the stations it is missing, as
