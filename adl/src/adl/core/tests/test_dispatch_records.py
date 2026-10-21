@@ -4,6 +4,7 @@ from django.test import TestCase
 
 from adl.core.dispatchers import get_station_dispatch_records
 from adl.core.models import (
+    DispatchChannel,
     DispatchChannelParameterMapping,
     ObservationRecord,
     StationChannelDispatchStatus,
@@ -73,7 +74,7 @@ class DispatchRecordCapTests(DispatchRecordFetchTestCase):
         self.channel = self.make_channel(max_records_per_dispatch=2)
         self.map_parameter(self.param)
         humidity = DataParameterFactory(
-            name="relative_humidity", unit=UnitFactory(name="Percent", symbol="pct")
+            name="relative_humidity", unit=UnitFactory(name="Percent", symbol="%")
         )
         self.map_parameter(humidity)
 
@@ -125,3 +126,44 @@ class DispatchRecordCapTests(DispatchRecordFetchTestCase):
 
         expected = [BASE_TIME + timedelta(hours=h) for h in range(5)]
         self.assertEqual(delivered, expected)  # complete, ordered, no duplicates
+
+
+class ChannelUnitTests(TestCase):
+    """Channels without a csv2bufr template convert to the unit stored on the mapping."""
+
+    def setUp(self):
+        self.link = StationLinkFactory()
+        self.channel = DispatchChannel.objects.create(name="Plain channel")
+        self.channel.network_connections.add(self.link.network_connection)
+
+    def send(self, param, channel_unit, value):
+        DispatchChannelParameterMapping.objects.create(
+            dispatch_channel=self.channel,
+            parameter=param,
+            channel_parameter="pressure",
+            channel_unit=channel_unit,
+        )
+        ObservationRecord.objects.create(
+            station=self.link.station,
+            connection=self.link.network_connection,
+            parameter=param,
+            value=value,
+            time=BASE_TIME,
+        )
+        [record] = get_station_dispatch_records(self.channel, self.link)
+        return record["values"]["pressure"]
+
+    def test_values_are_converted_to_the_stored_channel_unit(self):
+        pascal = UnitFactory(name="Pascal", symbol="Pa")
+        hpa = UnitFactory(name="Hectopascal", symbol="hPa")
+
+        value = self.send(DataParameterFactory(unit=pascal), hpa, 101320.0)
+
+        self.assertAlmostEqual(value, 1013.2, places=6)
+
+    def test_a_blank_channel_unit_sends_the_parameter_unit(self):
+        pascal = UnitFactory(name="Pascal", symbol="Pa")
+
+        value = self.send(DataParameterFactory(unit=pascal), None, 101320.0)
+
+        self.assertEqual(value, 101320.0)
