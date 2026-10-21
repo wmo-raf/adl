@@ -10,6 +10,8 @@ A generic `Registry`/`Instance` pair (`core/registry.py:1-168`) underpins all ex
 - `PluginRegistry` (`registries.py`) — registers data-source plugins
 - `QCValidatorRegistry` (`qc/registry.py`) — registers QC check types
 - `ViewSetRegistry` — registers Wagtail admin viewsets
+- `Csv2BufrTemplateRegistry` (`dispatchers/csv2bufr_templates.py`) — registers the csv2bufr templates a WIS2BOX
+  Upload channel can write CSV for (AWS by default)
 
 Each registered class can implement `after_register()` to run setup logic when added to the registry.
 
@@ -111,7 +113,8 @@ run has a queryable activity log.
 
 ## 7. Dispatcher Pattern
 
-**Files:** `adl/src/adl/core/dispatchers/__init__.py`, `adl/src/adl/core/dispatchers/wis2box.py`
+**Files:** `adl/src/adl/core/dispatchers/__init__.py`, `adl/src/adl/core/dispatchers/wis2box.py`,
+`adl/src/adl/core/dispatchers/csv2bufr_templates.py`
 
 Data dispatch is also extensible via `DispatchChannel` polymorphism (see §3). The dispatcher module provides shared
 utilities:
@@ -120,6 +123,9 @@ utilities:
 - `get_dispatch_channel_data()` — aggregates records by station and timestamp
 - Channel parameter mappings translate internal `DataParameter` keys to the external schema expected by the target
   system
+- `Wis2BoxUpload` builds its CSV from its csv2bufr template (`dispatchers/csv2bufr_templates.py`): each column is
+  filled from the station, the observation time, or a parameter mapping (observation columns only). See
+  `docs/adr/0001-wis2box-csv2bufr-templates.md`
 
 ## 8. Wagtail Admin Integration
 
