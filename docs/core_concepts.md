@@ -99,8 +99,7 @@ configuration, in the order you would do it.
 **1. Units and parameters.** Load the predefined parameters
 (*Temperature* in °C, *Relative Humidity* in %, *Atmospheric Pressure* in
 hPa, *Wind Speed* in m/s, *Wind Direction* in degrees, *Precipitation* in
-mm) with *conversion units* ticked, which also creates Kelvin, Pascal and
-kg/m² for WIS2Box.
+mm) with *conversion units* ticked.
 
 **2. Network.** *Davis AWS Network*, type *Automatic Weather Stations*.
 
@@ -140,8 +139,10 @@ ingestion now**. Within a minute each station's Inspect page shows *Records
 Fetched* and the dashboard turns green.
 
 **9. Dispatch.** Create a *WIS2Box Upload* channel reading from *Davis FTP*,
-map *Temperature* → `air_temperature` in Kelvin, *Atmospheric Pressure* →
-`pressure` in Pascal, *Precipitation* → `precipitation` in kg/m², and so on;
+pick *Temperature* for `air_temperature`, *Atmospheric Pressure* for
+`station_pressure` and *Precipitation* for `total_precipitation_1_hour` in
+the matching table, and so on (ADL converts to the template's Kelvin, Pascal
+and kg/m²);
 disable the non-GBON stations on the channel's station list. Every ten
 minutes the channel sends what is new.
 
