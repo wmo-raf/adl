@@ -73,6 +73,10 @@ This file starts at 0.8.9. Earlier history is in the git log.
 - **WIS2BOX Upload station and timestamp columns can no longer be
   overwritten** by a parameter mapping, and `thermometer_height` is now sent
   from the station's thermometer height; it was always empty before (#321).
+- **The csv2bufr Template choice links to each template's documentation.**
+  The help text under the choice listed only the AWS URL, as plain text.
+  It now links every registered template's documentation, so a template
+  added by a plugin is covered too (#319, user story 4).
 
 ### Changed
 

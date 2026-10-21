@@ -25,6 +25,7 @@ class MiniTemplate(Csv2BufrTemplate):
 
     type = "mini"
     label = "Mini"
+    documentation_url = "https://example.org/csv2bufr/mini"
     columns = (
         station_column("latitude", "decimal", "degree"),
         observation_column("air_temperature", "decimal", "degC", TEMPERATURE_HUMIDITY),
@@ -200,3 +201,23 @@ class SwitchingEdgeCaseTests(TemplateSwitchingTestCase):
         self.addCleanup(csv2bufr_template_registry.register, MiniTemplate())
 
         self.assertIsNone(self.render().select_one("script#parameter-matching-specs"))
+
+
+class TemplateDocumentationLinkTests(TemplateSwitchingTestCase):
+    def links(self):
+        field = self.render().find(id="id_template").find_parent(class_="w-field__wrapper")
+        return {a.text.strip(): a["href"] for a in field.find_all("a")}
+
+    def test_the_template_choice_links_to_each_templates_documentation(self):
+        self.assertEqual(self.links(), {
+            "AWS": "https://training.wis2box.wis.wmo.int/csv2bufr-templates/aws-template/",
+            "Mini": "https://example.org/csv2bufr/mini",
+        })
+
+    def test_a_template_without_a_documentation_url_has_no_link(self):
+        csv2bufr_template_registry.unregister("mini")
+        template = MiniTemplate()
+        template.documentation_url = ""
+        csv2bufr_template_registry.register(template)
+
+        self.assertEqual(list(self.links()), ["AWS"])
