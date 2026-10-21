@@ -48,6 +48,8 @@ class Csv2BufrColumn:
     :param window_hours: for observation columns covering more than one hour,
         the window length. Hourly aggregation cannot build these, so they need
         a source parameter already accumulated over that window
+    :param unit_context: pint context needed to convert into ``unit``, e.g.
+        ``"precipitation"`` for mm of rain into kg m-2
     """
 
     name: str
@@ -57,6 +59,7 @@ class Csv2BufrColumn:
     default_aggregation: str = None
     section: str = None
     window_hours: int = None
+    unit_context: str = None
 
 
 def station_column(name, data_type, unit=None):
@@ -67,7 +70,8 @@ def timestamp_column(name):
     return Csv2BufrColumn(name=name, source=TIMESTAMP, data_type="integer")
 
 
-def observation_column(name, data_type, unit, section, default_aggregation="avg_value", window_hours=None):
+def observation_column(name, data_type, unit, section, default_aggregation="avg_value", window_hours=None,
+                       unit_context=None):
     return Csv2BufrColumn(
         name=name,
         source=OBSERVATION,
@@ -76,7 +80,13 @@ def observation_column(name, data_type, unit, section, default_aggregation="avg_
         default_aggregation=default_aggregation,
         section=section,
         window_hours=window_hours,
+        unit_context=unit_context,
     )
+
+
+def precipitation_column(name, unit, default_aggregation="sum_value", window_hours=None):
+    return observation_column(name, "decimal", unit, PRECIPITATION, default_aggregation=default_aggregation,
+                              window_hours=window_hours, unit_context="precipitation")
 
 
 class Csv2BufrTemplate(Instance):
@@ -95,6 +105,12 @@ class Csv2BufrTemplate(Instance):
     @property
     def observation_columns(self):
         return [column for column in self.columns if column.source == OBSERVATION]
+    
+    def get_observation_column(self, name):
+        for column in self.observation_columns:
+            if column.name == name:
+                return column
+        return None
 
 
 PRESSURE = "pressure"
@@ -147,7 +163,7 @@ class AwsCsv2BufrTemplate(Csv2BufrTemplate):
         observation_column("ground_state", "integer", None, GROUND_SNOW, default_aggregation="max_value"),
         station_column("method_of_snow_depth_measurement", "integer"),
         observation_column("snow_depth", "decimal", "m", GROUND_SNOW),
-        observation_column("precipitation_intensity", "decimal", "kg/m^2/h", PRECIPITATION),
+        precipitation_column("precipitation_intensity", "kg/m^2/h", default_aggregation="avg_value"),
         station_column("anemometer_height", "decimal", "m"),
         station_column("time_period_of_wind", "integer", "minute"),
         observation_column("wind_direction", "integer", "degree", WIND),
@@ -162,16 +178,11 @@ class AwsCsv2BufrTemplate(Csv2BufrTemplate):
         observation_column("maximum_wind_gust_speed_3_hours", "decimal", "m/s", GUSTS,
                            default_aggregation="max_value", window_hours=3),
         station_column("rain_sensor_height", "decimal", "m"),
-        observation_column("total_precipitation_1_hour", "decimal", "kg/m^2", PRECIPITATION,
-                           default_aggregation="sum_value"),
-        observation_column("total_precipitation_3_hours", "decimal", "kg/m^2", PRECIPITATION,
-                           default_aggregation="sum_value", window_hours=3),
-        observation_column("total_precipitation_6_hours", "decimal", "kg/m^2", PRECIPITATION,
-                           default_aggregation="sum_value", window_hours=6),
-        observation_column("total_precipitation_12_hours", "decimal", "kg/m^2", PRECIPITATION,
-                           default_aggregation="sum_value", window_hours=12),
-        observation_column("total_precipitation_24_hours", "decimal", "kg/m^2", PRECIPITATION,
-                           default_aggregation="sum_value", window_hours=24),
+        precipitation_column("total_precipitation_1_hour", "kg/m^2"),
+        precipitation_column("total_precipitation_3_hours", "kg/m^2", window_hours=3),
+        precipitation_column("total_precipitation_6_hours", "kg/m^2", window_hours=6),
+        precipitation_column("total_precipitation_12_hours", "kg/m^2", window_hours=12),
+        precipitation_column("total_precipitation_24_hours", "kg/m^2", window_hours=24),
     )
 
 

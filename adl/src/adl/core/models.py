@@ -1,3 +1,4 @@
+import logging
 from datetime import timedelta, timezone
 from enum import IntFlag, auto
 
@@ -35,12 +36,29 @@ from .dispatchers.csv2bufr_templates import (
     get_csv2bufr_template_choices,
 )
 from .dispatchers.wis2box import upload_to_wis2box, test_wis2box_connection
-from .units import units, validate_unit, TEMPERATURE_UNITS
+from .units import units, units_are_convertible, units_are_equivalent, validate_unit, TEMPERATURE_UNITS
 from .utils import (
     validate_as_integer,
     get_custom_unit_context_entries
 )
 from .widgets import PluginSelectWidget
+
+logger = logging.getLogger(__name__)
+
+_logged_once = set()
+
+
+def log_once(level, key, message):
+    """
+    Log ``message`` the first time ``key`` is seen in this process.
+
+    For configuration problems found on every dispatch run, which would
+    otherwise repeat for every station on every run.
+    """
+    if key in _logged_once:
+        return
+    _logged_once.add(key)
+    logger.log(level, message)
 
 
 class Network(models.Model):
@@ -408,19 +426,30 @@ class DataParameter(ClusterableModel):
         
         return quantity_converted.magnitude
     
-    def convert_value_to_units(self, value, to_unit):
-        if to_unit.symbol in TEMPERATURE_UNITS:
+    def get_unit_context(self, default=None):
+        """The pint context to convert under: the parameter's own, else ``default``."""
+        return self.custom_unit_context or default
+    
+    def convert_value_to_units(self, value, to_unit, unit_context=None):
+        """
+        Convert ``value`` from this parameter's unit to ``to_unit``, a
+        :class:`Unit` or a pint symbol. ``unit_context`` names a pint context
+        to convert under when the parameter does not set its own.
+        """
+        to_symbol = getattr(to_unit, "symbol", to_unit)
+        if to_symbol in TEMPERATURE_UNITS:
             quantity = units.Quantity(value, self.unit.symbol)
         else:
             quantity = value * self.unit.pint_unit
         # use custom unit context if set
         # Useful for converting units that are not directly convertible  using pint,
         # like precipitation (from mm -> kg/m²)
-        if self.custom_unit_context:
-            with units.context(self.custom_unit_context):
-                quantity_converted = quantity.to(to_unit.symbol)
+        unit_context = self.get_unit_context(unit_context)
+        if unit_context:
+            with units.context(unit_context):
+                quantity_converted = quantity.to(to_symbol)
         else:
-            quantity_converted = quantity.to(to_unit.symbol)
+            quantity_converted = quantity.to(to_symbol)
         
         return quantity_converted.magnitude
 
@@ -1201,6 +1230,19 @@ class DispatchChannel(PolymorphicModel, ClusterableModel):
         channel_param_values = [pm.channel_parameter for pm in self.get_parameter_mappings()]
         return channel_param_values
     
+    def get_channel_unit(self, parameter_mapping):
+        """
+        The unit a mapped parameter's values are sent in, as
+        ``(pint symbol, pint context name)``. A ``None`` symbol means the
+        values are sent in the parameter's own unit. Returning ``None``
+        instead of a pair leaves the mapping out of dispatch.
+
+        Defaults to the mapping's stored ``channel_unit``. Channels whose
+        destination fixes the units override this.
+        """
+        channel_unit = parameter_mapping.channel_unit
+        return (channel_unit.symbol if channel_unit else None), None
+    
     def send_station_data(self, station_link, station_data_records):
         raise NotImplementedError("Method send_station_data must be implemented in the subclass")
 
@@ -1408,6 +1450,51 @@ class Wis2BoxUpload(DispatchChannel):
     
     def get_csv2bufr_template(self):
         return csv2bufr_template_registry.get(self.template)
+    
+    def get_channel_unit(self, parameter_mapping):
+        """
+        Observation columns are sent in the unit the csv2bufr template
+        declares, whatever ``channel_unit`` is stored on the mapping: csv2bufr
+        reads the column in that unit regardless. A stored unit that differs is
+        logged, since the channel would have been publishing wrong values
+        before the template unit took over.
+
+        A parameter whose unit cannot be converted to the column's unit is
+        left out, with an error logged, so the rest of the station's row still
+        goes out.
+        """
+        column = self.get_csv2bufr_template().get_observation_column(parameter_mapping.channel_parameter)
+        if column is None:
+            return super().get_channel_unit(parameter_mapping)
+        
+        if not column.unit:
+            return None, None
+        
+        parameter = parameter_mapping.parameter
+        unit_context = parameter.get_unit_context(column.unit_context)
+        if not units_are_convertible(parameter.unit.symbol, column.unit, unit_context):
+            log_once(
+                logging.ERROR,
+                (self.pk, parameter_mapping.pk, parameter.unit.symbol, column.name),
+                f"[DISPATCH] Channel '{self.name}' maps '{parameter.name}' ({parameter.unit.symbol}) to "
+                f"'{column.name}', which the {self.template} csv2bufr template expects in '{column.unit}'. "
+                f"The units are not convertible, so '{column.name}' is not sent."
+            )
+            return None
+        
+        # a blank stored unit used to fail dispatch outright, so it never published
+        # anything wrong; only a stored unit that disagrees with the template did
+        stored_unit = parameter_mapping.channel_unit
+        if stored_unit and not units_are_equivalent(stored_unit.symbol, column.unit, unit_context):
+            log_once(
+                logging.WARNING,
+                (self.pk, parameter_mapping.pk, stored_unit.symbol, column.name),
+                f"[DISPATCH] Channel '{self.name}' maps '{parameter.name}' to "
+                f"'{column.name}' with channel unit '{stored_unit.symbol}', but the {self.template} csv2bufr "
+                f"template expects '{column.unit}'. Sending in '{column.unit}'."
+            )
+        
+        return column.unit, column.unit_context
     
     def send_station_data(self, station_link, data_records):
         return upload_to_wis2box(self, data_records)

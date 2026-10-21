@@ -12,6 +12,45 @@ This file starts at 0.8.9. Earlier history is in the git log.
 
 ## [Unreleased]
 
+### Added
+
+- **WIS2BOX Upload channels name their csv2bufr template.** The CSV a channel
+  uploads has always followed wis2box's AWS csv2bufr template; channels now
+  select the template explicitly (AWS is the default), from templates defined
+  in code. Plugins can register more (#321).
+
+### Fixed
+
+- **WIS2BOX Upload values are sent in the units the csv2bufr template
+  expects.** Each observation column is converted to the template's unit —
+  Kelvin, Pascal, kg m⁻² and so on — whatever *Channel Unit* is stored on the
+  mapping. Rainfall in mm converts to kg m⁻² without setting a custom unit
+  context on the parameter. A mapping whose unit cannot convert to its column
+  (e.g. a length mapped to `station_pressure`) is left out with an error
+  logged, rather than stopping the station's whole dispatch (#322).
+- **A blank *Channel Unit* no longer crashes dispatch.** The help text says to
+  leave it empty when the unit is the parameter's own, but every dispatch
+  channel then failed converting values. Blank now means "send in the
+  parameter's unit", as documented (#322).
+- **WIS2BOX Upload station and timestamp columns can no longer be
+  overwritten** by a parameter mapping, and `thermometer_height` is now sent
+  from the station's thermometer height; it was always empty before (#321).
+
+### Upgrade notes
+
+- **Published WIS2BOX values change for misconfigured channels.** A channel
+  whose *Channel Unit* did not match the template — e.g. hPa on
+  `station_pressure`, or °C on `air_temperature` — was publishing wrong BUFR
+  values, and starts publishing correct ones as soon as you upgrade. Each such
+  mapping logs a `[DISPATCH]` warning naming the channel, column and stored
+  unit — once per dispatch worker process, not on every run — so you can tell
+  which channels were affected. Search the dispatch worker logs for
+  `csv2bufr template expects` after upgrading.
+- Ships one migration, `core.0052`, which adds the csv2bufr `template` field to
+  WIS2BOX Upload channels, set to `aws` for existing ones. Nothing to do before
+  running it.
+- No plugin has to be edited.
+
 ## [0.8.17] — 2026-10-21
 
 > 0.8.16 was never tagged: its tag name was reserved by GitHub's immutable
