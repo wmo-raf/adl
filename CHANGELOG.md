@@ -43,6 +43,13 @@ This file starts at 0.8.9. Earlier history is in the git log.
   saved until none are left. The dispatch channels list shows an "N unmatched
   mappings" badge, linking to the channel, so affected channels can be found
   without opening each one (#325).
+- **WIS2BOX Upload channels can switch csv2bufr template from the matching
+  panel.** Changing the template dropdown rebuilds the rows for the new
+  template straight away, with no extra request. Mappings whose column exists
+  in both templates are kept; the ones that will be removed are listed above
+  the table before you save. On save the removed mappings are deleted and the
+  kept ones take the new template's unit. With only the AWS template
+  registered nothing changes (#326).
 
 ### Fixed
 

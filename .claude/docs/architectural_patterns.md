@@ -137,6 +137,12 @@ utilities:
   non-deleted mapping is unmatched) and `get_unmatched_parameter_mappings()` (saved rows, used by the
   `UnmatchedMappingsColumn` badge on `/dispatch-channels/`) all share it. Unmatched mappings are never migrated away;
   dispatch ignores them until the channel is edited
+- A channel whose spec can be switched sets `parameter_mapping_spec_field` and returns every spec from
+  `get_parameter_mapping_specs()`; the panel then embeds them as JSON (`#parameter-matching-specs`, with the
+  parameters that fit each column) and `parameter_matching.js` rebuilds the rows on change. `DispatchChannelForm`
+  remembers the stored spec on init; `ParameterMappingRowForm` then deletes mappings whose column the new spec lacks
+  (`is_parameter_mapping_dropped`: it was a column before, and is not now) and re-saves the rest so their unit is
+  re-derived. Names that were never columns stay unrecognised
 - `Wis2BoxUpload` builds its CSV from its csv2bufr template (`dispatchers/csv2bufr_templates.py`): each column is
   filled from the station, the observation time, or a parameter mapping (observation columns only). See
   `docs/adr/0001-wis2box-csv2bufr-templates.md`

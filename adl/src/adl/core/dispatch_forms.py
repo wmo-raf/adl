@@ -1,4 +1,4 @@
-from django.core.exceptions import ValidationError
+from django.core.exceptions import ObjectDoesNotExist, ValidationError
 from django.forms.formsets import DELETION_FIELD_NAME
 from django.utils.translation import gettext_lazy as _
 from modelcluster.forms import BaseChildFormSet
@@ -22,14 +22,29 @@ class ParameterMappingRowForm(WagtailAdminModelForm):
     def has_parameter(self):
         return bool(self["parameter"].value())
 
+    def get_channel(self):
+        try:
+            return self.instance.dispatch_channel
+        except ObjectDoesNotExist:
+            return None
+
     def has_changed(self):
         if self.instance.pk is None and not self.has_parameter():
             return False
+        channel = self.get_channel()
+        if self.instance.pk and channel is not None and channel.parameter_mapping_spec_changed():
+            # saved again, so its unit is re-derived from the new spec
+            return True
         return super().has_changed()
 
     def clean(self):
         cleaned_data = super().clean()
-        if self.instance.pk and not cleaned_data.get("parameter"):
+        channel = self.get_channel()
+        if self.instance.pk and (
+                not cleaned_data.get("parameter")
+                or (channel is not None and channel.is_parameter_mapping_dropped(cleaned_data.get("channel_parameter")))
+        ):
+            # cleared by the administrator, or left without a column by switching the spec
             cleaned_data[DELETION_FIELD_NAME] = True
         return cleaned_data
 
@@ -79,6 +94,7 @@ class DispatchChannelForm(WagtailAdminModelForm):
         super().__init__(*args, **kwargs)
         # every formset here is a child relation of the channel (its ParentalKeys),
         # so each one's foreign key points at this instance
+        self.instance.load_saved_parameter_mapping_spec()
         for formset in self.formsets.values():
             for form in formset.forms:
                 setattr(form.instance, formset.fk.name, self.instance)
