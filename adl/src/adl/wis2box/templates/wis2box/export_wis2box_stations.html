@@ -1,0 +1,384 @@
+{% extends "wagtailadmin/generic/base.html" %}
+{% load i18n wagtailadmin_tags %}
+
+{% block titletag %}{% translate "Export for wis2box bulk insert" %}{% endblock %}
+
+{% block extra_css %}
+    {{ block.super }}
+    <style>
+        .wis2box-export-lead {
+            max-width: 60rem;
+            color: var(--w-color-text-meta);
+            margin-bottom: 1.5rem;
+        }
+
+        .wis2box-export-toolbar {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 0.75rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .wis2box-export-counts {
+            margin-inline-start: auto;
+            color: var(--w-color-text-meta);
+        }
+
+        .wis2box-export-panel {
+            border: 1px solid var(--w-color-border-furniture);
+            border-radius: 6px;
+            padding: 1rem 1.25rem;
+            margin-bottom: 1.5rem;
+            background: var(--w-color-surface-page);
+        }
+
+        .wis2box-export-panel h2 {
+            margin-top: 0;
+            font-size: 1rem;
+        }
+
+        .wis2box-export-controls {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: flex-end;
+            gap: 1rem;
+        }
+
+        .wis2box-export-controls label {
+            display: flex;
+            flex-direction: column;
+            gap: 0.25rem;
+            font-weight: 600;
+        }
+
+        .wis2box-export-controls .wis2box-export-inline-check {
+            flex-direction: row;
+            align-items: center;
+            font-weight: 400;
+        }
+
+        .wis2box-export-topic {
+            min-width: min(100%, 40rem);
+        }
+
+        .wis2box-export-number {
+            width: 8rem;
+        }
+
+        .wis2box-export-help {
+            color: var(--w-color-text-meta);
+            font-size: 0.875rem;
+            margin: 0.5rem 0 0;
+        }
+
+        .wis2box-export-table .col-select {
+            width: 3rem;
+        }
+
+        .wis2box-export-table .row-excluded {
+            color: var(--w-color-text-meta);
+        }
+
+        .wis2box-export-table .row-invalid td {
+            background: var(--w-color-critical-50);
+        }
+
+        .wis2box-export-row-error {
+            display: block;
+            color: var(--w-color-text-error);
+            font-size: 0.8125rem;
+            margin-top: 0.25rem;
+        }
+
+        .wis2box-export-reason {
+            display: block;
+            font-size: 0.8125rem;
+            margin-top: 0.25rem;
+        }
+
+        .wis2box-export-actions {
+            margin-top: 1.5rem;
+        }
+
+        .wis2box-export-preview {
+            width: 100%;
+            min-height: 12rem;
+            font-family: var(--w-font-mono, monospace);
+            font-size: 0.8125rem;
+            white-space: pre;
+        }
+
+        .wis2box-export-preview-actions {
+            display: flex;
+            gap: 0.5rem;
+            margin-top: 0.75rem;
+        }
+
+        .wis2box-export-steps li {
+            margin-bottom: 0.75rem;
+        }
+
+        .wis2box-export-steps pre {
+            margin: 0.5rem 0 0;
+            padding: 0.75rem;
+            overflow-x: auto;
+            background: var(--w-color-grey-50);
+            border-radius: 4px;
+        }
+    </style>
+{% endblock %}
+
+{% block main_content %}
+    {% if blocked_error %}
+        <div class="help-block help-critical">
+            <svg class="icon icon-warning icon" aria-hidden="true"><use href="#icon-warning"></use></svg>
+            {{ blocked_error }}
+        </div>
+        <a href="{{ retry_url }}" class="button button-secondary button--icon">
+            <span class="icon-wrapper">
+                <svg class="icon icon-rotate" aria-hidden="true"><use href="#icon-rotate"></use></svg>
+            </span>
+            {% translate "Retry" %}
+        </a>
+    {% else %}
+        <p class="wis2box-export-lead">
+            {% blocktranslate trimmed %}
+                Stations in ADL but not yet on wis2box, matched to OSCAR by WIGOS identifier. wis2box treats
+                OSCAR as authoritative, so every value except the barometer height comes from OSCAR.
+                Stations OSCAR does not know, or whose OSCAR record wis2box would reject, cannot be exported.
+            {% endblocktranslate %}
+        </p>
+
+        <div class="wis2box-export-toolbar">
+            <a href="{% url 'wis2box_stations' %}" class="button button-secondary button-small">
+                {% translate "Back to wis2box stations" %}
+            </a>
+            <a href="{{ retry_url }}" class="button button-secondary button-small button--icon">
+                <span class="icon-wrapper">
+                    <svg class="icon icon-rotate" aria-hidden="true"><use href="#icon-rotate"></use></svg>
+                </span>
+                {% translate "Refresh" %}
+            </a>
+            <span class="wis2box-export-counts">
+                {% blocktranslate trimmed with eligible=total_eligible excluded=total_excluded %}
+                    {{ eligible }} exportable · {{ excluded }} excluded
+                {% endblocktranslate %}
+            </span>
+        </div>
+
+        {% if csv_text %}
+            {% include "wis2box/includes/export_wis2box_result.html" %}
+        {% endif %}
+
+        {% if not rows %}
+            <div class="help-block help-info">
+                <svg class="icon icon-info-circle icon" aria-hidden="true"><use href="#icon-info-circle"></use></svg>
+                {% translate "Every ADL station is already on wis2box. There is nothing to export." %}
+            </div>
+        {% else %}
+            {% if form_error %}
+                <div class="help-block help-critical">
+                    <svg class="icon icon-warning icon" aria-hidden="true"><use href="#icon-warning"></use></svg>
+                    {{ form_error }}
+                </div>
+            {% endif %}
+
+            <form method="post" action="{{ retry_url }}" id="wis2box-export-form" novalidate>
+                {% csrf_token %}
+
+                <section class="wis2box-export-panel">
+                    <h2>{% translate "wis2box topic" %}</h2>
+                    <div class="wis2box-export-controls">
+                        <label class="wis2box-export-topic">
+                            {% translate "Topic hierarchy" %}
+                            {% if topics %}
+                                <select name="topic" required>
+                                    <option value="">{% translate "Choose a topic" %}</option>
+                                    {% for option in topics %}
+                                        <option value="{{ option }}" {% if option == topic %}selected{% endif %}>{{ option }}</option>
+                                    {% endfor %}
+                                </select>
+                            {% else %}
+                                <input type="text" name="topic" value="{{ topic }}" required
+                                       placeholder="origin/a/wis2/…/data/core/weather/surface-based-observations/synop">
+                            {% endif %}
+                        </label>
+                    </div>
+                    {% if topics_error %}
+                        <p class="wis2box-export-help">
+                            {% blocktranslate trimmed with error=topics_error %}
+                                Could not load the dataset topics from wis2box ({{ error }}). Type the topic of an
+                                existing wis2box dataset.
+                            {% endblocktranslate %}
+                        </p>
+                    {% elif not topics %}
+                        <p class="wis2box-export-help">
+                            {% translate "wis2box has no datasets yet. Create the dataset in wis2box first, then type its topic." %}
+                        </p>
+                    {% else %}
+                        <p class="wis2box-export-help">
+                            {% translate "Only the topics of datasets already configured on wis2box are accepted." %}
+                        </p>
+                    {% endif %}
+                </section>
+
+                <section class="wis2box-export-panel">
+                    <h2>{% translate "Barometer height" %}</h2>
+                    <div class="wis2box-export-controls">
+                        <label>
+                            {% translate "Barometer ground clearance (m)" %}
+                            <input type="number" step="any" id="wis2box-ground-clearance" class="wis2box-export-number">
+                        </label>
+                        <label class="wis2box-export-inline-check">
+                            <input type="checkbox" id="wis2box-overwrite-barometer">
+                            {% translate "Overwrite existing values" %}
+                        </label>
+                        <button type="button" class="button button-secondary" id="wis2box-apply-clearance">
+                            {% translate "Apply to selected" %}
+                        </button>
+                    </div>
+                    <p class="wis2box-export-help">
+                        {% translate "Fills each selected station's barometer height with its OSCAR elevation plus the clearance. Values can also be typed per station." %}
+                    </p>
+                    {% if can_save_barometer %}
+                        <div class="wis2box-export-controls">
+                            <label class="wis2box-export-inline-check">
+                                <input type="checkbox" name="save_barometer_heights" {% if save_barometer %}checked{% endif %}>
+                                {% translate "Save barometer heights to ADL stations" %}
+                            </label>
+                        </div>
+                    {% endif %}
+                </section>
+
+                <table class="listing wis2box-export-table">
+                    <thead>
+                    <tr>
+                        <th class="col-select">
+                            <input type="checkbox" id="wis2box-select-all"
+                                   aria-label="{% translate 'Select all exportable stations' %}">
+                        </th>
+                        <th>{% translate "WIGOS ID" %}</th>
+                        <th>{% translate "Name" %}</th>
+                        <th>{% translate "Network" %}</th>
+                        <th>{% translate "Elevation (OSCAR)" %}</th>
+                        <th>{% translate "Barometer height (m)" %}</th>
+                        <th>{% translate "Status" %}</th>
+                    </tr>
+                    </thead>
+                    <tbody>
+                    {% for row in rows %}
+                        <tr class="{% if not row.eligible %}row-excluded{% endif %}{% if row.error %} row-invalid{% endif %}">
+                            <td class="col-select">
+                                <input type="checkbox" name="selected" value="{{ row.wigos_id }}"
+                                       class="wis2box-select-row"
+                                       aria-label="{% blocktranslate with wigos_id=row.wigos_id %}Export {{ wigos_id }}{% endblocktranslate %}"
+                                       {% if row.selected %}checked{% endif %}
+                                       {% if not row.eligible %}disabled{% endif %}>
+                            </td>
+                            <td>{{ row.wigos_id }}</td>
+                            <td>{{ row.name }}</td>
+                            <td>{{ row.network }}</td>
+                            <td>{{ row.elevation|default_if_none:"-" }}</td>
+                            <td>
+                                {% if row.eligible %}
+                                    <input type="number" step="any" class="wis2box-export-number wis2box-barometer"
+                                           name="barometer_height__{{ row.wigos_id }}" value="{{ row.barometer }}"
+                                           data-elevation="{{ row.elevation }}"
+                                           aria-label="{% blocktranslate with wigos_id=row.wigos_id %}Barometer height for {{ wigos_id }}{% endblocktranslate %}">
+                                    {% if row.error %}
+                                        <span class="wis2box-export-row-error">{{ row.error }}</span>
+                                    {% endif %}
+                                {% else %}
+                                    -
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if row.eligible %}
+                                    <span class="w-status w-status--primary">{% translate "Exportable" %}</span>
+                                {% elif row.status == "not_in_oscar" %}
+                                    <span class="w-status">{% translate "Not in OSCAR" %}</span>
+                                {% else %}
+                                    <span class="w-status">{% translate "Invalid OSCAR data" %}</span>
+                                    <span class="wis2box-export-reason">{{ row.reason }}</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                    {% endfor %}
+                    </tbody>
+                </table>
+
+                <div class="wis2box-export-actions">
+                    <button type="submit" class="button">{% translate "Generate CSV" %}</button>
+                </div>
+            </form>
+        {% endif %}
+    {% endif %}
+{% endblock %}
+
+{% block extra_js %}
+    {{ block.super }}
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            const rowBoxes = Array.from(document.querySelectorAll('.wis2box-select-row:not(:disabled)'));
+            const selectAll = document.getElementById('wis2box-select-all');
+
+            if (selectAll) {
+                const syncSelectAll = function () {
+                    const checked = rowBoxes.filter(function (box) { return box.checked; }).length;
+                    selectAll.checked = rowBoxes.length > 0 && checked === rowBoxes.length;
+                    selectAll.indeterminate = checked > 0 && checked < rowBoxes.length;
+                };
+                selectAll.addEventListener('change', function () {
+                    rowBoxes.forEach(function (box) { box.checked = selectAll.checked; });
+                    syncSelectAll();
+                });
+                rowBoxes.forEach(function (box) { box.addEventListener('change', syncSelectAll); });
+                syncSelectAll();
+            }
+
+            const applyButton = document.getElementById('wis2box-apply-clearance');
+            if (applyButton) {
+                applyButton.addEventListener('click', function () {
+                    const clearance = parseFloat(document.getElementById('wis2box-ground-clearance').value);
+                    if (!Number.isFinite(clearance)) {
+                        return;
+                    }
+                    const overwrite = document.getElementById('wis2box-overwrite-barometer').checked;
+                    rowBoxes.forEach(function (box) {
+                        if (!box.checked) {
+                            return;
+                        }
+                        const input = box.closest('tr').querySelector('.wis2box-barometer');
+                        const elevation = parseFloat(input.dataset.elevation);
+                        if (!Number.isFinite(elevation) || (input.value !== '' && !overwrite)) {
+                            return;
+                        }
+                        // Round away float noise such as 618 + 1.1 = 619.0999999999999
+                        input.value = String(Math.round((elevation + clearance) * 1000) / 1000);
+                    });
+                });
+            }
+
+            const preview = document.getElementById('wis2box-csv-preview');
+            if (preview) {
+                document.getElementById('wis2box-csv-copy').addEventListener('click', function (event) {
+                    const button = event.currentTarget;
+                    navigator.clipboard.writeText(preview.value).then(function () {
+                        button.textContent = button.dataset.copiedLabel;
+                    });
+                });
+                document.getElementById('wis2box-csv-download').addEventListener('click', function (event) {
+                    const blob = new Blob([preview.value], {type: 'text/csv;charset=utf-8'});
+                    const link = document.createElement('a');
+                    link.href = URL.createObjectURL(blob);
+                    link.download = event.currentTarget.dataset.filename;
+                    document.body.appendChild(link);
+                    link.click();
+                    link.remove();
+                    URL.revokeObjectURL(link.href);
+                });
+            }
+        });
+    </script>
+{% endblock %}

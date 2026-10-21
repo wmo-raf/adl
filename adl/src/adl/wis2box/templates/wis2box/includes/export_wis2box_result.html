@@ -1,0 +1,53 @@
+{% load i18n %}
+<section class="wis2box-export-panel" id="wis2box-export-result">
+    <div class="help-block help-info">
+        <svg class="icon icon-success icon" aria-hidden="true"><use href="#icon-success"></use></svg>
+        {% blocktranslate trimmed count counter=csv_count %}
+            CSV generated for {{ counter }} station.
+        {% plural %}
+            CSV generated for {{ counter }} stations.
+        {% endblocktranslate %}
+        {% if barometer_saved %}
+            {% translate "Barometer heights were saved to the ADL stations." %}
+        {% endif %}
+    </div>
+
+    <h2>{% translate "Station list CSV" %}</h2>
+    <textarea id="wis2box-csv-preview" class="wis2box-export-preview" readonly
+              aria-label="{% translate 'Station list CSV' %}">{{ csv_text }}</textarea>
+    <div class="wis2box-export-preview-actions">
+        <button type="button" class="button button-secondary" id="wis2box-csv-copy"
+                data-copied-label="{% translate 'Copied' %}">{% translate "Copy" %}</button>
+        <button type="button" class="button" id="wis2box-csv-download"
+                data-filename="{{ csv_filename }}">{% translate "Download" %} {{ csv_filename }}</button>
+    </div>
+
+    <h2>{% translate "Load the stations into wis2box" %}</h2>
+    <ol class="wis2box-export-steps">
+        <li>
+            {% blocktranslate trimmed with filename=csv_filename %}
+                On the wis2box host, save the CSV as <code>{{ filename }}</code> in the wis2box host data
+                directory (<code>WIS2BOX_HOST_DATADIR</code> in <code>wis2box.env</code>). Inside the management
+                container that directory is <code>/data/wis2box</code>.
+            {% endblocktranslate %}
+        </li>
+        <li>
+            {% translate "From the wis2box directory, log in to the management container:" %}
+            <pre><code>python3 wis2box-ctl.py login</code></pre>
+        </li>
+        <li>
+            {% translate "Publish the stations to the selected topic:" %}
+            <pre><code>wis2box metadata station publish-collection --path /data/wis2box/{{ csv_filename }} --topic-hierarchy {{ topic }}</code></pre>
+            <p class="wis2box-export-help">
+                {% translate "wis2box checks every row against the WMDR code lists and stops at the first invalid one; rows here have already been checked against the same lists." %}
+            </p>
+        </li>
+        <li>
+            {% url 'wis2box_stations' as stations_url %}
+            {% blocktranslate trimmed with url=stations_url %}
+                Back in ADL, open <a href="{{ url }}?refresh=1">wis2box Stations</a> to refresh the list; the
+                exported stations should now be listed as matched.
+            {% endblocktranslate %}
+        </li>
+    </ol>
+</section>

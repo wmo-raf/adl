@@ -2,15 +2,26 @@ import logging
 
 import requests
 from django.core.cache import cache
+from pyoscar import OSCARClient
 
 logger = logging.getLogger(__name__)
 
 CACHE_KEY = "wis2box_stations"
 CACHE_TTL = 60 * 10  # 10 minutes
 
+OSCAR_RECORDS_CACHE_TTL = 60 * 20  # 20 minutes, as for the OSCAR station loader
+
+# wis2box's pygeoapi pages at 500 items unless asked for more (max 10000);
+# a truncated station list would make stations already on wis2box look ADL-only
+WIS2BOX_ITEMS_LIMIT = 10000
+
 
 def _stations_endpoint(base_url: str) -> str:
-    return base_url.rstrip("/") + "/oapi/collections/stations/items?f=json"
+    return base_url.rstrip("/") + f"/oapi/collections/stations/items?f=json&limit={WIS2BOX_ITEMS_LIMIT}"
+
+
+def _discovery_metadata_endpoint(base_url: str) -> str:
+    return base_url.rstrip("/") + f"/oapi/collections/discovery-metadata/items?f=json&limit={WIS2BOX_ITEMS_LIMIT}"
 
 
 def _normalize_feature(feature: dict) -> dict:
@@ -96,3 +107,37 @@ def get_wis2box_stations_cached(base_url: str, refresh: bool = False, as_dict: b
     if as_dict:
         return {s["wigos_id"]: s for s in stations}, None
     return stations, None
+
+
+def get_wis2box_topics(base_url: str):
+    """
+    The topic hierarchies of the datasets configured on wis2box, the only
+    topics ``wis2box metadata station publish-collection`` accepts.
+
+    Raises ``requests.RequestException`` on network or HTTP failure.
+    """
+    response = requests.get(_discovery_metadata_endpoint(base_url), timeout=15)
+    response.raise_for_status()
+
+    features = response.json().get("features") or []
+    topics = {(f.get("properties") or {}).get("wmo:topicHierarchy") for f in features}
+    return sorted(t for t in topics if t)
+
+
+def get_oscar_station_records(country):
+    """
+    Raw OSCAR station-search records for ``country``, with a 20-minute cache.
+
+    Unlike ``adl.core.utils.get_stations_for_country_live`` this keeps the
+    whole record, including the region, territory and station type labels
+    that wis2box station metadata needs. Raises on OSCAR failure.
+    """
+    cache_key = f"{country.alpha3}_oscar_station_records"
+    records = cache.get(cache_key)
+
+    if records is None:
+        results = OSCARClient().get_stations(country=country.alpha3)
+        records = results.get("stationSearchResults") or []
+        cache.set(cache_key, records, timeout=OSCAR_RECORDS_CACHE_TTL)
+
+    return records
