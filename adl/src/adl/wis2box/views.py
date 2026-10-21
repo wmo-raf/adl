@@ -476,7 +476,8 @@ def export_wis2box_stations(request):
         "topics_error":   topics_error,
         "can_save_barometer": can_save_barometer,
         "ground_clearance":   wis2box_settings.barometer_ground_clearance,
-        "settings_url":       _settings_url(),
+        # Only offered to users the settings page would not refuse
+        "settings_url":       _settings_url() if request.user.has_perm("wis2box.change_wis2boxsettings") else None,
     })
 
     return render(request, template_name, context)

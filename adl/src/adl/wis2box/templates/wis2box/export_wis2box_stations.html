@@ -189,14 +189,14 @@
                     <use href="#icon-success"></use>
                 </svg>
                 {% blocktranslate trimmed count counter=csv_count %}
-                    CSV generated for {{ counter }} station.
+                    CSV generated for {{ counter }} station —
                     {% plural %}
-                    CSV generated for {{ counter }} stations.
+                    CSV generated for {{ counter }} stations —
                 {% endblocktranslate %}
+                <a href="#wis2box-export-result">{% translate "see below" %}</a>.
                 {% if barometer_saved %}
                     {% translate "Barometer heights were saved to the ADL stations." %}
                 {% endif %}
-                <a href="#wis2box-export-result">{% translate "See the CSV below" %}</a>
             </div>
         {% endif %}
 
@@ -275,7 +275,9 @@
                     </div>
                     <p class="wis2box-export-help">
                         {% translate "Fills each selected station's barometer height with its OSCAR elevation plus the clearance. Values can also be typed per station." %}
-                        <a href="{{ settings_url }}">{% translate "Set the default clearance in wis2box settings" %}</a>
+                        {% if settings_url %}
+                            <a href="{{ settings_url }}">{% translate "Set the default clearance in wis2box settings" %}</a>
+                        {% endif %}
                     </p>
                     {% if can_save_barometer %}
                         <div class="wis2box-export-controls">

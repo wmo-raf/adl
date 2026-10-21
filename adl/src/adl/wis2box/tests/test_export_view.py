@@ -162,6 +162,27 @@ class GroundClearanceTests(ExportViewTestCase):
         self.assertContains(response, 'data-elevation="1146.5"')
 
 
+class SettingsLinkTests(ExportViewTestCase):
+    def setUp(self):
+        super().setUp()
+        StationFactory(station_id="0-454-2-AWSBALAKA")
+        self.oscar_records = [oscar_record("0-454-2-AWSBALAKA")]
+
+    def test_settings_link_is_offered_to_users_who_can_edit_wis2box_settings(self):
+        self.login("change_wis2boxsettings")
+
+        response = self.client.get(self.url)
+
+        self.assertContains(response, "Set the default clearance in wis2box settings")
+
+    def test_settings_link_is_hidden_from_users_who_would_be_refused(self):
+        self.login()
+
+        response = self.client.get(self.url)
+
+        self.assertNotContains(response, "Set the default clearance in wis2box settings")
+
+
 class GenerateCsvTests(ExportViewTestCase):
     def setUp(self):
         super().setUp()
