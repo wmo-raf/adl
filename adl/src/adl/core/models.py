@@ -29,6 +29,11 @@ from adl.core.registries import plugin_registry
 from .blocks import QCChecksStreamBlock
 from .dispatchers import get_dispatch_channel_data
 from .panels import IngestTimeoutBudgetPanel
+from .dispatchers.csv2bufr_templates import (
+    DEFAULT_CSV2BUFR_TEMPLATE,
+    csv2bufr_template_registry,
+    get_csv2bufr_template_choices,
+)
 from .dispatchers.wis2box import upload_to_wis2box, test_wis2box_connection
 from .units import units, validate_unit, TEMPERATURE_UNITS
 from .utils import (
@@ -1351,8 +1356,16 @@ class Wis2BoxUpload(DispatchChannel):
     """
     A :class:`DispatchChannel` that uploads observation data to a
     `wis2box <https://github.com/World-Meteorological-Organization/wis2box>`_
-    MinIO storage endpoint in BUFR format for WMO Information System 2.0
-    publication.
+    MinIO storage endpoint for WMO Information System 2.0 publication.
+
+    Each observation time is uploaded as a one-row CSV in the shape of a
+    **csv2bufr template**, which wis2box converts to BUFR. ``template`` picks
+    the template from
+    :data:`~adl.core.dispatchers.csv2bufr_templates.csv2bufr_template_registry`;
+    the default is the AWS template
+    (https://training.wis2box.wis.wmo.int/csv2bufr-templates/aws-template/).
+    The matching csv2bufr mapping must be installed in wis2box for the
+    dataset, or the uploaded CSV will not be converted.
 
     Connects to the wis2box MinIO instance using ``storage_endpoint``,
     ``storage_username``, and ``storage_password``. The ``dataset_id``
@@ -1367,6 +1380,14 @@ class Wis2BoxUpload(DispatchChannel):
     secure = models.BooleanField(default=False, verbose_name=_("Use Secure Connection"),
                                  help_text=_("If checked, HTTPS connection will be used,otherwise HTTP"))
     dataset_id = models.CharField(max_length=255, verbose_name=_("Dataset ID"))
+    template = models.CharField(max_length=64, default=DEFAULT_CSV2BUFR_TEMPLATE,
+                                choices=get_csv2bufr_template_choices,
+                                verbose_name=_("csv2bufr Template"),
+                                help_text=_("The csv2bufr template the uploaded CSV follows. The default, AWS, is "
+                                            "described at "
+                                            "https://training.wis2box.wis.wmo.int/csv2bufr-templates/aws-template/. "
+                                            "The matching csv2bufr mapping must be installed in wis2box for "
+                                            "this dataset."))
     
     panels = DispatchChannel.base_panels + [
         MultiFieldPanel([
@@ -1376,11 +1397,17 @@ class Wis2BoxUpload(DispatchChannel):
             FieldPanel("secure"),
             FieldPanel("dataset_id"),
         ], heading=_("Wis2Box Storage Configuration")),
+        MultiFieldPanel([
+            FieldPanel("template"),
+        ], heading=_("csv2bufr Template")),
     ] + DispatchChannel.parameter_panels
     
     class Meta:
         verbose_name = _("WIS2BOX Upload")
         verbose_name_plural = _("WIS2BOX Uploads")
+    
+    def get_csv2bufr_template(self):
+        return csv2bufr_template_registry.get(self.template)
     
     def send_station_data(self, station_link, data_records):
         return upload_to_wis2box(self, data_records)

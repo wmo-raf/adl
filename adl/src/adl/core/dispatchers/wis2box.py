@@ -9,6 +9,7 @@ from minio import Minio
 from minio.error import S3Error
 from urllib3 import PoolManager
 
+from adl.core.dispatchers.csv2bufr_templates import STATION, TIMESTAMP
 from adl.core.utils import get_object_or_none
 
 logger = logging.getLogger(__name__)
@@ -25,54 +26,6 @@ MINIO_PATH = "incoming/"
 
 # Create a custom HTTP client with timeout
 http_client = PoolManager(timeout=timedelta(seconds=WIS2BOX_STORAGE_REQUEST_TIMEOUT).seconds, retries=False)
-
-WIS2BOX_CSV_HEADER = [
-    "wsi_series",
-    "wsi_issuer",
-    "wsi_issue_number",
-    "wsi_local",
-    "wmo_block_number",
-    "wmo_station_number",
-    "station_type",
-    "year",
-    "month",
-    "day",
-    "hour",
-    "minute",
-    "latitude",
-    "longitude",
-    "station_height_above_msl",
-    "barometer_height_above_msl",
-    "station_pressure",
-    "msl_pressure",
-    "geopotential_height",
-    "thermometer_height",
-    "air_temperature",
-    "dewpoint_temperature",
-    "relative_humidity",
-    "method_of_ground_state_measurement",
-    "ground_state",
-    "method_of_snow_depth_measurement",
-    "snow_depth",
-    "precipitation_intensity",
-    "anemometer_height",
-    "time_period_of_wind",
-    "wind_direction",
-    "wind_speed",
-    "maximum_wind_gust_direction_10_minutes",
-    "maximum_wind_gust_speed_10_minutes",
-    "maximum_wind_gust_direction_1_hour",
-    "maximum_wind_gust_speed_1_hour",
-    "maximum_wind_gust_direction_3_hours",
-    "maximum_wind_gust_speed_3_hours",
-    "rain_sensor_height",
-    "total_precipitation_1_hour",
-    "total_precipitation_3_hours",
-    "total_precipitation_6_hours",
-    "total_precipitation_12_hours",
-    "total_precipitation_24_hours",
-]
-
 
 def get_minio_client(endpoint, access_key, secret_key, secure=False):
     return Minio(endpoint, access_key=access_key, secret_key=secret_key, http_client=http_client, secure=secure)
@@ -122,27 +75,6 @@ def test_wis2box_connection(channel):
         "message": f"Connected to {channel.storage_endpoint}; "
                    f"bucket '{WIS2BOX_INCOMING_BUCKET}' is accessible",
         "latency_ms": latency_ms(),
-    }
-
-
-def get_wis2box_csv_station_metadata(station):
-    return {
-        "wsi_series": station.wsi_series,
-        "wsi_issuer": station.wsi_issuer,
-        "wsi_issue_number": station.wsi_issue_number,
-        "wsi_local": station.wsi_local,
-        "wmo_block_number": station.wmo_block_number,
-        "wmo_station_number": station.wmo_station_number,
-        "station_type": station.station_type,
-        "latitude": station.location.y,
-        "longitude": station.location.x,
-        "station_height_above_msl": station.station_height_above_msl,
-        "barometer_height_above_msl": station.barometer_height_above_msl,
-        "anemometer_height": station.anemometer_height,
-        "rain_sensor_height": station.rain_sensor_height,
-        "method_of_ground_state_measurement": station.method_of_ground_state_measurement,
-        "method_of_snow_depth_measurement": station.method_of_snow_depth_measurement,
-        "time_period_of_wind": station.time_period_of_wind,
     }
 
 
@@ -200,7 +132,22 @@ def hourly_aggregate_data_records(channel, data_records):
     return hourly_data_records
 
 
-def channel_record_to_wis2box_csv(record):
+def get_station_column_value(station, column_name):
+    if column_name == "latitude":
+        return station.location.y
+    if column_name == "longitude":
+        return station.location.x
+    return getattr(station, column_name)
+
+
+def channel_record_to_wis2box_csv(channel, record):
+    """
+    Build the one-row CSV for a dispatch record, in the shape of the channel's
+    csv2bufr template.
+
+    Station and timestamp columns always come from the station and the
+    observation time, so a parameter mapping can never overwrite them.
+    """
     from adl.core.models import Station
     station_id = record.get("station_id")
     
@@ -219,33 +166,22 @@ def channel_record_to_wis2box_csv(record):
         logger.error(f"Station with ID {station_id} not found")
         return None, None
     
-    csv_metadata = get_wis2box_csv_station_metadata(station)
+    template = channel.get_csv2bufr_template()
+    values = record.get("values", {})
+    
+    row_data = []
+    for column in template.columns:
+        if column.source == STATION:
+            col_data = get_station_column_value(station, column.name)
+        elif column.source == TIMESTAMP:
+            col_data = getattr(timestamp, column.name)
+        else:
+            col_data = values.get(column.name, "")
+        row_data.append(col_data)
     
     output = StringIO()
     writer = csv.writer(output)
-    writer.writerow(WIS2BOX_CSV_HEADER)
-    
-    row_data = []
-    values = record.get("values", {})
-    
-    date_info = {
-        "year": timestamp.year,
-        "month": timestamp.month,
-        "day": timestamp.day,
-        "hour": timestamp.hour,
-        "minute": timestamp.minute,
-    }
-    
-    data = {
-        **csv_metadata,
-        **date_info,
-        **values
-    }
-    
-    for col in WIS2BOX_CSV_HEADER:
-        col_data = data.get(col, "")
-        row_data.append(col_data)
-    
+    writer.writerow(template.column_names)
     writer.writerow(row_data)
     csv_content = output.getvalue()
     output.close()
@@ -267,7 +203,7 @@ def upload_to_wis2box(channel, data_records, overwrite=False):
     last_sent_obs_time = None
     
     for record in data_records:
-        csv_content, filename = channel_record_to_wis2box_csv(record)
+        csv_content, filename = channel_record_to_wis2box_csv(channel, record)
         
         if not csv_content:
             logger.error("Error converting record to CSV. Skipping...")

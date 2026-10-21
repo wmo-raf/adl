@@ -81,6 +81,9 @@ exclude_patterns = [
     # Instructions for the engineering skills, kept next to the docs they
     # describe. Not site pages, and nothing links to them.
     "agents/**",
+    # Architecture decision records, read by contributors in the repo rather
+    # than published on the site.
+    "adr/**",
 ]
 
 # -- HTML output -------------------------------------------------------------
