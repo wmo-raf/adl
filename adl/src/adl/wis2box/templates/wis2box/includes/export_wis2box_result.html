@@ -17,7 +17,7 @@
               aria-label="{% translate 'Station list CSV' %}">{{ csv_text }}</textarea>
     <div class="wis2box-export-preview-actions">
         <button type="button" class="button button-secondary" id="wis2box-csv-copy"
-                data-copied-label="{% translate 'Copied' %}">{% translate "Copy" %}</button>
+                data-copy-label="{% translate 'Copy' %}" data-copied-label="{% translate 'Copied' %}">{% translate "Copy" %}</button>
         <button type="button" class="button" id="wis2box-csv-download"
                 data-filename="{{ csv_filename }}">{% translate "Download" %} {{ csv_filename }}</button>
     </div>

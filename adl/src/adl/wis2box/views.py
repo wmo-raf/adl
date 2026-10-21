@@ -2,6 +2,7 @@ import json
 import math
 from collections import defaultdict
 
+import requests
 from django.contrib.gis.geos import Point
 from django.shortcuts import render, redirect
 from django.urls import reverse, reverse_lazy
@@ -344,8 +345,9 @@ def _parse_barometer_height(raw):
 def _apply_export_post(rows, post):
     """
     Carry the submitted selection and barometer heights into ``rows`` and
-    validate them. Returns ``{wigos_id: barometer_height}`` for the selected
-    rows, or ``None`` when any selected row is invalid (its ``error`` is set).
+    validate them. Returns ``(barometer_heights, valid)``: the heights keyed
+    by WIGOS id for the selected rows, and whether every one was valid (an
+    invalid row has its ``error`` set).
     """
     selected_ids = set(post.getlist("selected"))
     barometer_heights = {}
@@ -367,7 +369,7 @@ def _apply_export_post(rows, post):
 
         barometer_heights[row["wigos_id"]] = value
 
-    return barometer_heights if valid else None
+    return barometer_heights, valid
 
 
 def export_wis2box_stations(request):
@@ -398,9 +400,9 @@ def export_wis2box_stations(request):
     base_url = wis2box_settings.wis2box_url
 
     # A stale or empty wis2box list would make stations already on wis2box look
-    # ADL-only, and publishing them would overwrite their metadata — so opening
-    # the page always re-fetches, and any fetch failure blocks the export
-    wis2box_stations_list, fetch_error = get_wis2box_stations_cached(base_url, refresh=request.method == "GET")
+    # ADL-only, and publishing them would overwrite their metadata — so both
+    # opening the page and generating re-fetch, and any failure blocks the export
+    wis2box_stations_list, fetch_error = get_wis2box_stations_cached(base_url, refresh=True)
     if fetch_error:
         context["blocked_error"] = _("Could not fetch stations from wis2box: %(error)s") % {"error": fetch_error}
         return render(request, template_name, context)
@@ -420,7 +422,7 @@ def export_wis2box_stations(request):
 
     try:
         topics, topics_error = get_wis2box_topics(base_url), None
-    except Exception as exc:
+    except (requests.RequestException, ValueError) as exc:
         topics, topics_error = [], str(exc)
 
     can_save_barometer = request.user.has_perm("core.change_station")
@@ -428,12 +430,19 @@ def export_wis2box_stations(request):
     if request.method == "POST":
         topic = request.POST.get("topic", "").strip()
         save_barometer = can_save_barometer and bool(request.POST.get("save_barometer_heights"))
-        barometer_heights = _apply_export_post(rows, request.POST)
+        barometer_heights, barometer_valid = _apply_export_post(rows, request.POST)
+        eligible_ids = {r["wigos_id"] for r in rows if r["eligible"]}
+        unexportable = set(request.POST.getlist("selected")) - eligible_ids
 
-        if barometer_heights is not None and not barometer_heights:
-            context["form_error"] = _("Select at least one station to export.")
-        elif barometer_heights is None:
+        if unexportable:
+            # OSCAR or wis2box changed between opening the page and generating
+            context["form_error"] = _(
+                "%(count)s selected station(s) are no longer exportable: %(ids)s. Review the list and generate again."
+            ) % {"count": len(unexportable), "ids": ", ".join(sorted(unexportable))}
+        elif not barometer_valid:
             context["form_error"] = _("Fix the highlighted stations before generating the CSV.")
+        elif not barometer_heights:
+            context["form_error"] = _("Select at least one station to export.")
         elif not topic or (topics and topic not in topics):
             context["form_error"] = _("Choose the wis2box topic the stations publish to.")
         else:

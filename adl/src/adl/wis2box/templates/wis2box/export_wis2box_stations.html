@@ -362,11 +362,24 @@
 
             const preview = document.getElementById('wis2box-csv-preview');
             if (preview) {
-                document.getElementById('wis2box-csv-copy').addEventListener('click', function (event) {
-                    const button = event.currentTarget;
-                    navigator.clipboard.writeText(preview.value).then(function () {
-                        button.textContent = button.dataset.copiedLabel;
-                    });
+                const copyButton = document.getElementById('wis2box-csv-copy');
+                const showCopied = function () {
+                    copyButton.textContent = copyButton.dataset.copiedLabel;
+                    setTimeout(function () { copyButton.textContent = copyButton.dataset.copyLabel; }, 2000);
+                };
+                const copyBySelection = function () {
+                    // navigator.clipboard only exists on HTTPS; many deployments serve the admin over HTTP
+                    preview.select();
+                    if (document.execCommand('copy')) {
+                        showCopied();
+                    }
+                };
+                copyButton.addEventListener('click', function () {
+                    if (navigator.clipboard && window.isSecureContext) {
+                        navigator.clipboard.writeText(preview.value).then(showCopied, copyBySelection);
+                    } else {
+                        copyBySelection();
+                    }
                 });
                 document.getElementById('wis2box-csv-download').addEventListener('click', function (event) {
                     const blob = new Blob([preview.value], {type: 'text/csv;charset=utf-8'});
@@ -376,7 +389,7 @@
                     document.body.appendChild(link);
                     link.click();
                     link.remove();
-                    URL.revokeObjectURL(link.href);
+                    setTimeout(function () { URL.revokeObjectURL(link.href); }, 0);
                 });
             }
         });

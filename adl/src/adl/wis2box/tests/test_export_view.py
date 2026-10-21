@@ -176,3 +176,24 @@ class GenerateCsvTests(ExportViewTestCase):
         self.station.refresh_from_db()
         self.assertIsNone(self.station.barometer_height_above_msl)
         self.assertContains(response, "619.25,MWI,africa")
+
+    def test_generate_rechecks_wis2box_rather_than_trusting_the_cached_list(self):
+        self.login()
+        self.client.get(self.url)  # primes the wis2box cache
+        self.wis2box_get.side_effect = requests.ConnectionError("wis2box down")
+
+        response = self.post()
+
+        self.assertContains(response, "wis2box down")
+        self.assertNotContains(response, "station_name,wigos_station_identifier")
+
+    def test_selected_station_that_is_no_longer_exportable_is_reported(self):
+        self.login()
+        self.client.get(self.url)
+        self.oscar_records = []  # OSCAR no longer lists the station by the time of Generate
+        cache.clear()
+
+        response = self.post()
+
+        self.assertContains(response, "no longer exportable")
+        self.assertNotContains(response, "station_name,wigos_station_identifier")
