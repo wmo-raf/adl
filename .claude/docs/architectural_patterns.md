@@ -126,6 +126,9 @@ utilities:
 - `DispatchChannel.get_channel_unit(mapping)` decides the unit each mapped value is sent in — the stored
   `channel_unit` by default; `Wis2BoxUpload` overrides it to use its csv2bufr template's unit, and returns `None` to
   leave out a mapping whose unit cannot convert
+- Mapping hooks on `DispatchChannel`: `clean_parameter_mapping(mapping)` validates a mapping and
+  `prepare_parameter_mapping(mapping)` adjusts it just before it is saved. Dispatch channels use `DispatchChannelForm`
+  (`base_form_class`), which attaches child mappings to the channel before validation so these hooks can run
 - `Wis2BoxUpload` builds its CSV from its csv2bufr template (`dispatchers/csv2bufr_templates.py`): each column is
   filled from the station, the observation time, or a parameter mapping (observation columns only). See
   `docs/adr/0001-wis2box-csv2bufr-templates.md`

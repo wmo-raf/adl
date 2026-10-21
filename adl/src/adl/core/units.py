@@ -123,7 +123,8 @@ def units_are_convertible(from_symbol, to_symbol, unit_context=None):
     """Check whether a value in ``from_symbol`` can be converted to ``to_symbol``."""
     try:
         convert_magnitude(1, from_symbol, to_symbol, unit_context)
-    except pint.errors.DimensionalityError:
+    except pint.errors.PintError:
+        # incompatible dimensions, or a symbol pint cannot parse
         return False
     return True
 
@@ -132,7 +133,7 @@ def units_are_equivalent(symbol, other_symbol, unit_context=None):
     """Check whether a value in ``symbol`` reads the same in ``other_symbol``, e.g. mm and kg/m^2 of rain."""
     try:
         magnitude = convert_magnitude(1, symbol, other_symbol, unit_context)
-    except pint.errors.DimensionalityError:
+    except pint.errors.PintError:
         return False
     return abs(magnitude - 1) < 1e-9
 

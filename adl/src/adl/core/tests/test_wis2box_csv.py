@@ -58,10 +58,14 @@ class Wis2BoxCsvTestCase(TestCase):
 
     def map_and_observe(self, channel_parameter, value, param=None, channel_unit=UNSET):
         param = param or DataParameterFactory()
-        DispatchChannelParameterMapping.objects.create(
+        mapping = DispatchChannelParameterMapping.objects.create(
             dispatch_channel=self.channel,
             parameter=param,
             channel_parameter=channel_parameter,
+        )
+        # write the stored unit as a row saved before units were locked to the
+        # template would hold it; saving a mapping now replaces it
+        DispatchChannelParameterMapping.objects.filter(pk=mapping.pk).update(
             channel_unit=param.unit if channel_unit is UNSET else channel_unit,
         )
         ObservationRecord.objects.create(

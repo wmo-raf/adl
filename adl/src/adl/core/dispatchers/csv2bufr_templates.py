@@ -17,6 +17,7 @@ their app config's ``ready()``.
 from dataclasses import dataclass
 
 from adl.core.registry import Instance, Registry
+from adl.core.units import units_are_convertible
 
 STATION = "station"
 """Filled from the :class:`~adl.core.models.Station`'s metadata."""
@@ -60,6 +61,16 @@ class Csv2BufrColumn:
     section: str = None
     window_hours: int = None
     unit_context: str = None
+    
+    def get_unit_context(self, parameter):
+        """The pint context for converting ``parameter`` into this column: the parameter's own, else the column's."""
+        return parameter.get_unit_context(self.unit_context)
+    
+    def accepts_unit_of(self, parameter):
+        """Whether ``parameter``'s values can be converted into this column's unit."""
+        if not self.unit:
+            return True
+        return units_are_convertible(parameter.unit.symbol, self.unit, self.get_unit_context(parameter))
 
 
 def station_column(name, data_type, unit=None):
@@ -106,10 +117,16 @@ class Csv2BufrTemplate(Instance):
     def observation_columns(self):
         return [column for column in self.columns if column.source == OBSERVATION]
     
-    def get_observation_column(self, name):
-        for column in self.observation_columns:
+    def get_column(self, name):
+        for column in self.columns:
             if column.name == name:
                 return column
+        return None
+
+    def get_observation_column(self, name):
+        column = self.get_column(name)
+        if column and column.source == OBSERVATION:
+            return column
         return None
 
 

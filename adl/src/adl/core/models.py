@@ -28,15 +28,18 @@ from wagtailiconchooser.widgets import IconChooserWidget
 
 from adl.core.registries import plugin_registry
 from .blocks import QCChecksStreamBlock
+from .dispatch_forms import DispatchChannelForm
 from .dispatchers import get_dispatch_channel_data
 from .panels import IngestTimeoutBudgetPanel
 from .dispatchers.csv2bufr_templates import (
     DEFAULT_CSV2BUFR_TEMPLATE,
+    STATION,
+    TIMESTAMP,
     csv2bufr_template_registry,
     get_csv2bufr_template_choices,
 )
 from .dispatchers.wis2box import upload_to_wis2box, test_wis2box_connection
-from .units import units, units_are_convertible, units_are_equivalent, validate_unit, TEMPERATURE_UNITS
+from .units import units, units_are_equivalent, validate_unit, TEMPERATURE_UNITS
 from .utils import (
     validate_as_integer,
     get_custom_unit_context_entries
@@ -274,6 +277,26 @@ class Unit(models.Model):
         return str(unit)
     
     get_registry_unit.short_description = _("Unit Registry")
+    
+    @classmethod
+    def get_for_symbol(cls, symbol):
+        """
+        The unit for a pint symbol: the row with that symbol, else a row whose
+        symbol is spelled differently but means the same unit (``kg m-2`` for
+        ``kg/m^2``), else a new row. Units are not seeded, so a deployment may
+        not have the unit yet.
+        """
+        unit = cls.objects.filter(symbol=symbol).first()
+        if unit:
+            return unit
+        
+        for unit in cls.objects.all():
+            if units_are_equivalent(unit.symbol, symbol):
+                return unit
+        
+        # unit names are unique; a row may already use the symbol as its name
+        name = symbol if not cls.objects.filter(name=symbol).exists() else f"{symbol} (csv2bufr)"
+        return cls.objects.create(name=name, symbol=symbol)
 
 
 class DataParameter(ClusterableModel):
@@ -1213,6 +1236,8 @@ class DispatchChannel(PolymorphicModel, ClusterableModel):
         FieldPanel("sort_order"),
     ]
     
+    base_form_class = DispatchChannelForm
+    
     class Meta:
         ordering = ["sort_order"]
     
@@ -1295,8 +1320,17 @@ class DispatchChannel(PolymorphicModel, ClusterableModel):
         
         return qs.distinct()
     
-    def clean_parameter_mapping(self, *args, **kwargs):
-        pass
+    def clean_parameter_mapping(self, parameter_mapping):
+        """
+        Validate a parameter mapping against this channel, raising
+        ``ValidationError`` keyed by the mapping's field names.
+        """
+    
+    def prepare_parameter_mapping(self, parameter_mapping):
+        """
+        Adjust a parameter mapping just before it is saved. Channels whose
+        destination fixes part of the mapping (e.g. its unit) set it here.
+        """
 
     def is_dispatch_overdue(self, now=None):
         """
@@ -1363,13 +1397,33 @@ class DispatchChannelParameterMapping(Orderable):
     def __str__(self):
         return f"{self.dispatch_channel.name} - {self.parameter.name}"
     
+    def get_channel(self):
+        """
+        The mapping's channel as its concrete subclass, or ``None`` if not set.
+
+        A new channel on the create form has no id yet, but its mappings are
+        still attached to it and must still be checked.
+        """
+        try:
+            channel = self.dispatch_channel
+        except ObjectDoesNotExist:
+            return None
+        if channel.pk:
+            channel = channel.get_real_instance()
+        return channel
+    
     def clean(self):
         super(DispatchChannelParameterMapping, self).clean()
         
-        if self.dispatch_channel_id:
-            channel = self.dispatch_channel
-            if hasattr(channel, "clean_parameter_mapping"):
-                channel.clean_parameter_mapping(self)
+        channel = self.get_channel()
+        if channel is not None:
+            channel.clean_parameter_mapping(self)
+    
+    def save(self, *args, **kwargs):
+        channel = self.get_channel()
+        if channel is not None:
+            channel.prepare_parameter_mapping(self)
+        super().save(*args, **kwargs)
 
 
 class DispatchChannelStationLink(Orderable):
@@ -1451,6 +1505,51 @@ class Wis2BoxUpload(DispatchChannel):
     def get_csv2bufr_template(self):
         return csv2bufr_template_registry.get(self.template)
     
+    def clean_parameter_mapping(self, parameter_mapping):
+        """
+        A mapping must fill an observation column of the channel's csv2bufr
+        template, with a parameter whose unit converts to the column's unit.
+        """
+        name = parameter_mapping.channel_parameter
+        if not name:
+            # the form already reports the missing name
+            return
+        
+        template = self.get_csv2bufr_template()
+        column = template.get_column(name)
+        params = {"column": name, "template": template.label}
+        
+        if column is None:
+            message = _("'%(column)s' is not a column of the %(template)s csv2bufr template.")
+        elif column.source == STATION:
+            message = _("'%(column)s' is filled from the station's metadata and cannot be mapped.")
+        elif column.source == TIMESTAMP:
+            message = _("'%(column)s' is filled from the observation time and cannot be mapped.")
+        else:
+            message = None
+        
+        if message:
+            raise ValidationError({"channel_parameter": ValidationError(message, params=params)})
+        
+        if not parameter_mapping.parameter_id:
+            return
+        
+        parameter = parameter_mapping.parameter
+        if not column.accepts_unit_of(parameter):
+            raise ValidationError({"parameter": ValidationError(
+                _("%(parameter)s is in %(unit)s, which cannot be converted to %(column_unit)s, "
+                  "the unit of '%(column)s' in the %(template)s csv2bufr template."),
+                params={**params, "parameter": parameter.name, "unit": parameter.unit.symbol,
+                        "column_unit": column.unit},
+            )})
+    
+    def prepare_parameter_mapping(self, parameter_mapping):
+        """Store the csv2bufr template's unit as the mapping's channel unit, whatever was submitted."""
+        column = self.get_csv2bufr_template().get_observation_column(parameter_mapping.channel_parameter)
+        if column is None:
+            return
+        parameter_mapping.channel_unit = Unit.get_for_symbol(column.unit) if column.unit else None
+    
     def get_channel_unit(self, parameter_mapping):
         """
         Observation columns are sent in the unit the csv2bufr template
@@ -1471,8 +1570,8 @@ class Wis2BoxUpload(DispatchChannel):
             return None, None
         
         parameter = parameter_mapping.parameter
-        unit_context = parameter.get_unit_context(column.unit_context)
-        if not units_are_convertible(parameter.unit.symbol, column.unit, unit_context):
+        unit_context = column.get_unit_context(parameter)
+        if not column.accepts_unit_of(parameter):
             log_once(
                 logging.ERROR,
                 (self.pk, parameter_mapping.pk, parameter.unit.symbol, column.name),
