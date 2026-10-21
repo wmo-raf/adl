@@ -22,9 +22,19 @@ This file starts at 0.8.9. Earlier history is in the git log.
   template.** A mapping must name an observation column of the template — a
   typo, or a station or timestamp column such as `latitude`, is rejected with
   a message saying why — and its parameter's unit must convert to the
-  column's. Saving a mapping stores the template's unit as its *Channel Unit*,
+  column's; a column without a unit, such as `ground_state`, takes a
+  dimensionless parameter. Saving a mapping stores the template's unit as its *Channel Unit*,
   whatever was entered, creating the unit if the deployment does not have it
   yet (#323).
+- **WIS2BOX Upload parameter mappings are a matching table.** Instead of
+  adding mappings one by one and typing column names, the channel lists every
+  observation column of its csv2bufr template, grouped by section, with the
+  unit it takes and a dropdown of the ADL parameters whose unit fits. Leave a
+  row empty to not send that column; clear it to remove the mapping. The
+  aggregation is preset from the template (sum for precipitation totals, max
+  for gusts) and can be changed, with a note when it differs. Mappings that
+  fit no column are listed under the table so they can be removed. Other
+  dispatch channels keep the inline list (#324).
 
 ### Fixed
 
@@ -70,6 +80,11 @@ This file starts at 0.8.9. Earlier history is in the git log.
   convert, keeps dispatching as before (it was never sent, or is left out),
   but the channel cannot be saved until that mapping is fixed or removed. The
   error is shown on the mapping.
+- Adds static files `adl/css/parameter_matching.css` and
+  `adl/js/parameter_matching.js`. Deployments that serve static files through
+  the proxy need `collectstatic` — automatic with
+  `COLLECT_STATICFILES_ON_STARTUP=true` — or the WIS2BOX Upload mapping table
+  loses its layout and live checks.
 - Ships one migration, `core.0052`, which adds the csv2bufr `template` field to
   WIS2BOX Upload channels, set to `aws` for existing ones. Nothing to do before
   running it.

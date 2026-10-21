@@ -30,7 +30,7 @@ from adl.core.registries import plugin_registry
 from .blocks import QCChecksStreamBlock
 from .dispatch_forms import DispatchChannelForm
 from .dispatchers import get_dispatch_channel_data
-from .panels import IngestTimeoutBudgetPanel
+from .panels import IngestTimeoutBudgetPanel, ParameterMappingPanel
 from .dispatchers.csv2bufr_templates import (
     DEFAULT_CSV2BUFR_TEMPLATE,
     STATION,
@@ -1245,6 +1245,11 @@ class DispatchChannel(PolymorphicModel, ClusterableModel):
         InlinePanel("parameter_mappings", label=_("Parameter Mappings"), heading=_("Parameter Mappings")),
     ]
     
+    # for channels whose destination columns are known in advance; see get_parameter_mapping_spec
+    matching_parameter_panels = [
+        ParameterMappingPanel("parameter_mappings", label=_("Parameter Mappings"), heading=_("Parameter Mappings")),
+    ]
+    
     def __str__(self):
         return f"{self.name}"
     
@@ -1254,6 +1259,19 @@ class DispatchChannel(PolymorphicModel, ClusterableModel):
     def get_parameter_mapping_values(self):
         channel_param_values = [pm.channel_parameter for pm in self.get_parameter_mappings()]
         return channel_param_values
+    
+    def get_parameter_mapping_spec(self):
+        """
+        The destination columns a parameter can be mapped to, when the
+        destination fixes them, for the parameter matching panel
+        (:class:`~adl.core.panels.ParameterMappingPanel`). ``None`` means the
+        destination's names are free, and mappings are edited inline.
+
+        Each column provides ``name``, ``unit`` (pint symbol or ``None``),
+        ``default_aggregation``, ``section`` and ``section_label`` (for
+        grouping), ``hint`` (text or ``None``) and ``accepts_unit_of(parameter)``.
+        """
+        return None
     
     def get_channel_unit(self, parameter_mapping):
         """
@@ -1496,7 +1514,7 @@ class Wis2BoxUpload(DispatchChannel):
         MultiFieldPanel([
             FieldPanel("template"),
         ], heading=_("csv2bufr Template")),
-    ] + DispatchChannel.parameter_panels
+    ] + DispatchChannel.matching_parameter_panels
     
     class Meta:
         verbose_name = _("WIS2BOX Upload")
@@ -1504,6 +1522,9 @@ class Wis2BoxUpload(DispatchChannel):
     
     def get_csv2bufr_template(self):
         return csv2bufr_template_registry.get(self.template)
+    
+    def get_parameter_mapping_spec(self):
+        return self.get_csv2bufr_template().observation_columns
     
     def clean_parameter_mapping(self, parameter_mapping):
         """
@@ -1540,7 +1561,7 @@ class Wis2BoxUpload(DispatchChannel):
                 _("%(parameter)s is in %(unit)s, which cannot be converted to %(column_unit)s, "
                   "the unit of '%(column)s' in the %(template)s csv2bufr template."),
                 params={**params, "parameter": parameter.name, "unit": parameter.unit.symbol,
-                        "column_unit": column.unit},
+                        "column_unit": column.unit or _("a dimensionless value")},
             )})
     
     def prepare_parameter_mapping(self, parameter_mapping):
