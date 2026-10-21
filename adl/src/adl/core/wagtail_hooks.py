@@ -122,9 +122,12 @@ def insert_editor_js():
 @hooks.register("insert_global_admin_css")
 def insert_global_admin_css():
     # The one status-badge convention, shared across admin pages (station-link
-    # status panel, ingestion diagnostic) instead of copied per template
+    # status panel, ingestion diagnostic) instead of copied per template, and
+    # the page layout every admin view shares (top spacing under the slim header)
     return format_html(
-        '<link rel="stylesheet" href="{}">', static("adl/css/status_badges.css"),
+        '<link rel="stylesheet" href="{}"><link rel="stylesheet" href="{}">',
+        static("adl/css/status_badges.css"),
+        static("adl/css/admin_layout.css"),
     )
 
 
