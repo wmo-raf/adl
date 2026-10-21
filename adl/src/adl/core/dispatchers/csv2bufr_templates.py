@@ -16,6 +16,8 @@ their app config's ``ready()``.
 
 from dataclasses import dataclass
 
+from django.utils.translation import gettext_lazy as _
+
 from adl.core.registry import Instance, Registry
 from adl.core.units import units_are_convertible
 
@@ -66,11 +68,25 @@ class Csv2BufrColumn:
         """The pint context for converting ``parameter`` into this column: the parameter's own, else the column's."""
         return parameter.get_unit_context(self.unit_context)
     
+    @property
+    def section_label(self):
+        return SECTION_LABELS.get(self.section, self.section)
+    
+    @property
+    def hint(self):
+        if self.window_hours:
+            return _("Needs a source parameter already accumulated over %(hours)s hours: hourly data cannot "
+                     "build this window.") % {"hours": self.window_hours}
+        return None
+    
     def accepts_unit_of(self, parameter):
-        """Whether ``parameter``'s values can be converted into this column's unit."""
-        if not self.unit:
-            return True
-        return units_are_convertible(parameter.unit.symbol, self.unit, self.get_unit_context(parameter))
+        """
+        Whether ``parameter``'s values can be converted into this column's
+        unit. A column without a unit (a code-table value, a count) takes any
+        dimensionless parameter.
+        """
+        unit = self.unit or "dimensionless"
+        return units_are_convertible(parameter.unit.symbol, unit, self.get_unit_context(parameter))
 
 
 def station_column(name, data_type, unit=None):
@@ -136,6 +152,15 @@ GROUND_SNOW = "ground_snow"
 PRECIPITATION = "precipitation"
 WIND = "wind"
 GUSTS = "gusts"
+
+SECTION_LABELS = {
+    PRESSURE: _("Pressure"),
+    TEMPERATURE_HUMIDITY: _("Temperature and humidity"),
+    GROUND_SNOW: _("Ground and snow"),
+    PRECIPITATION: _("Precipitation"),
+    WIND: _("Wind"),
+    GUSTS: _("Wind gusts"),
+}
 
 
 class AwsCsv2BufrTemplate(Csv2BufrTemplate):

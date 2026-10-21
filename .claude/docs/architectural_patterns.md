@@ -129,6 +129,9 @@ utilities:
 - Mapping hooks on `DispatchChannel`: `clean_parameter_mapping(mapping)` validates a mapping and
   `prepare_parameter_mapping(mapping)` adjusts it just before it is saved. Dispatch channels use `DispatchChannelForm`
   (`base_form_class`), which attaches child mappings to the channel before validation so these hooks can run
+- A channel whose destination columns are fixed returns them from `get_parameter_mapping_spec()` and uses
+  `DispatchChannel.matching_parameter_panels`: `ParameterMappingPanel` (`core/panels.py`) renders one row per column
+  over the same `parameter_mappings` formset. Channels returning `None` keep `parameter_panels` (the inline list)
 - `Wis2BoxUpload` builds its CSV from its csv2bufr template (`dispatchers/csv2bufr_templates.py`): each column is
   filled from the station, the observation time, or a parameter mapping (observation columns only). See
   `docs/adr/0001-wis2box-csv2bufr-templates.md`

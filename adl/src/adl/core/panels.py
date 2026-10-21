@@ -1,4 +1,9 @@
-from wagtail.admin.panels import Panel
+from django import forms
+from django.forms.formsets import DELETION_FIELD_NAME, ORDERING_FIELD_NAME, ManagementForm
+from django.utils.translation import gettext_lazy as _
+from wagtail.admin.panels import InlinePanel, Panel
+
+from .dispatch_forms import ParameterMappingRowForm
 
 
 class IngestTimeoutBudgetPanel(Panel):
@@ -48,4 +53,206 @@ class IngestTimeoutBudgetPanel(Panel):
                 "is_clamped": effective < configured,
             })
 
+            return context
+
+
+class ParameterMappingPanel(InlinePanel):
+    """
+    A dispatch channel's parameter mappings as a side-by-side matching table:
+    one fixed row per destination column, each with a dropdown of the ADL
+    parameters whose unit fits it.
+
+    For channels whose ``get_parameter_mapping_spec()`` returns their
+    destination columns; channels without a spec use the plain inline panel
+    (``DispatchChannel.parameter_panels``) instead.
+
+    The rows are the ``parameter_mappings`` child formset, so mappings save in
+    the same submission as the channel. Every column is submitted on every
+    save; :class:`~adl.core.dispatch_forms.ParameterMappingRowForm` decides
+    from each row's parameter whether a mapping is created, kept or deleted.
+    Mappings that fit no row are listed under the table, with their errors,
+    so the form never refuses to save for a reason the page does not show.
+    """
+
+    def get_form_options(self):
+        options = super().get_form_options()
+        options["formsets"][self.relation_name]["form"] = ParameterMappingRowForm
+        return options
+
+    class BoundPanel(Panel.BoundPanel):
+        template_name = "core/panels/parameter_matching.html"
+
+        class Media:
+            css = {"all": ["adl/css/parameter_matching.css"]}
+            js = ["adl/js/parameter_matching.js"]
+
+        def __init__(self, **kwargs):
+            super().__init__(**kwargs)
+            self.label = self.panel.label
+            if self.form is None:
+                return
+
+            from adl.core.models import DataParameter
+
+            self.formset = self.form.formsets[self.panel.relation_name]
+            self.columns = self.form.instance.get_parameter_mapping_spec()
+            self.parameters = list(DataParameter.objects.select_related("unit").order_by("name"))
+            self.aggregating = bool(self.form["send_aggregated_data"].value())
+            self.aggregation_choices = self.formset.empty_form.fields["aggregation_measure"].choices
+            self.fits = {}
+
+            column_names = {column.name for column in self.columns}
+            forms_by_column = {}
+            self.unrecognised = []
+            for subform in self.formset.forms:
+                name = subform["channel_parameter"].value()
+                if name in column_names and name not in forms_by_column:
+                    forms_by_column[name] = subform
+                elif name in column_names:
+                    self.unrecognised.append((subform, _("Another mapping for '%(column)s', which already has "
+                                                         "one in the table.") % {"column": name}))
+                elif subform.instance.pk or subform.has_changed():
+                    self.unrecognised.append((subform, _("Not a column of this destination.")))
+
+            total = len(self.formset.forms)
+            self.row_forms = []
+            for column in self.ordered_columns():
+                subform = forms_by_column.get(column.name)
+                if subform is None:
+                    subform = self.new_row_form(total, column)
+                    total += 1
+                self.row_forms.append((column, subform))
+
+            self.management_form = ManagementForm(
+                auto_id=self.formset.auto_id,
+                prefix=self.formset.prefix,
+                initial={
+                    "TOTAL_FORMS": total,
+                    "INITIAL_FORMS": self.formset.initial_form_count(),
+                    "MIN_NUM_FORMS": self.formset.min_num,
+                    "MAX_NUM_FORMS": self.formset.max_num,
+                },
+                renderer=self.formset.renderer,
+            )
+
+            for position, (column, subform) in enumerate(self.row_forms, start=1):
+                self.hide_bookkeeping_fields(subform, position)
+            for position, (subform, reason) in enumerate(self.unrecognised, start=len(self.row_forms) + 1):
+                self.hide_bookkeeping_fields(subform, position)
+                subform.fields[DELETION_FIELD_NAME].widget = forms.CheckboxInput(attrs={"data-role": "delete"})
+
+        def ordered_columns(self):
+            """Columns grouped by section, sections in the order the spec first reaches them."""
+            sections = []
+            for column in self.columns:
+                if column.section not in sections:
+                    sections.append(column.section)
+            return sorted(self.columns, key=lambda column: sections.index(column.section))
+
+        def new_row_form(self, index, column):
+            """An empty row for a column with no mapping yet, numbered after the formset's own forms."""
+            subform = self.formset.form(
+                prefix=self.formset.add_prefix(index),
+                auto_id=self.formset.auto_id,
+                initial={"channel_parameter": column.name, "aggregation_measure": column.default_aggregation},
+                empty_permitted=True,
+                use_required_attribute=False,
+                renderer=self.formset.renderer,
+                **self.formset.get_form_kwargs(index),
+            )
+            self.formset.add_fields(subform, index)
+            return subform
+
+        def hide_bookkeeping_fields(self, subform, position):
+            subform.fields["channel_parameter"].widget = forms.HiddenInput()
+            subform.fields[DELETION_FIELD_NAME].widget = forms.HiddenInput()
+            if self.formset.can_order:
+                # rows save in table order; a submitted form keeps the order it was posted with
+                subform.fields[ORDERING_FIELD_NAME].widget = forms.HiddenInput()
+                subform.fields[ORDERING_FIELD_NAME].initial = position
+
+        def column_fits(self, column, parameter):
+            # the same unit checks repeat for every row, so remember them per unit and context
+            key = (column.name, parameter.unit.symbol, parameter.custom_unit_context)
+            if key not in self.fits:
+                self.fits[key] = column.accepts_unit_of(parameter)
+            return self.fits[key]
+
+        def selected_parameters(self):
+            """ADL parameter id -> the column it is chosen for, across every row."""
+            selected = {}
+            for column, subform in self.row_forms:
+                value = subform["parameter"].value()
+                if value:
+                    selected[str(value)] = column.name
+            return selected
+
+        def parameter_options(self, column, subform, selected):
+            current = str(subform["parameter"].value() or "")
+            options = []
+            for parameter in self.parameters:
+                value = str(parameter.pk)
+                fits = self.column_fits(column, parameter)
+                if not fits and value != current:
+                    continue
+                used_in = selected.get(value)
+                taken = used_in is not None and used_in != column.name
+                if not fits:
+                    # keep a mapping that no longer fits on the page, so saving reports it
+                    # instead of dropping it from the dropdown and deleting it
+                    label = _("%(name)s (in %(unit)s, which does not fit)") % {
+                        "name": parameter.name, "unit": parameter.unit.symbol,
+                    }
+                elif taken:
+                    label = _("%(name)s (used in %(column)s)") % {"name": parameter.name, "column": used_in}
+                else:
+                    label = parameter.name
+                options.append({
+                    "value": value,
+                    "label": label,
+                    "name": parameter.name,
+                    "selected": value == current,
+                    "disabled": taken,
+                })
+            return options
+
+        def aggregation_options(self, subform):
+            current = subform["aggregation_measure"].value()
+            return [
+                {"value": value, "label": label, "selected": value == current}
+                for value, label in self.aggregation_choices
+            ]
+
+        def rows(self):
+            selected = self.selected_parameters()
+            choice_labels = dict(self.aggregation_choices)
+            sections = []
+            for column, subform in self.row_forms:
+                aggregation = subform["aggregation_measure"].value()
+                if not sections or sections[-1]["key"] != column.section:
+                    sections.append({"key": column.section, "label": column.section_label, "rows": []})
+                sections[-1]["rows"].append({
+                    "column": column,
+                    "form": subform,
+                    "parameter_field": subform["parameter"],
+                    "parameter_options": self.parameter_options(column, subform, selected),
+                    "aggregation_field": subform["aggregation_measure"],
+                    "aggregation_options": self.aggregation_options(subform),
+                    "default_aggregation_label": choice_labels.get(column.default_aggregation),
+                    "overridden": self.aggregating and subform.has_parameter()
+                                  and aggregation != column.default_aggregation,
+                })
+            return sections
+
+        def get_context_data(self, parent_context=None):
+            context = super().get_context_data(parent_context)
+            context.update({
+                "sections": self.rows(),
+                "unrecognised": self.unrecognised,
+                "management_form": self.management_form,
+                "aggregating": self.aggregating,
+                "non_form_errors": self.formset.non_form_errors(),
+                # the script relabels options as rows change; it fills in this translated pattern
+                "used_in_label": _("%(name)s (used in %(column)s)"),
+            })
             return context

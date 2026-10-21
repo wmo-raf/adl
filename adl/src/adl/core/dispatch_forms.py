@@ -1,4 +1,34 @@
+from django.forms.formsets import DELETION_FIELD_NAME
 from wagtail.admin.forms import WagtailAdminModelForm
+
+
+class ParameterMappingRowForm(WagtailAdminModelForm):
+    """
+    One row of the parameter matching panel: a fixed destination column, with
+    the ADL parameter chosen for it, if any.
+
+    Every column is always submitted, so the row's parameter is what decides
+    whether a mapping exists. A new row with no parameter is an empty row and
+    saves nothing; an existing row whose parameter is cleared is deleted.
+    """
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["parameter"].required = False
+
+    def has_parameter(self):
+        return bool(self["parameter"].value())
+
+    def has_changed(self):
+        if self.instance.pk is None and not self.has_parameter():
+            return False
+        return super().has_changed()
+
+    def clean(self):
+        cleaned_data = super().clean()
+        if self.instance.pk and not cleaned_data.get("parameter"):
+            cleaned_data[DELETION_FIELD_NAME] = True
+        return cleaned_data
 
 
 class DispatchChannelForm(WagtailAdminModelForm):
