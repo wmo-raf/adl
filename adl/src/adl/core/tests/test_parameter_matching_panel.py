@@ -8,7 +8,9 @@ are held to the same contract the browser uses.
 """
 
 from bs4 import BeautifulSoup
+from django.contrib.auth import get_user_model
 from django.test import RequestFactory, TestCase
+from django.urls import reverse
 from django.utils.datastructures import MultiValueDict
 from wagtail.admin.panels import ObjectList, get_edit_handler
 
@@ -366,6 +368,186 @@ class UnrecognisedMappingVisibilityTests(MatchingPanelTestCase):
         form.save()
 
         self.assertFalse(DispatchChannelParameterMapping.objects.filter(pk=legacy.pk).exists())
+
+
+class UnrecognisedMappingCleanupTests(MatchingPanelTestCase):
+    """
+    The form refuses to save while a mapping fills no column, and offers
+    reassigning it to a column that fits, or removing it.
+    """
+
+    def unrecognised_row(self, soup, name):
+        return soup.select_one(f'tr[data-unrecognised="{name}"]')
+
+    def reassign(self, soup, data, name, column):
+        select = self.unrecognised_row(soup, name).select_one("select[data-role=reassign]")
+        data.setlist(select["name"], [column])
+
+    def test_a_form_with_an_unrecognised_mapping_is_refused_with_a_message(self):
+        self.map(self.temperature, "air_temp")
+
+        form = self.submit()
+
+        self.assertFalse(form.is_valid())
+        errors = form.formsets["parameter_mappings"].non_form_errors()
+        self.assertIn("Remove or reassign the mappings listed under the table", " ".join(errors))
+        self.assertIn("Remove or reassign", self.render(form).select_one(".help-critical").get_text())
+
+    def test_a_station_column_name_is_unrecognised_too(self):
+        self.map(self.temperature, "latitude")
+
+        self.assertIsNotNone(self.unrecognised_row(self.render(), "latitude"))
+        self.assertFalse(self.submit().is_valid())
+
+    def test_reassigning_saves_a_normal_mapping_with_the_template_unit(self):
+        legacy = self.map(self.temperature, "air_temp")
+        soup = self.render()
+        data = self.post_data(soup)
+        self.reassign(soup, data, "air_temp", "air_temperature")
+
+        form = self.form_class(data, instance=self.channel)
+        self.assertTrue(form.is_valid(), str(form.formsets["parameter_mappings"].errors))
+        form.save()
+
+        mapping = DispatchChannelParameterMapping.objects.get(pk=legacy.pk)
+        self.assertEqual(mapping.channel_parameter, "air_temperature")
+        self.assertEqual(mapping.channel_unit, self.kelvin)
+        row = self.row(self.render(), "air_temperature")
+        self.assertEqual(row.select_one("select[data-role=parameter] option[selected]")["value"],
+                         str(self.temperature.pk))
+        self.assertIsNone(self.unrecognised_row(self.render(), "air_temp"))
+
+    def test_removing_still_deletes_the_row(self):
+        legacy = self.map(self.temperature, "air_temp")
+        soup = self.render()
+        data = self.post_data(soup)
+        data.setlist(self.unrecognised_row(soup, "air_temp").select_one("input[data-role=delete]")["name"], ["on"])
+
+        form = self.form_class(data, instance=self.channel)
+        self.assertTrue(form.is_valid())
+        form.save()
+
+        self.assertFalse(DispatchChannelParameterMapping.objects.filter(pk=legacy.pk).exists())
+
+    def test_only_free_columns_that_fit_are_offered(self):
+        self.map(self.dewpoint, "air_temperature")
+        self.map(self.temperature, "air_temp")
+
+        select = self.unrecognised_row(self.render(), "air_temp").select_one("select[data-role=reassign]")
+
+        offered = [option["value"] for option in select.find_all("option")]
+        self.assertEqual(offered[0], "air_temp")
+        self.assertIn("dewpoint_temperature", offered)
+        self.assertNotIn("air_temperature", offered)  # already holds a mapping
+        self.assertNotIn("wind_speed", offered)  # Kelvin does not convert to m/s
+
+    def test_reassigning_to_a_column_that_already_has_a_mapping_is_refused(self):
+        self.map(self.dewpoint, "air_temperature")
+        self.map(self.temperature, "air_temp")
+        soup = self.render()
+        data = self.post_data(soup)
+        self.reassign(soup, data, "air_temp", "air_temperature")
+
+        form = self.form_class(data, instance=self.channel)
+
+        self.assertFalse(form.is_valid())
+        self.assertIsNotNone(self.unrecognised_row(self.render(form), "air_temperature"))
+
+    def test_reassigning_to_a_column_the_parameter_does_not_fit_is_refused(self):
+        self.map(self.temperature, "air_temp")
+        soup = self.render()
+        data = self.post_data(soup)
+        self.reassign(soup, data, "air_temp", "wind_speed")
+
+        self.assertFalse(self.form_class(data, instance=self.channel).is_valid())
+
+    def test_a_reassignment_survives_a_re_render_after_another_error(self):
+        self.map(self.temperature, "air_temp")
+        soup = self.render()
+        data = self.post_data(soup)
+        self.reassign(soup, data, "air_temp", "air_temperature")
+        # the same parameter in a second row is rejected on the page
+        data.setlist(self.row(soup, "dewpoint_temperature").select_one("select[data-role=parameter]")["name"],
+                     [str(self.temperature.pk)])
+
+        form = self.form_class(data, instance=self.channel)
+
+        self.assertFalse(form.is_valid())
+        row = self.row(self.render(form), "air_temperature")
+        self.assertEqual(row.select_one("select[data-role=parameter] option[selected]")["value"],
+                         str(self.temperature.pk))
+
+    def test_a_duplicate_for_a_column_can_be_reassigned_to_a_free_one(self):
+        self.map(self.temperature, "air_temperature")
+        self.map(self.dewpoint, "air_temperature")
+        soup = self.render()
+        [duplicate] = soup.select("tr[data-unrecognised]")
+        data = self.post_data(soup)
+        select = duplicate.select_one("select[data-role=reassign]")
+        data.setlist(select["name"], ["dewpoint_temperature"])
+
+        form = self.form_class(data, instance=self.channel)
+        self.assertTrue(form.is_valid(), str(form.formsets["parameter_mappings"].errors))
+        form.save()
+
+        self.assertEqual(set(self.saved_mappings()), {"air_temperature", "dewpoint_temperature"})
+
+
+class NewChannelPanelTests(MatchingPanelTestCase):
+    def test_the_create_form_renders_without_unrecognised_mappings(self):
+        new_channel = Wis2BoxUpload()
+        form = self.form_class(instance=new_channel)
+        bound = self.edit_handler.get_bound_panel(instance=new_channel, request=self.request, form=form)
+        soup = BeautifulSoup(bound.render_html(), "html.parser")
+
+        self.assertEqual(len(soup.select("tr[data-column]")), len(AWS_OBSERVATION_COLUMNS))
+        self.assertIsNone(soup.select_one("tr[data-unrecognised]"))
+
+
+class UnmatchedMappingsFlagTests(MatchingPanelTestCase):
+    """Channels with unrecognised mappings are flagged on the channel listing."""
+
+    def setUp(self):
+        super().setUp()
+        user = get_user_model().objects.create_superuser(username="admin", email="a@example.com", password="x")
+        self.client.force_login(user)
+
+    def listing(self):
+        response = self.client.get(reverse("dispatch_channels_list"))
+        self.assertEqual(response.status_code, 200)
+        return BeautifulSoup(response.content, "html.parser")
+
+    def test_a_channel_with_unrecognised_mappings_is_flagged_with_their_count(self):
+        self.map(self.temperature, "air_temp")
+        self.map(self.dewpoint, "latitude")
+        self.map(self.rainfall, "total_precipitation_1_hour")
+
+        badge = self.listing().select_one(".status-badge--warning")
+
+        self.assertIn("2 unmatched mappings", badge.get_text())
+        self.assertEqual(badge.find_parent("a")["href"], self.channel.edit_url)
+
+    def test_a_channel_without_unrecognised_mappings_is_not_flagged(self):
+        self.map(self.temperature, "air_temperature")
+
+        self.assertIsNone(self.listing().select_one(".status-badge--warning"))
+
+    def test_saved_mappings_are_counted_without_the_form(self):
+        self.map(self.temperature, "air_temp")
+        self.map(self.dewpoint, "air_temperature")
+        self.map(self.rainfall, "air_temperature")
+
+        reasons = [reason for _mapping, reason in self.channel.get_unmatched_parameter_mappings()]
+
+        self.assertEqual(len(reasons), 2)
+
+    def test_a_channel_without_a_spec_has_no_unmatched_mappings(self):
+        channel = DispatchChannel.objects.create(name="Plain")
+        DispatchChannelParameterMapping.objects.create(
+            dispatch_channel=channel, parameter=self.temperature, channel_parameter="anything",
+        )
+
+        self.assertEqual(channel.get_unmatched_parameter_mappings(), [])
 
 
 class PlainChannelPanelTests(TestCase):

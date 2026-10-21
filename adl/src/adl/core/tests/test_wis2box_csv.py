@@ -138,6 +138,28 @@ class AwsTemplateCsvTests(Wis2BoxCsvTestCase):
         self.assertEqual(row["thermometer_height"], "1.25")
 
 
+class UnrecognisedMappingDispatchTests(Wis2BoxCsvTestCase):
+    """A channel with mappings the template does not recognise keeps dispatching until it is edited."""
+
+    def test_recognised_mappings_are_still_sent_alongside_an_unrecognised_one(self):
+        kelvin = UnitFactory(name="Kelvin", symbol="K")
+        self.map_and_observe("air_temp", 1.0)
+        self.map_and_observe("air_temperature", 293.15, param=DataParameterFactory(unit=kelvin))
+
+        header, row = self.build_csv()
+
+        self.assertEqual(header, AWS_TEMPLATE_COLUMNS)
+        self.assertEqual(row["air_temperature"], "293.15")
+        self.assertNotIn("air_temp", row)
+
+    def test_a_mapping_to_a_station_column_does_not_stop_dispatch(self):
+        self.map_and_observe("latitude", 99.0)
+
+        _header, row = self.build_csv()
+
+        self.assertEqual(row["latitude"], "-1.3")
+
+
 class TemplateUnitTests(Wis2BoxCsvTestCase):
     """The csv2bufr template's unit wins over the unit stored on the mapping."""
 

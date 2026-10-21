@@ -3,7 +3,7 @@ from django.forms.formsets import DELETION_FIELD_NAME, ORDERING_FIELD_NAME, Mana
 from django.utils.translation import gettext_lazy as _
 from wagtail.admin.panels import InlinePanel, Panel
 
-from .dispatch_forms import ParameterMappingRowForm
+from .dispatch_forms import ParameterMappingFormSet, ParameterMappingRowForm, is_live_mapping_form
 
 
 class IngestTimeoutBudgetPanel(Panel):
@@ -77,6 +77,7 @@ class ParameterMappingPanel(InlinePanel):
     def get_form_options(self):
         options = super().get_form_options()
         options["formsets"][self.relation_name]["form"] = ParameterMappingRowForm
+        options["formsets"][self.relation_name]["formset"] = ParameterMappingFormSet
         return options
 
     class BoundPanel(Panel.BoundPanel):
@@ -101,18 +102,9 @@ class ParameterMappingPanel(InlinePanel):
             self.aggregation_choices = self.formset.empty_form.fields["aggregation_measure"].choices
             self.fits = {}
 
-            column_names = {column.name for column in self.columns}
-            forms_by_column = {}
-            self.unrecognised = []
-            for subform in self.formset.forms:
-                name = subform["channel_parameter"].value()
-                if name in column_names and name not in forms_by_column:
-                    forms_by_column[name] = subform
-                elif name in column_names:
-                    self.unrecognised.append((subform, _("Another mapping for '%(column)s', which already has "
-                                                         "one in the table.") % {"column": name}))
-                elif subform.instance.pk or subform.has_changed():
-                    self.unrecognised.append((subform, _("Not a column of this destination.")))
+            forms_by_column, self.unrecognised = self.form.instance.match_parameter_mappings(
+                self.formset.forms, lambda subform: subform["channel_parameter"].value(), is_live_mapping_form,
+            )
 
             total = len(self.formset.forms)
             self.row_forms = []
@@ -140,6 +132,27 @@ class ParameterMappingPanel(InlinePanel):
             for position, (subform, reason) in enumerate(self.unrecognised, start=len(self.row_forms) + 1):
                 self.hide_bookkeeping_fields(subform, position)
                 subform.fields[DELETION_FIELD_NAME].widget = forms.CheckboxInput(attrs={"data-role": "delete"})
+                self.offer_reassignment(subform, forms_by_column)
+
+        def offer_reassignment(self, subform, forms_by_column):
+            """
+            Let an unrecognised mapping be moved to a column: the columns without a live mapping
+            whose unit fits its parameter. The first choice keeps the stored name, so a form posted
+            unchanged is still refused rather than silently reassigned.
+            """
+            current = subform["channel_parameter"].value() or ""
+            parameter = subform.instance.parameter if subform.instance.parameter_id else None
+            choices = [(current, _("Choose a column…"))]
+            for column in self.ordered_columns():
+                taken = column.name in forms_by_column and is_live_mapping_form(forms_by_column[column.name])
+                if column.name == current or taken:
+                    continue
+                if parameter is not None and not self.column_fits(column, parameter):
+                    continue
+                choices.append((column.name, column.name))
+            subform.fields["channel_parameter"].widget = forms.Select(
+                choices=choices, attrs={"data-role": "reassign", "aria-label": _("Reassign to a column")},
+            )
 
         def ordered_columns(self):
             """Columns grouped by section, sections in the order the spec first reaches them."""

@@ -65,7 +65,7 @@ from .registries import (
     connection_viewset_registry,
     plugin_registry
 )
-from .table import ConnectionHealthColumn, LinkColumnWithIcon
+from .table import ConnectionHealthColumn, LinkColumnWithIcon, UnmatchedMappingsColumn
 from .tasks import (
     process_station_link_batch,
     perform_channel_dispatch,
@@ -888,6 +888,13 @@ def dispatch_channels_list(request):
             LinkColumnWithIcon("stations_link", label=_("Stations Link"), icon_name="map-pin",
                                get_url=get_station_links_url),
         ]
+        
+        unmatched_counts = {
+            channel.pk: len(channel.get_unmatched_parameter_mappings())
+            for channel in dispatch_channels_by_model_name[model_name]
+        }
+        if any(unmatched_counts.values()):
+            columns.append(UnmatchedMappingsColumn("unmatched_mappings", unmatched_counts, label=_("Mappings")))
         
         data[model_name] = {
             "name": channel_type._meta.verbose_name,

@@ -1,4 +1,7 @@
+from django.core.exceptions import ValidationError
 from django.forms.formsets import DELETION_FIELD_NAME
+from django.utils.translation import gettext_lazy as _
+from modelcluster.forms import BaseChildFormSet
 from wagtail.admin.forms import WagtailAdminModelForm
 
 
@@ -29,6 +32,35 @@ class ParameterMappingRowForm(WagtailAdminModelForm):
         if self.instance.pk and not cleaned_data.get("parameter"):
             cleaned_data[DELETION_FIELD_NAME] = True
         return cleaned_data
+
+
+def is_live_mapping_form(form):
+    """A saved mapping, or a row the user filled in; not an empty row of the matching table."""
+    return bool(form.instance.pk) or form.has_changed()
+
+
+class ParameterMappingFormSet(BaseChildFormSet):
+    """
+    The parameter mappings of a channel whose destination fixes its columns.
+
+    Refuses to save while a mapping fills no column (an unknown name, or a
+    second mapping for a column that has one), so the table never saves a
+    channel that is sending less than it shows. The matching panel lists those
+    mappings with the means to reassign or remove them; a mapping marked for
+    removal no longer counts.
+    """
+
+    def clean(self):
+        super().clean()
+        forms = [form for form in self.forms if not self._should_delete_form(form)]
+        _matched, unmatched = self.instance.match_parameter_mappings(
+            forms, lambda form: form["channel_parameter"].value(), is_live_mapping_form,
+        )
+        if unmatched:
+            raise ValidationError(
+                _("Remove or reassign the mappings listed under the table before saving."),
+                code="unmatched_mappings",
+            )
 
 
 class DispatchChannelForm(WagtailAdminModelForm):

@@ -100,13 +100,14 @@
 
     {% if unrecognised %}
         <div class="help-block help-warning parameter-matching__unrecognised">
-            <p>{% trans "These mappings have no row in the table above, so they are not sent. Remove them to save the channel." %}</p>
+            <p>{% trans "These mappings have no row in the table above, so they are not sent. Reassign each to a column, or remove it, to save the channel." %}</p>
             <table class="listing">
                 <thead>
                 <tr>
                     <th>{% trans "Stored column name" %}</th>
                     <th>{% trans "ADL parameter" %}</th>
                     <th>{% trans "Why it is listed" %}</th>
+                    <th>{% trans "Reassign to" %}</th>
                     <th>{% trans "Remove" %}</th>
                 </tr>
                 </thead>
@@ -129,6 +130,7 @@
                             <input type="hidden" name="{{ subform.aggregation_measure.html_name }}" value="{{ subform.aggregation_measure.value|default:'' }}">
                         </td>
                         <td>{{ reason }}</td>
+                        <td>{{ subform.channel_parameter }}</td>
                         <td>{{ subform.DELETE }}</td>
                     </tr>
                 {% endfor %}

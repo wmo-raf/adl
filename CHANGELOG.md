@@ -35,6 +35,14 @@ This file starts at 0.8.9. Earlier history is in the git log.
   for gusts) and can be changed, with a note when it differs. Mappings that
   fit no column are listed under the table so they can be removed. Other
   dispatch channels keep the inline list (#324).
+- **WIS2BOX Upload channels with unrecognised mappings can be cleaned up and
+  are flagged.** A mapping that fills no column of the template (a typo, a
+  station column such as `latitude`, a legacy name, or a second mapping for a
+  column) is listed under the table with a dropdown to reassign it to a free
+  column its parameter fits, or a checkbox to remove it. The channel cannot be
+  saved until none are left. The dispatch channels list shows an "N unmatched
+  mappings" badge, linking to the channel, so affected channels can be found
+  without opening each one (#325).
 
 ### Fixed
 
@@ -61,6 +69,11 @@ This file starts at 0.8.9. Earlier history is in the git log.
 
 ### Upgrade notes
 
+- **WIS2BOX Upload channels with unrecognised mappings must be fixed before
+  they can be saved again.** No migration changes or deletes any mapping, and
+  dispatch carries on as before (those mappings are simply not sent). Look for
+  the "unmatched mappings" badge on the dispatch channels list, open each
+  flagged channel, and reassign or remove the mappings listed under the table.
 - **Published WIS2BOX values change for misconfigured channels.** A channel
   whose *Channel Unit* did not match the template — e.g. hPa on
   `station_pressure`, or °C on `air_temperature` — was publishing wrong BUFR
