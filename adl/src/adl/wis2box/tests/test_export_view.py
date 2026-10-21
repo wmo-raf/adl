@@ -16,6 +16,7 @@ from django.core.cache import cache
 from django.test import TestCase
 from django.urls import reverse
 from wagtail.models import Site
+from wagtail.users.models import UserProfile
 
 from adl.core.models import AdlSettings
 from adl.core.tests.factories import StationFactory
@@ -138,7 +139,27 @@ class GroundClearanceTests(ExportViewTestCase):
 
         response = self.client.get(self.url)
 
-        self.assertRegex(response.content.decode(), r'id="wis2box-ground-clearance"[^>]*value="1.25"')
+        self.assertRegex(response.content.decode(), r'id="wis2box-ground-clearance"[^>]*value="1\.25"')
+
+    def test_clearance_prefill_survives_a_comma_decimal_admin_language(self):
+        # A type=number input drops "1,25", which French formatting would render,
+        # and the Apply button would parse "1146,5" as 1146
+        StationFactory(station_id="0-454-2-AWSBALAKA", barometer_height_above_msl=619.25)
+        self.oscar_records = [oscar_record("0-454-2-AWSBALAKA", elevation=1146.5)]
+        settings = Wis2BoxSettings.for_site(Site.objects.get(is_default_site=True))
+        settings.barometer_ground_clearance = 1.25
+        settings.save()
+        user = make_user("francophone")
+        profile = UserProfile.get_for_user(user)
+        profile.preferred_language = "fr"
+        profile.save()
+        self.client.force_login(user)
+
+        response = self.client.get(self.url)
+
+        self.assertRegex(response.content.decode(), r'id="wis2box-ground-clearance"[^>]*value="1\.25"')
+        self.assertContains(response, 'value="619.25"')
+        self.assertContains(response, 'data-elevation="1146.5"')
 
 
 class GenerateCsvTests(ExportViewTestCase):

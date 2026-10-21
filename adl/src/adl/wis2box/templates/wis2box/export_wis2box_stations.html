@@ -1,5 +1,5 @@
 {% extends "wagtailadmin/generic/base.html" %}
-{% load i18n wagtailadmin_tags %}
+{% load i18n l10n wagtailadmin_tags %}
 
 {% block titletag %}{% translate "Export for wis2box bulk insert" %}{% endblock %}
 
@@ -69,7 +69,7 @@
         .wis2box-export-help {
             color: var(--w-color-text-meta);
             font-size: 0.875rem;
-            margin: 0.5rem 0 0;
+            margin: 0.5rem 0 0.5rem;
         }
 
         .wis2box-export-table .col-select {
@@ -117,18 +117,23 @@
         .wis2box-export-preview-actions {
             display: flex;
             gap: 0.5rem;
-            margin-top: 0.75rem;
+            margin: 0.75rem 0 1.5rem;
         }
 
         .wis2box-export-steps li {
             margin-bottom: 0.75rem;
         }
 
-        .wis2box-export-steps pre {
+        /* nowrap collapses any whitespace a formatter adds around the command,
+           and keeps a long command on one copyable line instead of wrapping mid-flag */
+        .wis2box-export-command {
+            display: block;
             margin: 0.5rem 0 0;
             padding: 0.75rem;
             overflow-x: auto;
+            white-space: nowrap;
             background: var(--w-color-grey-50);
+            border: 0;
             border-radius: 4px;
         }
     </style>
@@ -137,12 +142,16 @@
 {% block main_content %}
     {% if blocked_error %}
         <div class="help-block help-critical">
-            <svg class="icon icon-warning icon" aria-hidden="true"><use href="#icon-warning"></use></svg>
+            <svg class="icon icon-warning icon" aria-hidden="true">
+                <use href="#icon-warning"></use>
+            </svg>
             {{ blocked_error }}
         </div>
         <a href="{{ retry_url }}" class="button button-secondary button--icon">
             <span class="icon-wrapper">
-                <svg class="icon icon-rotate" aria-hidden="true"><use href="#icon-rotate"></use></svg>
+                <svg class="icon icon-rotate" aria-hidden="true">
+                    <use href="#icon-rotate"></use>
+                </svg>
             </span>
             {% translate "Retry" %}
         </a>
@@ -161,7 +170,9 @@
             </a>
             <a href="{{ retry_url }}" class="button button-secondary button-small button--icon">
                 <span class="icon-wrapper">
-                    <svg class="icon icon-rotate" aria-hidden="true"><use href="#icon-rotate"></use></svg>
+                    <svg class="icon icon-rotate" aria-hidden="true">
+                        <use href="#icon-rotate"></use>
+                    </svg>
                 </span>
                 {% translate "Refresh" %}
             </a>
@@ -174,10 +185,12 @@
 
         {% if csv_text %}
             <div class="help-block help-info">
-                <svg class="icon icon-success icon" aria-hidden="true"><use href="#icon-success"></use></svg>
+                <svg class="icon icon-success icon" aria-hidden="true">
+                    <use href="#icon-success"></use>
+                </svg>
                 {% blocktranslate trimmed count counter=csv_count %}
                     CSV generated for {{ counter }} station.
-                {% plural %}
+                    {% plural %}
                     CSV generated for {{ counter }} stations.
                 {% endblocktranslate %}
                 {% if barometer_saved %}
@@ -189,13 +202,17 @@
 
         {% if not rows %}
             <div class="help-block help-info">
-                <svg class="icon icon-info-circle icon" aria-hidden="true"><use href="#icon-info-circle"></use></svg>
+                <svg class="icon icon-info-circle icon" aria-hidden="true">
+                    <use href="#icon-info-circle"></use>
+                </svg>
                 {% translate "Every ADL station is already on wis2box. There is nothing to export." %}
             </div>
         {% else %}
             {% if form_error %}
                 <div class="help-block help-critical">
-                    <svg class="icon icon-warning icon" aria-hidden="true"><use href="#icon-warning"></use></svg>
+                    <svg class="icon icon-warning icon" aria-hidden="true">
+                        <use href="#icon-warning"></use>
+                    </svg>
                     {{ form_error }}
                 </div>
             {% endif %}
@@ -212,7 +229,8 @@
                                 <select name="topic" required>
                                     <option value="">{% translate "Choose a topic" %}</option>
                                     {% for option in topics %}
-                                        <option value="{{ option }}" {% if option == topic %}selected{% endif %}>{{ option }}</option>
+                                        <option value="{{ option }}"
+                                                {% if option == topic %}selected{% endif %}>{{ option }}</option>
                                     {% endfor %}
                                 </select>
                             {% else %}
@@ -245,13 +263,13 @@
                         <label>
                             {% translate "Barometer ground clearance (m)" %}
                             <input type="number" step="any" id="wis2box-ground-clearance" class="wis2box-export-number"
-                                   value="{{ ground_clearance|default_if_none:'' }}">
+                                   value="{{ ground_clearance|default_if_none:''|unlocalize }}">
                         </label>
                         <label class="wis2box-export-inline-check">
                             <input type="checkbox" id="wis2box-overwrite-barometer">
                             {% translate "Overwrite existing values" %}
                         </label>
-                        <button type="button" class="button button-secondary" id="wis2box-apply-clearance">
+                        <button type="button" class="button button-secondary button-small" id="wis2box-apply-clearance">
                             {% translate "Apply to selected" %}
                         </button>
                     </div>
@@ -262,7 +280,8 @@
                     {% if can_save_barometer %}
                         <div class="wis2box-export-controls">
                             <label class="wis2box-export-inline-check">
-                                <input type="checkbox" name="save_barometer_heights" {% if save_barometer %}checked{% endif %}>
+                                <input type="checkbox" name="save_barometer_heights"
+                                       {% if save_barometer %}checked{% endif %}>
                                 {% translate "Save barometer heights to ADL stations" %}
                             </label>
                         </div>
@@ -301,8 +320,8 @@
                             <td>
                                 {% if row.eligible %}
                                     <input type="number" step="any" class="wis2box-export-number wis2box-barometer"
-                                           name="barometer_height__{{ row.wigos_id }}" value="{{ row.barometer }}"
-                                           data-elevation="{{ row.elevation }}"
+                                           name="barometer_height__{{ row.wigos_id }}" value="{{ row.barometer|unlocalize }}"
+                                           data-elevation="{{ row.elevation|unlocalize }}"
                                            aria-label="{% blocktranslate with wigos_id=row.wigos_id %}Barometer height for {{ wigos_id }}{% endblocktranslate %}">
                                     {% if row.error %}
                                         <span class="wis2box-export-row-error">{{ row.error }}</span>
@@ -351,15 +370,21 @@
 
             if (selectAll) {
                 const syncSelectAll = function () {
-                    const checked = rowBoxes.filter(function (box) { return box.checked; }).length;
+                    const checked = rowBoxes.filter(function (box) {
+                        return box.checked;
+                    }).length;
                     selectAll.checked = rowBoxes.length > 0 && checked === rowBoxes.length;
                     selectAll.indeterminate = checked > 0 && checked < rowBoxes.length;
                 };
                 selectAll.addEventListener('change', function () {
-                    rowBoxes.forEach(function (box) { box.checked = selectAll.checked; });
+                    rowBoxes.forEach(function (box) {
+                        box.checked = selectAll.checked;
+                    });
                     syncSelectAll();
                 });
-                rowBoxes.forEach(function (box) { box.addEventListener('change', syncSelectAll); });
+                rowBoxes.forEach(function (box) {
+                    box.addEventListener('change', syncSelectAll);
+                });
                 syncSelectAll();
             }
 
@@ -394,7 +419,9 @@
                 const copyButton = document.getElementById('wis2box-csv-copy');
                 const showCopied = function () {
                     copyButton.textContent = copyButton.dataset.copiedLabel;
-                    setTimeout(function () { copyButton.textContent = copyButton.dataset.copyLabel; }, 2000);
+                    setTimeout(function () {
+                        copyButton.textContent = copyButton.dataset.copyLabel;
+                    }, 2000);
                 };
                 const copyBySelection = function () {
                     // navigator.clipboard only exists on HTTPS; many deployments serve the admin over HTTP
@@ -418,7 +445,9 @@
                     document.body.appendChild(link);
                     link.click();
                     link.remove();
-                    setTimeout(function () { URL.revokeObjectURL(link.href); }, 0);
+                    setTimeout(function () {
+                        URL.revokeObjectURL(link.href);
+                    }, 0);
                 });
             }
         });
