@@ -1,6 +1,6 @@
 /*
- * The one status-badge convention, shared by the station-link status panel
- * and the ingestion diagnostic page.
+ * The one status-badge convention, shared by the station-link status panel,
+ * the ingestion diagnostic page and the wis2box station export page.
  *
  * Built on Wagtail's CSS variables so the colours track the admin theme and
  * do not lie in dark mode. Colour carries the verdict axis only: OK/WARNING/

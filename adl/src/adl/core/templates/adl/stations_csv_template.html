@@ -5,6 +5,10 @@
 {% block extra_css %}
     {{ block.super }}
     <style>
+        .stations-csv-page {
+            margin-bottom: 40px;
+        }
+
 
         .csv-columns-table thead th {
             font-weight: bold;
@@ -17,7 +21,7 @@
 {% endblock %}
 
 {% block main_content %}
-    <div style="margin-bottom: 40px">
+    <div class="stations-csv-page">
         <div style="margin: 20px 0">
             <form method="POST" id="stations-form"
                   enctype="multipart/form-data">

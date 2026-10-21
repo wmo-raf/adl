@@ -7,7 +7,8 @@ Conventions for all HTML templates in ADL. Referenced from `CLAUDE.md`.
 - **No inline styles** — never use `style="..."` attributes. Extract all CSS into a
   `{% block extra_css %}<style>…</style>{% endblock %}` block and give elements semantic class names.
   When the same vocabulary is needed on more than one page (status badges, pills), escalate to a
-  shared stylesheet loaded by an `insert_global_admin_css` hook rather than copying the block.
+  shared stylesheet in `core/static/adl/css/`, linked from the `insert_global_admin_css` hook in
+  `core/wagtail_hooks.py`, rather than copying the block.
 - **Multi-line comments use `{% comment %}`** — the `{# … #}` syntax is for single-line comments only.
   When a comment spans multiple lines, always use a `{% comment %}…{% endcomment %}` block:
 
@@ -140,5 +141,3 @@ These predate the conventions and are recorded so they read as debt, not precede
   Wagtail CSS vars + icons (`monitoring/templates/monitoring/network_monitoring.html`). Wagtail's own
   `{% status %}` / `w-status` component is used nowhere. New pages should use the shared stylesheet;
   retrofitting the three is a separate piece of work.
-- Shared admin CSS lives in `core/static/adl/css/` and is linked from the `insert_global_admin_css` hook
-  in `core/wagtail_hooks.py` — add to it there rather than copying a `<style>` block between pages.
