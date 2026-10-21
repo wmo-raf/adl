@@ -7,6 +7,7 @@ from django.contrib.gis.db import models
 from django.core.exceptions import ValidationError, ObjectDoesNotExist
 from django.core.validators import MaxValueValidator, MinValueValidator
 from django.utils import timezone as dj_timezone
+from django.utils.html import format_html, format_html_join
 from django.utils.translation import gettext_lazy as _
 from django_countries.fields import CountryField
 from django_countries.widgets import CountrySelectWidget
@@ -1600,6 +1601,24 @@ class Wis2BoxUpload(DispatchChannel):
     
     def get_csv2bufr_template(self):
         return csv2bufr_template_registry.get(self.template)
+    
+    def get_parameter_mapping_spec_field_help_text(self):
+        """
+        The template choice's help text with a link to each registered
+        template's documentation, so it follows the registry: a template added
+        by a plugin is linked too. Applied by the channel form, because the
+        model field's own help text is fixed in the migrations.
+        """
+        links = [(template.documentation_url, template.label)
+                 for template in csv2bufr_template_registry.get_all() if template.documentation_url]
+        help_text = _("The csv2bufr template the uploaded CSV follows. The default is AWS. "
+                      "The matching csv2bufr mapping must be installed in wis2box for this dataset.")
+        if not links:
+            return help_text
+        return format_html(
+            "{} {} {}", help_text, _("Documentation:"),
+            format_html_join(", ", '<a href="{}" target="_blank" rel="noopener">{}</a>', links),
+        )
     
     parameter_mapping_spec_field = "template"
     

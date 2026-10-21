@@ -95,6 +95,9 @@ class DispatchChannelForm(WagtailAdminModelForm):
         # every formset here is a child relation of the channel (its ParentalKeys),
         # so each one's foreign key points at this instance
         self.instance.load_saved_parameter_mapping_spec()
+        field = self.instance.parameter_mapping_spec_field
+        if field in self.fields:
+            self.fields[field].help_text = self.instance.get_parameter_mapping_spec_field_help_text()
         for formset in self.formsets.values():
             for form in formset.forms:
                 setattr(form.instance, formset.fk.name, self.instance)
