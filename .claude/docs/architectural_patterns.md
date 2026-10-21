@@ -132,6 +132,11 @@ utilities:
 - A channel whose destination columns are fixed returns them from `get_parameter_mapping_spec()` and uses
   `DispatchChannel.matching_parameter_panels`: `ParameterMappingPanel` (`core/panels.py`) renders one row per column
   over the same `parameter_mappings` formset. Channels returning `None` keep `parameter_panels` (the inline list)
+- `DispatchChannel.match_parameter_mappings(items, name_of, is_live)` is the one place mappings are sorted onto spec
+  columns; the panel, `ParameterMappingFormSet.clean` (`dispatch_forms.py`, refuses to save while any live,
+  non-deleted mapping is unmatched) and `get_unmatched_parameter_mappings()` (saved rows, used by the
+  `UnmatchedMappingsColumn` badge on `/dispatch-channels/`) all share it. Unmatched mappings are never migrated away;
+  dispatch ignores them until the channel is edited
 - `Wis2BoxUpload` builds its CSV from its csv2bufr template (`dispatchers/csv2bufr_templates.py`): each column is
   filled from the station, the observation time, or a parameter mapping (observation columns only). See
   `docs/adr/0001-wis2box-csv2bufr-templates.md`

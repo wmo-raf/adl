@@ -1,0 +1,10 @@
+{% load i18n %}
+<td {% if column.classname %}class="{{ column.classname }}"{% endif %}>
+    {% if unmatched_count %}
+        <a href="{{ edit_url }}">
+            <span class="status-badge status-badge--warning">
+                {% blocktrans count counter=unmatched_count %}{{ counter }} unmatched mapping{% plural %}{{ counter }} unmatched mappings{% endblocktrans %}
+            </span>
+        </a>
+    {% endif %}
+</td>

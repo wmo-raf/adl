@@ -45,6 +45,30 @@ class ConnectionHealthColumn(Column):
         return context
 
 
+class UnmatchedMappingsColumn(Column):
+    """
+    How many of a channel's saved parameter mappings fill no column of its
+    destination, as a warning badge linking to the channel's edit page, where
+    they can be reassigned or removed. Counts are worked out once by the view
+    and passed in, keyed by channel id.
+    """
+
+    cell_template_name = "core/tables/unmatched_mappings_cell.html"
+
+    def __init__(self, name, counts, **kwargs):
+        super().__init__(name, **kwargs)
+        self.counts = counts
+
+    def get_value(self, instance):
+        return self.counts.get(instance.pk, 0)
+
+    def get_cell_context_data(self, instance, parent_context):
+        context = super().get_cell_context_data(instance, parent_context)
+        context["edit_url"] = instance.edit_url
+        context["unmatched_count"] = self.counts.get(instance.pk, 0)
+        return context
+
+
 class LinkColumn(Column):
     cell_template_name = "wagtailadmin/tables/link_cell.html"
     

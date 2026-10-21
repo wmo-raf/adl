@@ -1272,7 +1272,46 @@ class DispatchChannel(PolymorphicModel, ClusterableModel):
         grouping), ``hint`` (text or ``None``) and ``accepts_unit_of(parameter)``.
         """
         return None
-    
+
+    def match_parameter_mappings(self, items, name_of, is_live=lambda item: True):
+        """
+        Sort parameter mappings (saved rows or form rows) onto the destination
+        columns of :meth:`get_parameter_mapping_spec`.
+
+        Returns ``(matched, unmatched)``: ``matched`` maps column name to the
+        item holding it, and ``unmatched`` lists ``(item, reason)`` for live
+        items that fill no column, either because their name is not a column
+        or because another item already holds it. An item that is not live (an
+        empty row of the matching table) never counts as unmatched, and never
+        displaces a live item from its column. Without a spec nothing is
+        matched or unmatched.
+        """
+        spec = self.get_parameter_mapping_spec()
+        if spec is None:
+            return {}, []
+
+        names = {column.name for column in spec}
+        matched = {}
+        unmatched = []
+        # live items first, so they take their column ahead of an empty row
+        for item in sorted(items, key=lambda item: not is_live(item)):
+            name = name_of(item)
+            if name in names:
+                if name not in matched:
+                    matched[name] = item
+                elif is_live(item):
+                    unmatched.append((item, _("Another mapping for '%(column)s', which already has one in the "
+                                              "table.") % {"column": name}))
+            elif is_live(item):
+                unmatched.append((item, _("Not a column of this destination.")))
+        return matched, unmatched
+
+    def get_unmatched_parameter_mappings(self):
+        """The saved mappings that fill no column of the destination, as ``(mapping, reason)``."""
+        if self.get_parameter_mapping_spec() is None:
+            return []
+        return self.match_parameter_mappings(self.get_parameter_mappings(), lambda m: m.channel_parameter)[1]
+
     def get_channel_unit(self, parameter_mapping):
         """
         The unit a mapped parameter's values are sent in, as
