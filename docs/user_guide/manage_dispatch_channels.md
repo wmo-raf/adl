@@ -92,7 +92,16 @@ instructions.
 
 ### Part C: Parameter Mappings
 
-Map ADL data parameters to the format expected by the destination system:
+Map ADL data parameters to the format expected by the destination system.
+
+```{note}
+**WIS2BOX Upload** channels show a matching table instead of the list below:
+one fixed row per column of the selected csv2bufr template, with the unit
+locked and conversion automatic. See
+[parameter mappings in the WIS2Box integration guide](../wis2box_integration.md).
+The rest of this section applies to the other channel types, and the
+*Aggregation Measure* explanation applies to all of them.
+```
 
 ![Parameter Mappings](../_static/images/user/dispatch/05_dc_edit_part_c.png)
 
@@ -107,8 +116,7 @@ For each parameter mapping:
 
 - **Channel Parameter**  
   Enter the parameter name expected by the destination system.  
-  For example, for a **wis2box** channel, this should match the corresponding **Column** defined in the  
-  [csv2bufr AWS Template](https://training.wis2box.wis.wmo.int/csv2bufr-templates/aws-template/).
+  For example, for a SmartMet channel, this should be one of the parameter names SmartMet knows.
 
 - **Channel Unit**  
   Specify the unit required by the destination system.  
@@ -120,47 +128,11 @@ For each parameter mapping:
   Choose how the data should be aggregated before transmission  
   (e.g., Average, Sum, Minimum, Maximum).
 
-#### Example: Mapping ADL Parameters to a wis2box AWS Template
+#### Example: Unit conversion
 
-The example below shows how ADL parameters are mapped to the corresponding
-columns defined in the
-wis2box [csv2bufr AWS Template](https://training.wis2box.wis.wmo.int/csv2bufr-templates/aws-template/).
-
-![Example Parameter Mapping](../_static/images/user/dispatch/07_dc_sample_destination_config.png)
-
-![ADL Dispatch Parameter Mapping Example](../_static/images/user/dispatch/07_dc_sample_filled_pm.png)
-
-In this example:
-
-- **Pressure – hPa (ADL)**
-    - Channel Parameter: `station_pressure`
-    - Channel Unit: `Pa`
-
-- **Temperature – °C (ADL)**
-    - Channel Parameter: `air_temperature`
-    - Channel Unit: `Kelvin`
-
-#### ⚠ Important: Unit Conversion
-
-The **Channel Unit** must match the unit expected by the destination system.
-
-The wis2box AWS Template requires:
-
-- `station_pressure` → **Pa (Pascal)**
-- `air_temperature` → **Kelvin**
-
-However, ADL may store values in different units:
-
-- Pressure may be stored as **hPa**
-- Temperature may be stored as **°C**
-
-If the ADL unit differs from the required channel unit:
-
-- ADL will automatically convert the value before dispatch (most of the common conversions are supported).
-- You must explicitly select the correct **Channel Unit**.
-- Ensure that the unit exists under **Settings > Units**.
-
-#### Example Conversions done by ADL
+When the **Channel Unit** differs from the ADL parameter's unit, ADL converts the value before dispatch (most
+common conversions are supported). For example, for a destination that wants pressure in Pascal and temperature in
+Kelvin:
 
 - **Pressure:**  
   `1013.2 hPa` → `101320 Pa`
@@ -168,13 +140,14 @@ If the ADL unit differs from the required channel unit:
 - **Temperature:**  
   `25 °C` → `298.15 K`
 
-Incorrect unit configuration may result in:
+Set the **Channel Unit** to the unit the destination requires, and make sure it exists under **Settings > Units**.
+Incorrect unit configuration may result in rejected messages, physically incorrect values and downstream validation
+errors, so always verify the required unit in the destination's documentation before saving the mapping.
 
-- Rejected BUFR messages
-- Physically incorrect values
-- Downstream validation errors
-
-Always verify the required unit from the official template before saving the mapping.
+```{note}
+WIS2BOX Upload channels do not have this step. The csv2bufr template fixes each column's unit, and ADL always
+converts to it.
+```
 
 #### Aggregation Measure
 
@@ -207,8 +180,8 @@ This setting is critical and must match the expected meaning of the parameter in
 In the example shown:
 
 - **Parameter:** Rainfall – mm
-- **Channel Parameter:** `total_precipitation_1_hour`
 - **Aggregation Measure:** **Sum Value**
+  (on a WIS2BOX Upload channel this is already the default for `total_precipitation_1_hour`)
 
 Rainfall is an accumulated quantity.  
 If you select **Average** instead of **Sum**, the reported value will be physically incorrect and may cause validation

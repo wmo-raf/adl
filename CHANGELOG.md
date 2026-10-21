@@ -74,6 +74,14 @@ This file starts at 0.8.9. Earlier history is in the git log.
   overwritten** by a parameter mapping, and `thermometer_height` is now sent
   from the station's thermometer height; it was always empty before (#321).
 
+### Changed
+
+- **The WIS2Box integration guide describes the matching table.** Choosing a
+  csv2bufr template, locked units and automatic conversion, aggregation
+  defaults, switching templates and cleaning up unrecognised mappings after
+  upgrading are covered, and the old advice to set *Channel Unit* by hand for
+  WIS2BOX Upload is gone from it and from Manage Dispatch Channels (#327).
+
 ### Upgrade notes
 
 - **WIS2BOX Upload channels with unrecognised mappings must be fixed before
