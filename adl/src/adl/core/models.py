@@ -1273,6 +1273,45 @@ class DispatchChannel(PolymorphicModel, ClusterableModel):
         """
         return None
 
+    # name of the form field that picks which spec applies, when the destination offers several
+    parameter_mapping_spec_field = None
+    
+    def get_parameter_mapping_specs(self):
+        """
+        Every spec the channel can be switched between, as ``{key: (label, columns)}``, for the
+        matching panel to rebuild its rows client-side. Empty when the spec cannot be switched.
+        """
+        return {}
+    
+    def load_saved_parameter_mapping_spec(self):
+        """Remember the spec the channel is stored with, before an edit changes it."""
+        saved = type(self).objects.filter(pk=self.pk).first() if self.pk else None
+        self._saved_parameter_mapping_spec = saved.get_parameter_mapping_spec() if saved else None
+    
+    def get_saved_parameter_mapping_spec(self):
+        if not hasattr(self, "_saved_parameter_mapping_spec"):
+            self.load_saved_parameter_mapping_spec()
+        return self._saved_parameter_mapping_spec
+    
+    def parameter_mapping_spec_changed(self):
+        """Whether an edit switches a saved channel to a different spec."""
+        saved = self.get_saved_parameter_mapping_spec()
+        current = self.get_parameter_mapping_spec()
+        return saved is not None and current is not None and list(saved) != list(current)
+    
+    def is_parameter_mapping_dropped(self, channel_parameter):
+        """
+        Whether an edit that switches the spec leaves a mapping without its column: the name was a
+        column before, and is not now. These are removed on save. A name that was never a column
+        stays unrecognised, and is left for the administrator to reassign or remove.
+        """
+        saved = self.get_saved_parameter_mapping_spec()
+        current = self.get_parameter_mapping_spec()
+        if saved is None or current is None:
+            return False
+        return (channel_parameter in {column.name for column in saved}
+                and channel_parameter not in {column.name for column in current})
+    
     def match_parameter_mappings(self, items, name_of, is_live=lambda item: True):
         """
         Sort parameter mappings (saved rows or form rows) onto the destination
@@ -1562,8 +1601,16 @@ class Wis2BoxUpload(DispatchChannel):
     def get_csv2bufr_template(self):
         return csv2bufr_template_registry.get(self.template)
     
+    parameter_mapping_spec_field = "template"
+    
     def get_parameter_mapping_spec(self):
         return self.get_csv2bufr_template().observation_columns
+    
+    def get_parameter_mapping_specs(self):
+        return {
+            template.type: (template.label, template.observation_columns)
+            for template in csv2bufr_template_registry.get_all()
+        }
     
     def clean_parameter_mapping(self, parameter_mapping):
         """
