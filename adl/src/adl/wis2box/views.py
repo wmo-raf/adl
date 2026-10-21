@@ -475,6 +475,8 @@ def export_wis2box_stations(request):
         "topics":         topics,
         "topics_error":   topics_error,
         "can_save_barometer": can_save_barometer,
+        "ground_clearance":   wis2box_settings.barometer_ground_clearance,
+        "settings_url":       _settings_url(),
     })
 
     return render(request, template_name, context)

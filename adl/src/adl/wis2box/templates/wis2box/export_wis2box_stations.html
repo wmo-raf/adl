@@ -101,6 +101,11 @@
             margin-top: 1.5rem;
         }
 
+        #wis2box-export-result {
+            margin-top: 2rem;
+            scroll-margin-top: 5rem;
+        }
+
         .wis2box-export-preview {
             width: 100%;
             min-height: 12rem;
@@ -168,7 +173,18 @@
         </div>
 
         {% if csv_text %}
-            {% include "wis2box/includes/export_wis2box_result.html" %}
+            <div class="help-block help-info">
+                <svg class="icon icon-success icon" aria-hidden="true"><use href="#icon-success"></use></svg>
+                {% blocktranslate trimmed count counter=csv_count %}
+                    CSV generated for {{ counter }} station.
+                {% plural %}
+                    CSV generated for {{ counter }} stations.
+                {% endblocktranslate %}
+                {% if barometer_saved %}
+                    {% translate "Barometer heights were saved to the ADL stations." %}
+                {% endif %}
+                <a href="#wis2box-export-result">{% translate "See the CSV below" %}</a>
+            </div>
         {% endif %}
 
         {% if not rows %}
@@ -228,7 +244,8 @@
                     <div class="wis2box-export-controls">
                         <label>
                             {% translate "Barometer ground clearance (m)" %}
-                            <input type="number" step="any" id="wis2box-ground-clearance" class="wis2box-export-number">
+                            <input type="number" step="any" id="wis2box-ground-clearance" class="wis2box-export-number"
+                                   value="{{ ground_clearance|default_if_none:'' }}">
                         </label>
                         <label class="wis2box-export-inline-check">
                             <input type="checkbox" id="wis2box-overwrite-barometer">
@@ -240,6 +257,7 @@
                     </div>
                     <p class="wis2box-export-help">
                         {% translate "Fills each selected station's barometer height with its OSCAR elevation plus the clearance. Values can also be typed per station." %}
+                        <a href="{{ settings_url }}">{% translate "Set the default clearance in wis2box settings" %}</a>
                     </p>
                     {% if can_save_barometer %}
                         <div class="wis2box-export-controls">
@@ -312,6 +330,10 @@
                     <button type="submit" class="button">{% translate "Generate CSV" %}</button>
                 </div>
             </form>
+
+            {% if csv_text %}
+                {% include "wis2box/includes/export_wis2box_result.html" %}
+            {% endif %}
         {% endif %}
     {% endif %}
 {% endblock %}
@@ -362,6 +384,9 @@
 
             const preview = document.getElementById('wis2box-csv-preview');
             if (preview) {
+                // The result renders below a long station table; bring it into view after Generate
+                document.getElementById('wis2box-export-result').scrollIntoView({behavior: 'smooth'});
+
                 const copyButton = document.getElementById('wis2box-csv-copy');
                 const showCopied = function () {
                     copyButton.textContent = copyButton.dataset.copiedLabel;

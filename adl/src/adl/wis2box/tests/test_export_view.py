@@ -127,6 +127,20 @@ class ExportBlockedTests(ExportViewTestCase):
         self.assertNotContains(response, "0-454-2-AWSBALAKA")
 
 
+class GroundClearanceTests(ExportViewTestCase):
+    def test_clearance_input_starts_from_the_wis2box_setting(self):
+        StationFactory(station_id="0-454-2-AWSBALAKA")
+        self.oscar_records = [oscar_record("0-454-2-AWSBALAKA")]
+        settings = Wis2BoxSettings.for_site(Site.objects.get(is_default_site=True))
+        settings.barometer_ground_clearance = 1.25
+        settings.save()
+        self.login()
+
+        response = self.client.get(self.url)
+
+        self.assertRegex(response.content.decode(), r'id="wis2box-ground-clearance"[^>]*value="1.25"')
+
+
 class GenerateCsvTests(ExportViewTestCase):
     def setUp(self):
         super().setUp()

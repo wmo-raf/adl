@@ -1,17 +1,5 @@
 {% load i18n %}
 <section class="wis2box-export-panel" id="wis2box-export-result">
-    <div class="help-block help-info">
-        <svg class="icon icon-success icon" aria-hidden="true"><use href="#icon-success"></use></svg>
-        {% blocktranslate trimmed count counter=csv_count %}
-            CSV generated for {{ counter }} station.
-        {% plural %}
-            CSV generated for {{ counter }} stations.
-        {% endblocktranslate %}
-        {% if barometer_saved %}
-            {% translate "Barometer heights were saved to the ADL stations." %}
-        {% endif %}
-    </div>
-
     <h2>{% translate "Station list CSV" %}</h2>
     <textarea id="wis2box-csv-preview" class="wis2box-export-preview" readonly
               aria-label="{% translate 'Station list CSV' %}">{{ csv_text }}</textarea>
