@@ -312,12 +312,16 @@
                                 {% endif %}
                             </td>
                             <td>
+                                {% comment %}
+                                    Badges come from the shared stylesheet (adl/css/status_badges.css),
+                                    loaded admin-wide by the insert_global_admin_css hook
+                                {% endcomment %}
                                 {% if row.eligible %}
-                                    <span class="w-status w-status--primary">{% translate "Exportable" %}</span>
+                                    <span class="status-badge status-badge--ok">{% translate "Exportable" %}</span>
                                 {% elif row.status == "not_in_oscar" %}
-                                    <span class="w-status">{% translate "Not in OSCAR" %}</span>
+                                    <span class="status-badge status-badge--muted">{% translate "Not in OSCAR" %}</span>
                                 {% else %}
-                                    <span class="w-status">{% translate "Invalid OSCAR data" %}</span>
+                                    <span class="status-badge status-badge--warning">{% translate "Invalid OSCAR data" %}</span>
                                     <span class="wis2box-export-reason">{{ row.reason }}</span>
                                 {% endif %}
                             </td>
