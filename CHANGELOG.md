@@ -12,6 +12,67 @@ This file starts at 0.8.9. Earlier history is in the git log.
 
 ## [Unreleased]
 
+## [0.8.19] — 2026-10-22
+
+> The v0.8.19 tag was cut without a version bump, so `adl/src/adl/version.py`
+> in this release still reads `0.8.18`. The code is the tagged commit; only the
+> reported version is behind.
+
+A fix release for dispatch stalling after an upgrade. On a deployment upgraded
+past 0.8.9 with a long history, the stale-activity-log sweep met tens of
+thousands of stranded ingestion rows and spent hours on them on the dispatch
+worker, so nothing was dispatched. Two PRs (#339, #340).
+
+### Fixed
+
+- **The stale-activity-log sweep no longer stalls dispatch.** It saved
+  stranded `STARTED` rows one at a time, on the dispatch queue, with no time
+  limit. 0.8.9 started sweeping ingestion rows, which nothing had cleared
+  before, so a deployment upgrading across it met every row stranded since it
+  was installed — 61,000 on one server, back to September 2025. Each sweep ran
+  for hours, the next one started alongside it, and with both dispatch worker
+  processes taken, every station dispatch waited in the queue behind them.
+  The beat log still showed dispatch running ("spawned N station dispatch
+  tasks"), but nothing was sent. The sweep now marks stale rows with one
+  update per connection and per channel, so a backlog of any size clears in a
+  few statements; a second sweep skips while one is running; it is stopped
+  after 4 minutes, before its next 5-minute run; and a sweep left waiting in
+  the queue past its next run is dropped (#340).
+- **Saving an activity log or a dispatch status no longer updates Wagtail's
+  reference index.** Wagtail ran a reference-index task inline on every save
+  of these rows, about 140 ms each, on the worker doing the dispatch. Nothing
+  references them, so they are no longer indexed. The `django_tasks` logger
+  now logs at `WARNING`, which removes the `update_reference_index_task
+  state=RUNNING/SUCCESSFUL` lines that buried the dispatch worker's output;
+  set `ADL_DJANGO_TASKS_LOG_LEVEL=INFO` to see them again (#339).
+
+### Upgrade notes
+
+- **Deployments on 0.8.9–0.8.18 may have dispatch stalled now.** Check the
+  dispatch worker log for `sweep_stale_activity_logs` tasks that never finish,
+  and count the stranded rows:
+
+  ```sql
+  select direction, count(*), min(time)
+  from monitoring_stationlinkactivitylog
+  where status = 'STARTED' group by direction;
+  ```
+
+  Thousands of rows means the sweep is, or will be, stuck on them. Upgrading
+  is enough: the first sweep after it clears them all. Restart the dispatch
+  worker after upgrading so the sweeps still running on the old code are
+  stopped.
+- **The first sweep after upgrading marks every stranded row FAILED,** with
+  the message *Ingestion worker died mid-run (no completion recorded)*. The
+  monitoring views will show a burst of failed ingestion runs dated across the
+  deployment's history. These are runs that never recorded completion, not
+  new failures.
+- **A deployment that compresses old activity-log chunks** will see the sweep
+  raise for a connection whose stale rows sit in a compressed chunk: Timescale
+  refuses updates to compressed chunks (see `monitoring.0010`). The per-row
+  sweep failed the same way.
+- No migrations. No plugin has to be edited.
+
 ## [0.8.18] — 2026-10-22
 
 A release about WIS2BOX Upload knowing which csv2bufr template it writes: the
