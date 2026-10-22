@@ -1748,6 +1748,9 @@ class StationChannelDispatchStatus(models.Model):
     works for ingestion. One row per ``(channel, station)`` pair; updated
     after each successful dispatch batch.
     """
+    # Rewritten on every successful dispatch; nothing references it
+    wagtail_reference_index_ignore = True
+
     created_at = models.DateTimeField(auto_now_add=True)
     modified_at = models.DateTimeField(auto_now=True)
     channel = models.ForeignKey(DispatchChannel, on_delete=models.CASCADE, verbose_name=_("Channel"),

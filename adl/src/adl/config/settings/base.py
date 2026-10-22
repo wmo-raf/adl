@@ -356,6 +356,11 @@ LOGGING = {
             "level": ADL_DATABASE_LOG_LEVEL,
             "propagate": True,
         },
+        # Wagtail runs its reference-index tasks inline through django-tasks,
+        # which logs RUNNING/SUCCESSFUL at INFO for every model save
+        "django_tasks": {
+            "level": env.str("ADL_DJANGO_TASKS_LOG_LEVEL", "WARNING"),
+        },
     },
     "root": {
         "handlers": ["console"],
