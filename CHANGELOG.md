@@ -12,6 +12,14 @@ This file starts at 0.8.9. Earlier history is in the git log.
 
 ## [Unreleased]
 
+## [0.8.18] — 2026-10-22
+
+A release about WIS2BOX Upload knowing which csv2bufr template it writes: the
+channel names its template, matches parameters to the template's columns in a
+table, and sends values in the units the template expects. Read **Upgrade
+notes** below before upgrading; published values change for misconfigured
+channels.
+
 ### Added
 
 - **WIS2BOX Upload channels name their csv2bufr template.** The CSV a channel
