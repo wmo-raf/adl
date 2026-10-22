@@ -62,6 +62,18 @@ INGEST_LOCK_TTL_MARGIN_SECONDS = 60
 # model field's own default, for the rows where 0 was saved
 DEFAULT_INGEST_BATCH_SIZE = 10
 
+# The sweep shares the dispatch worker, so it must always finish (or be killed)
+# before its own next tick — never hold a pool slot dispatch is waiting on
+SWEEP_INTERVAL_SECONDS = 300
+SWEEP_SOFT_TIME_LIMIT_SECONDS = 240
+SWEEP_TIME_LIMIT_SECONDS = 270
+
+# Outlives the hard limit, so only a run that is still alive holds it, and
+# expires before the next tick, so a hard-killed run (whose finally never
+# releases it) cannot skip the sweep after it
+SWEEP_LOCK_KEY = "lock:sweep_stale_activity_logs"
+SWEEP_LOCK_TTL_SECONDS = SWEEP_TIME_LIMIT_SECONDS + 15
+
 # Longer than the shared inspect default: what a dispatch worker's silence
 # costs is asymmetric. A slow reply read as silence makes the locks page
 # refuse to clear anything ("no lock can be proven stale"), so this side
@@ -215,10 +227,13 @@ def setup_periodic_tasks(sender, **kwargs):
         run_backup.s(),
         name="run-backup-daily-at-midnight",
     )
+    # A sweep left queued past the next tick has nothing the next one will
+    # not cover, so it expires instead of piling up behind a stalled worker
     sender.add_periodic_task(
-        300.0,
+        SWEEP_INTERVAL_SECONDS,
         sweep_stale_activity_logs.s(),
         name="sweep-stale-activity-logs-every-5-minutes",
+        expires=SWEEP_INTERVAL_SECONDS,
     )
 
 
@@ -781,7 +796,9 @@ def dispatch_station(self, channel_id, station_link_id):
         log.save()
 
 
-@shared_task(name="adl.core.tasks.sweep_stale_activity_logs")
+@shared_task(name="adl.core.tasks.sweep_stale_activity_logs",
+             soft_time_limit=SWEEP_SOFT_TIME_LIMIT_SECONDS,
+             time_limit=SWEEP_TIME_LIMIT_SECONDS)
 def sweep_stale_activity_logs():
     """
     Mark activity logs stranded in STARTED — in either direction — as failed.
@@ -797,51 +814,68 @@ def sweep_stale_activity_logs():
     (see :func:`ingest_batch_budget_seconds`): a station is allowed to run for
     the whole batch budget, and sweeping at the per-station number would declare
     live runs dead — the inverse of this task's purpose.
+
+    The threshold depends only on the row's connection or channel, so each is
+    swept with one UPDATE rather than a save per row: the backlog a server
+    accumulated before the pull side was swept runs to tens of thousands of
+    rows, and saving them one by one held the dispatch worker for hours.
     """
-    from .models import DispatchChannel  # noqa: F401  (FK target must be loaded)
+    if not cache.add(SWEEP_LOCK_KEY, "locked", timeout=SWEEP_LOCK_TTL_SECONDS):
+        logger.info("[SWEEP] Previous sweep still running. Skipping...")
+        return 0
+
+    try:
+        swept = _sweep_stale_activity_logs()
+
+        # Sweep-then-evaluate: the diagnostic verdict is computed only after
+        # stranded rows have been made terminal, so the evaluator never reads a
+        # dead run as still in progress. Riding this task also inherits its
+        # off-ingestion-queue routing — the evaluator survives the starvation it
+        # exists to record.
+        from adl.monitoring.health import evaluate_all_connections
+        evaluate_all_connections()
+
+        return swept
+    except SoftTimeLimitExceeded:
+        logger.warning("[SWEEP] Timed out after %s seconds", SWEEP_SOFT_TIME_LIMIT_SECONDS)
+        raise
+    finally:
+        cache.delete(SWEEP_LOCK_KEY)
+
+
+def _sweep_stale_activity_logs():
+    from .models import DispatchChannel, NetworkConnection
 
     now = dj_timezone.now()
+    started = StationLinkActivityLog.objects.filter(
+        status=StationLinkActivityLog.ActivityStatus.STARTED,
+    )
+    failed = {
+        "status": StationLinkActivityLog.ActivityStatus.FAILED,
+        "success": False,
+    }
     swept = 0
 
-    push_candidates = StationLinkActivityLog.objects.filter(
-        direction="push",
-        status=StationLinkActivityLog.ActivityStatus.STARTED,
-        dispatch_channel__isnull=False,
-    ).select_related("dispatch_channel")
+    # Only base-model fields are read, and a deleted plugin's subclass rows
+    # must not break the sweep, so neither side resolves polymorphic children
+    for connection in NetworkConnection.objects.non_polymorphic():
+        cutoff = now - timedelta(seconds=ingest_batch_budget_seconds(connection))
+        swept += started.filter(
+            direction="pull",
+            station_link__network_connection=connection,
+            time__lt=cutoff,
+        ).update(**failed, message="Ingestion worker died mid-run (no completion recorded)")
 
-    pull_candidates = StationLinkActivityLog.objects.filter(
-        direction="pull",
-        status=StationLinkActivityLog.ActivityStatus.STARTED,
-    ).select_related("station_link__network_connection")
-
-    sides = (
-        (push_candidates,
-         lambda log: dispatch_timeout_budget_seconds(log.dispatch_channel),
-         "Dispatch worker died mid-dispatch (no completion recorded)"),
-        (pull_candidates,
-         lambda log: ingest_batch_budget_seconds(log.station_link.network_connection),
-         "Ingestion worker died mid-run (no completion recorded)"),
-    )
-
-    for candidates, threshold_seconds, message in sides:
-        for log in candidates:
-            if log.time < now - timedelta(seconds=threshold_seconds(log)):
-                log.status = StationLinkActivityLog.ActivityStatus.FAILED
-                log.success = False
-                log.message = message
-                log.save(update_fields=["status", "success", "message"])
-                swept += 1
+    for channel in DispatchChannel.objects.non_polymorphic():
+        cutoff = now - timedelta(seconds=dispatch_timeout_budget_seconds(channel))
+        swept += started.filter(
+            direction="push",
+            dispatch_channel=channel,
+            time__lt=cutoff,
+        ).update(**failed, message="Dispatch worker died mid-dispatch (no completion recorded)")
 
     if swept:
         logger.warning("[SWEEP] Swept %d stale activity log(s) to FAILED", swept)
-
-    # Sweep-then-evaluate: the diagnostic verdict is computed only after
-    # stranded rows have been made terminal, so the evaluator never reads a
-    # dead run as still in progress. Riding this task also inherits its
-    # off-ingestion-queue routing — the evaluator survives the starvation it
-    # exists to record.
-    from adl.monitoring.health import evaluate_all_connections
-    evaluate_all_connections()
 
     return swept
 
