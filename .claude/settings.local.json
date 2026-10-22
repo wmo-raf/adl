@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "Read(//Users/otenyo/.agents/skills/to-prd/**)",
+      "Bash(gh pr *)",
+      "Read(//Users/otenyo/Projects/wmo/adl-project/**)",
+      "Read(//Users/otenyo/Projects/wmo/adl-project/adl-plugins/**)",
+      "Read(//Users/otenyo/.agents/skills/wayfinder/**)",
+      "Bash(gh issue *)",
+      "Bash(gh api *)",
+      "Bash(python3 -c \"import django_celery_beat, os; print\\(os.path.dirname\\(django_celery_beat.__file__\\)\\)\")",
+      "Bash(find / -name \"models.py\" -path \"*django_celery_beat*\")"
+    ]
+  }
+}

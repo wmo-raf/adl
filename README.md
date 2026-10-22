@@ -28,15 +28,15 @@ different receiving systems.
 | 17  | 🇬🇳 [Guinea](https://anmeteo.gov.gn)             | Siap + Micros                                                             | [Guinea Wis2box](https://wis2.anmeteo.gov.gn)               | ✅ Operational |
 | 18  | 🇰🇲 [Comoros](https://meteocomores.km)           | ADL FTP Plugin (LSI)                                                      | [Comoros  Wis2bo](https://wis2.meteocomores.km)             | ✅ Operational |
 | 19  | 🇸🇱 [Sierra Leone](https://slmet.gov.sl)         | ADL PulsoWeb Plugin, ADL ADCON DB Plugin                                  | [Sierra Leone Wis2box](https://wis2.slmet.gov.sl)           | ✅ Operational |
-| 20  | 🇳🇪 [Niger](https://www.niger-meteo.ne)          | ADL PulsoWeb Plugin                                                       | Niger Wis2box                                               | ⏳ In Progress |
-| 21  | 🇪🇹 [Ethiopia](https://www.ethiomet.gov.et)      | ADL ADCON DB Plugin                                                       | Ethiomet Wis2box                                            | ⏳ In Progress |
-| 22  | 🇸🇳 [Senegal](https://anacim.sn)                 | ADCON, ADL PulsoWeb Plugin                                                | Senegal Wis2box                                             | ⏳ In Progress |
-| 23  | 🇸🇩 [Sudan](https://meteosudan.sd)               | ADL CIMAWebDrops Plugin                                                   | —                                                           | ⏳ In Progress |
-| 24  | 🇺🇬 Uganda                                       | ADL ADCON DB Plugin                                                       | Uganda Wis2box                                              | ⏳ In Progress |
-| 25  | 🇬🇲 Gambia                                       | —                                                                         | —                                                           | ⏳ In Progress |
-| 26  | 🇱🇷 [Liberia](https://meteoliberia.com)          | ADL ADCON Plugin                                                          | —                                                           | ⏳ In Progress |
-| 27  | 🇿🇲 Zambia                                       | ADL FTP Plugin                                                            | -                                                           | ⏳ In Progress |
-| 28  | 🇲🇷 [Mauritania](https://meteomauritanie.mr)     | ADL PulsoWeb Plugin                                                       | -                                                           | ⏳ In Progress |
+| 20  | 🇪🇹 [Ethiopia](https://www.ethiomet.gov.et)      | ADL ADCON DB Plugin                                                       | [Ethiomet Wis2box](https://wis2.ethiomet.gov.et)            | ✅ Operational |
+| 21  | 🇲🇷 [Mauritania](https://meteomauritanie.mr)     | ADL PulsoWeb Plugin                                                       | [Mauritania Wis2box](https://wis2.meteomauritanie.mr)       | ⏳ In Progress |
+| 22  | 🇳🇪 [Niger](https://www.niger-meteo.ne)          | ADL PulsoWeb Plugin                                                       | Niger Wis2box                                               | ⏳ In Progress |
+| 23  | 🇸🇳 [Senegal](https://anacim.sn)                 | ADCON, ADL PulsoWeb Plugin                                                | Senegal Wis2box                                             | ⏳ In Progress |
+| 24  | 🇸🇩 [Sudan](https://meteosudan.sd)               | ADL CIMAWebDrops Plugin                                                   | —                                                           | ⏳ In Progress |
+| 25  | 🇺🇬 Uganda                                       | ADL ADCON DB Plugin                                                       | Uganda Wis2box                                              | ⏳ In Progress |
+| 26  | 🇬🇲 Gambia                                       | —                                                                         | —                                                           | ⏳ In Progress |
+| 27  | 🇱🇷 [Liberia](https://meteoliberia.com)          | ADL ADCON Plugin                                                          | —                                                           | ⏳ In Progress |
+| 28  | 🇿🇲 Zambia                                       | ADL FTP Plugin                                                            | -                                                           | ⏳ In Progress |
 | 29  | 🇬🇼 [Guinea Bissau](https://meteoguinebissau.gw) |                                                                           |                                                             |               |
 
 ## List of Plugins
