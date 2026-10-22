@@ -11,6 +11,10 @@ from .constants import CheckState
 
 @register_snippet
 class StationLinkActivityLog(TimescaleModel):
+    # Written on every ingestion and dispatch run and never referenced by
+    # content, so indexing it only adds a reference-index task per save
+    wagtail_reference_index_ignore = True
+
     DIRECTION_CHOICES = (
         ("pull", "Pull"),
         ("push", "Push"),
