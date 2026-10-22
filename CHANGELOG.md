@@ -12,6 +12,116 @@ This file starts at 0.8.9. Earlier history is in the git log.
 
 ## [Unreleased]
 
+### Added
+
+- **WIS2BOX Upload channels name their csv2bufr template.** The CSV a channel
+  uploads has always followed wis2box's AWS csv2bufr template; channels now
+  select the template explicitly (AWS is the default), from templates defined
+  in code. Plugins can register more (#321).
+- **WIS2BOX Upload parameter mappings are checked against the csv2bufr
+  template.** A mapping must name an observation column of the template — a
+  typo, or a station or timestamp column such as `latitude`, is rejected with
+  a message saying why — and its parameter's unit must convert to the
+  column's; a column without a unit, such as `ground_state`, takes a
+  dimensionless parameter. Saving a mapping stores the template's unit as its *Channel Unit*,
+  whatever was entered, creating the unit if the deployment does not have it
+  yet (#323).
+- **WIS2BOX Upload parameter mappings are a matching table.** Instead of
+  adding mappings one by one and typing column names, the channel lists every
+  observation column of its csv2bufr template, grouped by section, with the
+  unit it takes and a dropdown of the ADL parameters whose unit fits. Leave a
+  row empty to not send that column; clear it to remove the mapping. The
+  aggregation is preset from the template (sum for precipitation totals, max
+  for gusts) and can be changed, with a note when it differs. Mappings that
+  fit no column are listed under the table so they can be removed. Other
+  dispatch channels keep the inline list (#324).
+- **WIS2BOX Upload channels with unrecognised mappings can be cleaned up and
+  are flagged.** A mapping that fills no column of the template (a typo, a
+  station column such as `latitude`, a legacy name, or a second mapping for a
+  column) is listed under the table with a dropdown to reassign it to a free
+  column its parameter fits, or a checkbox to remove it. The channel cannot be
+  saved until none are left. The dispatch channels list shows an "N unmatched
+  mappings" badge, linking to the channel, so affected channels can be found
+  without opening each one (#325).
+- **WIS2BOX Upload channels can switch csv2bufr template from the matching
+  panel.** Changing the template dropdown rebuilds the rows for the new
+  template straight away, with no extra request. Mappings whose column exists
+  in both templates are kept; the ones that will be removed are listed above
+  the table before you save. On save the removed mappings are deleted and the
+  kept ones take the new template's unit. With only the AWS template
+  registered nothing changes (#326).
+
+### Fixed
+
+- **WIS2BOX Upload values are sent in the units the csv2bufr template
+  expects.** Each observation column is converted to the template's unit —
+  Kelvin, Pascal, kg m⁻² and so on — whatever *Channel Unit* is stored on the
+  mapping. Rainfall in mm converts to kg m⁻² without setting a custom unit
+  context on the parameter. A mapping whose unit cannot convert to its column
+  (e.g. a length mapped to `station_pressure`) is left out with an error
+  logged, rather than stopping the station's whole dispatch (#322).
+- **Dispatch channel parameter-mapping checks now run in the admin.** A
+  channel's `clean_parameter_mapping` never ran from the edit form: the form
+  attaches mappings to their channel only when saving, so during validation
+  they had no channel to check against. Dispatch channels now use a base form,
+  `DispatchChannelForm`, that attaches them first — on the create form too
+  (#323).
+- **A blank *Channel Unit* no longer crashes dispatch.** The help text says to
+  leave it empty when the unit is the parameter's own, but every dispatch
+  channel then failed converting values. Blank now means "send in the
+  parameter's unit", as documented (#322).
+- **WIS2BOX Upload station and timestamp columns can no longer be
+  overwritten** by a parameter mapping, and `thermometer_height` is now sent
+  from the station's thermometer height; it was always empty before (#321).
+- **The csv2bufr Template choice links to each template's documentation.**
+  The help text under the choice listed only the AWS URL, as plain text.
+  It now links every registered template's documentation, so a template
+  added by a plugin is covered too (#319, user story 4).
+
+### Changed
+
+- **The WIS2Box integration guide describes the matching table.** Choosing a
+  csv2bufr template, locked units and automatic conversion, aggregation
+  defaults, switching templates and cleaning up unrecognised mappings after
+  upgrading are covered, and the old advice to set *Channel Unit* by hand for
+  WIS2BOX Upload is gone from it and from Manage Dispatch Channels (#327).
+
+### Upgrade notes
+
+- **WIS2BOX Upload channels with unrecognised mappings must be fixed before
+  they can be saved again.** No migration changes or deletes any mapping, and
+  dispatch carries on as before (those mappings are simply not sent). Look for
+  the "unmatched mappings" badge on the dispatch channels list, open each
+  flagged channel, and reassign or remove the mappings listed under the table.
+- **Published WIS2BOX values change for misconfigured channels.** A channel
+  whose *Channel Unit* did not match the template — e.g. hPa on
+  `station_pressure`, or °C on `air_temperature` — was publishing wrong BUFR
+  values, and starts publishing correct ones as soon as you upgrade. Each such
+  mapping logs a `[DISPATCH]` warning naming the channel, column and stored
+  unit — once per dispatch worker process, not on every run — so you can tell
+  which channels were affected. Search the dispatch worker logs for
+  `csv2bufr template expects` after upgrading.
+- **Plugin channels' mapping checks start applying.** Because of the
+  dispatch channel form fix, a plugin channel that defines
+  `clean_parameter_mapping` — e.g. the FTP plugin's SmartMet upload, which
+  only accepts known SmartMet parameter names — now enforces it. An existing
+  channel with a mapping that fails its check keeps dispatching, but cannot be
+  saved from the admin until the mapping is corrected.
+- **The same goes for WIS2BOX Upload channels.** A mapping to a name that is
+  not an observation column of the template, or with a unit that cannot
+  convert, keeps dispatching as before (it was never sent, or is left out),
+  but the channel cannot be saved until that mapping is fixed or removed. The
+  error is shown on the mapping.
+- Adds static files `adl/css/parameter_matching.css` and
+  `adl/js/parameter_matching.js`. Deployments that serve static files through
+  the proxy need `collectstatic` — automatic with
+  `COLLECT_STATICFILES_ON_STARTUP=true` — or the WIS2BOX Upload mapping table
+  loses its layout and live checks.
+- Ships one migration, `core.0052`, which adds the csv2bufr `template` field to
+  WIS2BOX Upload channels, set to `aws` for existing ones. Nothing to do before
+  running it.
+- No plugin has to be edited.
+
 ## [0.8.17] — 2026-10-21
 
 > 0.8.16 was never tagged: its tag name was reserved by GitHub's immutable

@@ -1,0 +1,60 @@
+/*
+ * The parameter matching panel on dispatch channels whose destination columns
+ * are known (WIS2BOX Upload): one row per column, grouped by section.
+ * Built on Wagtail's CSS variables so it follows the admin theme.
+ */
+
+.parameter-matching__table {
+    width: 100%;
+    table-layout: fixed;
+}
+
+/* the panel sits in Wagtail's form-width column; give the selects the room */
+.parameter-matching__table th:nth-child(1) {
+    width: 32%;
+}
+
+.parameter-matching__table th:nth-child(2) {
+    width: 12%;
+}
+
+.parameter-matching__table th:nth-child(3) {
+    width: 32%;
+}
+
+.parameter-matching__table th:nth-child(4) {
+    width: 24%;
+}
+
+.parameter-matching__table code {
+    overflow-wrap: anywhere;
+}
+
+.parameter-matching__table select {
+    width: 100%;
+    font-size: 0.875rem;
+    padding-inline-start: 0.5rem;
+}
+
+.parameter-matching__section-row th {
+    padding-top: 1.25rem;
+    border-bottom: 2px solid var(--w-color-border-furniture);
+    color: var(--w-color-text-label);
+    font-weight: 700;
+    text-align: start;
+}
+
+.parameter-matching__hint,
+.parameter-matching__override {
+    margin: 0.25rem 0 0;
+    font-size: 0.8125rem;
+    color: var(--w-color-text-meta);
+}
+
+.parameter-matching__override--hidden {
+    display: none;
+}
+
+.parameter-matching__unrecognised {
+    margin-top: 1.5rem;
+}

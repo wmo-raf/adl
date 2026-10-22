@@ -1,3 +1,4 @@
+import logging
 from datetime import timedelta, timezone
 from enum import IntFlag, auto
 
@@ -6,6 +7,7 @@ from django.contrib.gis.db import models
 from django.core.exceptions import ValidationError, ObjectDoesNotExist
 from django.core.validators import MaxValueValidator, MinValueValidator
 from django.utils import timezone as dj_timezone
+from django.utils.html import format_html, format_html_join
 from django.utils.translation import gettext_lazy as _
 from django_countries.fields import CountryField
 from django_countries.widgets import CountrySelectWidget
@@ -27,20 +29,40 @@ from wagtailiconchooser.widgets import IconChooserWidget
 
 from adl.core.registries import plugin_registry
 from .blocks import QCChecksStreamBlock
+from .dispatch_forms import DispatchChannelForm
 from .dispatchers import get_dispatch_channel_data
-from .panels import IngestTimeoutBudgetPanel
+from .panels import IngestTimeoutBudgetPanel, ParameterMappingPanel
 from .dispatchers.csv2bufr_templates import (
     DEFAULT_CSV2BUFR_TEMPLATE,
+    STATION,
+    TIMESTAMP,
     csv2bufr_template_registry,
     get_csv2bufr_template_choices,
 )
 from .dispatchers.wis2box import upload_to_wis2box, test_wis2box_connection
-from .units import units, validate_unit, TEMPERATURE_UNITS
+from .units import units, units_are_equivalent, validate_unit, TEMPERATURE_UNITS
 from .utils import (
     validate_as_integer,
     get_custom_unit_context_entries
 )
 from .widgets import PluginSelectWidget
+
+logger = logging.getLogger(__name__)
+
+_logged_once = set()
+
+
+def log_once(level, key, message):
+    """
+    Log ``message`` the first time ``key`` is seen in this process.
+
+    For configuration problems found on every dispatch run, which would
+    otherwise repeat for every station on every run.
+    """
+    if key in _logged_once:
+        return
+    _logged_once.add(key)
+    logger.log(level, message)
 
 
 class Network(models.Model):
@@ -256,6 +278,26 @@ class Unit(models.Model):
         return str(unit)
     
     get_registry_unit.short_description = _("Unit Registry")
+    
+    @classmethod
+    def get_for_symbol(cls, symbol):
+        """
+        The unit for a pint symbol: the row with that symbol, else a row whose
+        symbol is spelled differently but means the same unit (``kg m-2`` for
+        ``kg/m^2``), else a new row. Units are not seeded, so a deployment may
+        not have the unit yet.
+        """
+        unit = cls.objects.filter(symbol=symbol).first()
+        if unit:
+            return unit
+        
+        for unit in cls.objects.all():
+            if units_are_equivalent(unit.symbol, symbol):
+                return unit
+        
+        # unit names are unique; a row may already use the symbol as its name
+        name = symbol if not cls.objects.filter(name=symbol).exists() else f"{symbol} (csv2bufr)"
+        return cls.objects.create(name=name, symbol=symbol)
 
 
 class DataParameter(ClusterableModel):
@@ -408,19 +450,30 @@ class DataParameter(ClusterableModel):
         
         return quantity_converted.magnitude
     
-    def convert_value_to_units(self, value, to_unit):
-        if to_unit.symbol in TEMPERATURE_UNITS:
+    def get_unit_context(self, default=None):
+        """The pint context to convert under: the parameter's own, else ``default``."""
+        return self.custom_unit_context or default
+    
+    def convert_value_to_units(self, value, to_unit, unit_context=None):
+        """
+        Convert ``value`` from this parameter's unit to ``to_unit``, a
+        :class:`Unit` or a pint symbol. ``unit_context`` names a pint context
+        to convert under when the parameter does not set its own.
+        """
+        to_symbol = getattr(to_unit, "symbol", to_unit)
+        if to_symbol in TEMPERATURE_UNITS:
             quantity = units.Quantity(value, self.unit.symbol)
         else:
             quantity = value * self.unit.pint_unit
         # use custom unit context if set
         # Useful for converting units that are not directly convertible  using pint,
         # like precipitation (from mm -> kg/m²)
-        if self.custom_unit_context:
-            with units.context(self.custom_unit_context):
-                quantity_converted = quantity.to(to_unit.symbol)
+        unit_context = self.get_unit_context(unit_context)
+        if unit_context:
+            with units.context(unit_context):
+                quantity_converted = quantity.to(to_symbol)
         else:
-            quantity_converted = quantity.to(to_unit.symbol)
+            quantity_converted = quantity.to(to_symbol)
         
         return quantity_converted.magnitude
 
@@ -1184,11 +1237,18 @@ class DispatchChannel(PolymorphicModel, ClusterableModel):
         FieldPanel("sort_order"),
     ]
     
+    base_form_class = DispatchChannelForm
+    
     class Meta:
         ordering = ["sort_order"]
     
     parameter_panels = [
         InlinePanel("parameter_mappings", label=_("Parameter Mappings"), heading=_("Parameter Mappings")),
+    ]
+    
+    # for channels whose destination columns are known in advance; see get_parameter_mapping_spec
+    matching_parameter_panels = [
+        ParameterMappingPanel("parameter_mappings", label=_("Parameter Mappings"), heading=_("Parameter Mappings")),
     ]
     
     def __str__(self):
@@ -1200,6 +1260,110 @@ class DispatchChannel(PolymorphicModel, ClusterableModel):
     def get_parameter_mapping_values(self):
         channel_param_values = [pm.channel_parameter for pm in self.get_parameter_mappings()]
         return channel_param_values
+    
+    def get_parameter_mapping_spec(self):
+        """
+        The destination columns a parameter can be mapped to, when the
+        destination fixes them, for the parameter matching panel
+        (:class:`~adl.core.panels.ParameterMappingPanel`). ``None`` means the
+        destination's names are free, and mappings are edited inline.
+
+        Each column provides ``name``, ``unit`` (pint symbol or ``None``),
+        ``default_aggregation``, ``section`` and ``section_label`` (for
+        grouping), ``hint`` (text or ``None``) and ``accepts_unit_of(parameter)``.
+        """
+        return None
+
+    # name of the form field that picks which spec applies, when the destination offers several
+    parameter_mapping_spec_field = None
+    
+    def get_parameter_mapping_specs(self):
+        """
+        Every spec the channel can be switched between, as ``{key: (label, columns)}``, for the
+        matching panel to rebuild its rows client-side. Empty when the spec cannot be switched.
+        """
+        return {}
+    
+    def load_saved_parameter_mapping_spec(self):
+        """Remember the spec the channel is stored with, before an edit changes it."""
+        saved = type(self).objects.filter(pk=self.pk).first() if self.pk else None
+        self._saved_parameter_mapping_spec = saved.get_parameter_mapping_spec() if saved else None
+    
+    def get_saved_parameter_mapping_spec(self):
+        if not hasattr(self, "_saved_parameter_mapping_spec"):
+            self.load_saved_parameter_mapping_spec()
+        return self._saved_parameter_mapping_spec
+    
+    def parameter_mapping_spec_changed(self):
+        """Whether an edit switches a saved channel to a different spec."""
+        saved = self.get_saved_parameter_mapping_spec()
+        current = self.get_parameter_mapping_spec()
+        return saved is not None and current is not None and list(saved) != list(current)
+    
+    def is_parameter_mapping_dropped(self, channel_parameter):
+        """
+        Whether an edit that switches the spec leaves a mapping without its column: the name was a
+        column before, and is not now. These are removed on save. A name that was never a column
+        stays unrecognised, and is left for the administrator to reassign or remove.
+        """
+        saved = self.get_saved_parameter_mapping_spec()
+        current = self.get_parameter_mapping_spec()
+        if saved is None or current is None:
+            return False
+        return (channel_parameter in {column.name for column in saved}
+                and channel_parameter not in {column.name for column in current})
+    
+    def match_parameter_mappings(self, items, name_of, is_live=lambda item: True):
+        """
+        Sort parameter mappings (saved rows or form rows) onto the destination
+        columns of :meth:`get_parameter_mapping_spec`.
+
+        Returns ``(matched, unmatched)``: ``matched`` maps column name to the
+        item holding it, and ``unmatched`` lists ``(item, reason)`` for live
+        items that fill no column, either because their name is not a column
+        or because another item already holds it. An item that is not live (an
+        empty row of the matching table) never counts as unmatched, and never
+        displaces a live item from its column. Without a spec nothing is
+        matched or unmatched.
+        """
+        spec = self.get_parameter_mapping_spec()
+        if spec is None:
+            return {}, []
+
+        names = {column.name for column in spec}
+        matched = {}
+        unmatched = []
+        # live items first, so they take their column ahead of an empty row
+        for item in sorted(items, key=lambda item: not is_live(item)):
+            name = name_of(item)
+            if name in names:
+                if name not in matched:
+                    matched[name] = item
+                elif is_live(item):
+                    unmatched.append((item, _("Another mapping for '%(column)s', which already has one in the "
+                                              "table.") % {"column": name}))
+            elif is_live(item):
+                unmatched.append((item, _("Not a column of this destination.")))
+        return matched, unmatched
+
+    def get_unmatched_parameter_mappings(self):
+        """The saved mappings that fill no column of the destination, as ``(mapping, reason)``."""
+        if self.get_parameter_mapping_spec() is None:
+            return []
+        return self.match_parameter_mappings(self.get_parameter_mappings(), lambda m: m.channel_parameter)[1]
+
+    def get_channel_unit(self, parameter_mapping):
+        """
+        The unit a mapped parameter's values are sent in, as
+        ``(pint symbol, pint context name)``. A ``None`` symbol means the
+        values are sent in the parameter's own unit. Returning ``None``
+        instead of a pair leaves the mapping out of dispatch.
+
+        Defaults to the mapping's stored ``channel_unit``. Channels whose
+        destination fixes the units override this.
+        """
+        channel_unit = parameter_mapping.channel_unit
+        return (channel_unit.symbol if channel_unit else None), None
     
     def send_station_data(self, station_link, station_data_records):
         raise NotImplementedError("Method send_station_data must be implemented in the subclass")
@@ -1253,8 +1417,17 @@ class DispatchChannel(PolymorphicModel, ClusterableModel):
         
         return qs.distinct()
     
-    def clean_parameter_mapping(self, *args, **kwargs):
-        pass
+    def clean_parameter_mapping(self, parameter_mapping):
+        """
+        Validate a parameter mapping against this channel, raising
+        ``ValidationError`` keyed by the mapping's field names.
+        """
+    
+    def prepare_parameter_mapping(self, parameter_mapping):
+        """
+        Adjust a parameter mapping just before it is saved. Channels whose
+        destination fixes part of the mapping (e.g. its unit) set it here.
+        """
 
     def is_dispatch_overdue(self, now=None):
         """
@@ -1321,13 +1494,33 @@ class DispatchChannelParameterMapping(Orderable):
     def __str__(self):
         return f"{self.dispatch_channel.name} - {self.parameter.name}"
     
+    def get_channel(self):
+        """
+        The mapping's channel as its concrete subclass, or ``None`` if not set.
+
+        A new channel on the create form has no id yet, but its mappings are
+        still attached to it and must still be checked.
+        """
+        try:
+            channel = self.dispatch_channel
+        except ObjectDoesNotExist:
+            return None
+        if channel.pk:
+            channel = channel.get_real_instance()
+        return channel
+    
     def clean(self):
         super(DispatchChannelParameterMapping, self).clean()
         
-        if self.dispatch_channel_id:
-            channel = self.dispatch_channel
-            if hasattr(channel, "clean_parameter_mapping"):
-                channel.clean_parameter_mapping(self)
+        channel = self.get_channel()
+        if channel is not None:
+            channel.clean_parameter_mapping(self)
+    
+    def save(self, *args, **kwargs):
+        channel = self.get_channel()
+        if channel is not None:
+            channel.prepare_parameter_mapping(self)
+        super().save(*args, **kwargs)
 
 
 class DispatchChannelStationLink(Orderable):
@@ -1400,7 +1593,7 @@ class Wis2BoxUpload(DispatchChannel):
         MultiFieldPanel([
             FieldPanel("template"),
         ], heading=_("csv2bufr Template")),
-    ] + DispatchChannel.parameter_panels
+    ] + DispatchChannel.matching_parameter_panels
     
     class Meta:
         verbose_name = _("WIS2BOX Upload")
@@ -1408,6 +1601,125 @@ class Wis2BoxUpload(DispatchChannel):
     
     def get_csv2bufr_template(self):
         return csv2bufr_template_registry.get(self.template)
+    
+    def get_parameter_mapping_spec_field_help_text(self):
+        """
+        The template choice's help text with a link to each registered
+        template's documentation, so it follows the registry: a template added
+        by a plugin is linked too. Applied by the channel form, because the
+        model field's own help text is fixed in the migrations.
+        """
+        links = [(template.documentation_url, template.label)
+                 for template in csv2bufr_template_registry.get_all() if template.documentation_url]
+        help_text = _("The csv2bufr template the uploaded CSV follows. The default is AWS. "
+                      "The matching csv2bufr mapping must be installed in wis2box for this dataset.")
+        if not links:
+            return help_text
+        return format_html(
+            "{} {} {}", help_text, _("Documentation:"),
+            format_html_join(", ", '<a href="{}" target="_blank" rel="noopener">{}</a>', links),
+        )
+    
+    parameter_mapping_spec_field = "template"
+    
+    def get_parameter_mapping_spec(self):
+        return self.get_csv2bufr_template().observation_columns
+    
+    def get_parameter_mapping_specs(self):
+        return {
+            template.type: (template.label, template.observation_columns)
+            for template in csv2bufr_template_registry.get_all()
+        }
+    
+    def clean_parameter_mapping(self, parameter_mapping):
+        """
+        A mapping must fill an observation column of the channel's csv2bufr
+        template, with a parameter whose unit converts to the column's unit.
+        """
+        name = parameter_mapping.channel_parameter
+        if not name:
+            # the form already reports the missing name
+            return
+        
+        template = self.get_csv2bufr_template()
+        column = template.get_column(name)
+        params = {"column": name, "template": template.label}
+        
+        if column is None:
+            message = _("'%(column)s' is not a column of the %(template)s csv2bufr template.")
+        elif column.source == STATION:
+            message = _("'%(column)s' is filled from the station's metadata and cannot be mapped.")
+        elif column.source == TIMESTAMP:
+            message = _("'%(column)s' is filled from the observation time and cannot be mapped.")
+        else:
+            message = None
+        
+        if message:
+            raise ValidationError({"channel_parameter": ValidationError(message, params=params)})
+        
+        if not parameter_mapping.parameter_id:
+            return
+        
+        parameter = parameter_mapping.parameter
+        if not column.accepts_unit_of(parameter):
+            raise ValidationError({"parameter": ValidationError(
+                _("%(parameter)s is in %(unit)s, which cannot be converted to %(column_unit)s, "
+                  "the unit of '%(column)s' in the %(template)s csv2bufr template."),
+                params={**params, "parameter": parameter.name, "unit": parameter.unit.symbol,
+                        "column_unit": column.unit or _("a dimensionless value")},
+            )})
+    
+    def prepare_parameter_mapping(self, parameter_mapping):
+        """Store the csv2bufr template's unit as the mapping's channel unit, whatever was submitted."""
+        column = self.get_csv2bufr_template().get_observation_column(parameter_mapping.channel_parameter)
+        if column is None:
+            return
+        parameter_mapping.channel_unit = Unit.get_for_symbol(column.unit) if column.unit else None
+    
+    def get_channel_unit(self, parameter_mapping):
+        """
+        Observation columns are sent in the unit the csv2bufr template
+        declares, whatever ``channel_unit`` is stored on the mapping: csv2bufr
+        reads the column in that unit regardless. A stored unit that differs is
+        logged, since the channel would have been publishing wrong values
+        before the template unit took over.
+
+        A parameter whose unit cannot be converted to the column's unit is
+        left out, with an error logged, so the rest of the station's row still
+        goes out.
+        """
+        column = self.get_csv2bufr_template().get_observation_column(parameter_mapping.channel_parameter)
+        if column is None:
+            return super().get_channel_unit(parameter_mapping)
+        
+        if not column.unit:
+            return None, None
+        
+        parameter = parameter_mapping.parameter
+        unit_context = column.get_unit_context(parameter)
+        if not column.accepts_unit_of(parameter):
+            log_once(
+                logging.ERROR,
+                (self.pk, parameter_mapping.pk, parameter.unit.symbol, column.name),
+                f"[DISPATCH] Channel '{self.name}' maps '{parameter.name}' ({parameter.unit.symbol}) to "
+                f"'{column.name}', which the {self.template} csv2bufr template expects in '{column.unit}'. "
+                f"The units are not convertible, so '{column.name}' is not sent."
+            )
+            return None
+        
+        # a blank stored unit used to fail dispatch outright, so it never published
+        # anything wrong; only a stored unit that disagrees with the template did
+        stored_unit = parameter_mapping.channel_unit
+        if stored_unit and not units_are_equivalent(stored_unit.symbol, column.unit, unit_context):
+            log_once(
+                logging.WARNING,
+                (self.pk, parameter_mapping.pk, stored_unit.symbol, column.name),
+                f"[DISPATCH] Channel '{self.name}' maps '{parameter.name}' to "
+                f"'{column.name}' with channel unit '{stored_unit.symbol}', but the {self.template} csv2bufr "
+                f"template expects '{column.unit}'. Sending in '{column.unit}'."
+            )
+        
+        return column.unit, column.unit_context
     
     def send_station_data(self, station_link, data_records):
         return upload_to_wis2box(self, data_records)

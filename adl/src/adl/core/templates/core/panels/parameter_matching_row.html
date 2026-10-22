@@ -1,0 +1,59 @@
+{% load i18n %}
+<tr data-column="{{ row.column.name }}" data-default-aggregation="{{ row.column.default_aggregation }}">
+    <td>
+        <code>{{ row.column.name }}</code>
+        {% if row.column.hint %}
+            <p class="parameter-matching__hint" data-role="hint">{{ row.column.hint }}</p>
+        {% endif %}
+        {% for hidden in row.form.hidden_fields %}{{ hidden }}{% endfor %}
+        {% for error in row.form.non_field_errors %}
+            <p class="error-message">{{ error }}</p>
+        {% endfor %}
+        {% for error in row.form.channel_parameter.errors %}
+            <p class="error-message">{{ error }}</p>
+        {% endfor %}
+    </td>
+    <td data-role="unit">{{ row.column.unit|default:"—" }}</td>
+    <td>
+        <select name="{{ row.parameter_field.html_name }}" id="{{ row.parameter_field.auto_id }}"
+                data-role="parameter" aria-label="{% blocktrans with column=row.column.name %}ADL parameter for {{ column }}{% endblocktrans %}">
+            <option value="">{% trans "— not sent —" %}</option>
+            {% for option in row.parameter_options %}
+                <option value="{{ option.value }}" data-name="{{ option.name }}"
+                        {% if option.selected %}selected{% endif %}
+                        {% if option.disabled %}disabled{% endif %}>{{ option.label }}</option>
+            {% endfor %}
+        </select>
+        {% for error in row.parameter_field.errors %}
+            <p class="error-message">{{ error }}</p>
+        {% endfor %}
+    </td>
+    <td>
+        {% comment %}
+            A disabled select is not submitted, so when the channel does
+            not aggregate the value travels in a hidden input instead and
+            the select is shown disabled, without a name.
+        {% endcomment %}
+        <select {% if aggregating %}name="{{ row.aggregation_field.html_name }}"{% else %}disabled{% endif %}
+                data-role="aggregation" data-name="{{ row.aggregation_field.html_name }}"
+                aria-label="{% blocktrans with column=row.column.name %}Aggregation for {{ column }}{% endblocktrans %}">
+            {% for option in row.aggregation_options %}
+                <option value="{{ option.value }}" {% if option.selected %}selected{% endif %}>{{ option.label }}</option>
+            {% endfor %}
+        </select>
+        {% if not aggregating %}
+            {% for option in row.aggregation_options %}
+                {% if option.selected %}
+                    <input type="hidden" name="{{ row.aggregation_field.html_name }}" value="{{ option.value }}" data-role="aggregation-value">
+                {% endif %}
+            {% endfor %}
+        {% endif %}
+        <p class="parameter-matching__override{% if not row.overridden %} parameter-matching__override--hidden{% endif %}"
+           data-role="override-note">
+            {% blocktrans with default=row.default_aggregation_label %}Template default: {{ default }}{% endblocktrans %}
+        </p>
+        {% for error in row.aggregation_field.errors %}
+            <p class="error-message">{{ error }}</p>
+        {% endfor %}
+    </td>
+</tr>

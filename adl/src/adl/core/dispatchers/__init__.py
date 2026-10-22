@@ -78,24 +78,51 @@ def get_station_channel_records(dispatch_channel, station_id, connection_id):
     return obs_records
 
 
+def get_parameter_channel_mapping(dispatch_channel, parameter_mappings):
+    """
+    Index a channel's parameter mappings by ADL parameter id, with the
+    channel parameter name, the value field to read, and the unit (and pint
+    context) to send values in, as the channel decides. Mappings the channel
+    leaves out are not indexed.
+    """
+    send_agg_data = dispatch_channel.send_aggregated_data
+    
+    parameter_channel_mapping = {}
+    for pm in parameter_mappings:
+        resolved_unit = dispatch_channel.get_channel_unit(pm)
+        if resolved_unit is None:
+            continue
+        channel_unit, unit_context = resolved_unit
+        parameter_channel_mapping[pm.parameter_id] = {
+            "channel_parameter": pm.channel_parameter,
+            "adl_parameter": pm.parameter,
+            "value_field": "value" if not send_agg_data else pm.aggregation_measure,
+            "channel_unit": channel_unit,
+            "unit_context": unit_context,
+        }
+    
+    return parameter_channel_mapping
+
+
+def convert_to_channel_unit(mapping, data_value):
+    """Convert a value to its mapping's channel unit. No channel unit means the parameter's own."""
+    channel_unit = mapping["channel_unit"]
+    adl_parameter = mapping["adl_parameter"]
+    
+    if channel_unit is None or channel_unit == adl_parameter.unit.symbol:
+        return data_value
+    
+    return adl_parameter.convert_value_to_units(data_value, channel_unit, unit_context=mapping["unit_context"])
+
+
 def get_station_dispatch_records(dispatch_channel, station_link):
     """Fetch and format dispatch records for a single station link."""
     parameter_mappings = dispatch_channel.get_parameter_mappings()
     if not parameter_mappings:
         return []
 
-    parameter_mappings_ids = set(parameter_mappings.values_list("parameter_id", flat=True))
-    send_agg_data = dispatch_channel.send_aggregated_data
-
-    parameter_channel_mapping = {
-        pm.parameter_id: {
-            "channel_parameter": pm.channel_parameter,
-            "adl_parameter": pm.parameter,
-            "value_field": "value" if not send_agg_data else pm.aggregation_measure,
-            "channel_unit": pm.channel_unit,
-        }
-        for pm in parameter_mappings
-    }
+    parameter_channel_mapping = get_parameter_channel_mapping(dispatch_channel, parameter_mappings)
+    parameter_mappings_ids = set(parameter_channel_mapping)
 
     station_channel_records = get_station_channel_records(
         dispatch_channel,
@@ -116,10 +143,7 @@ def get_station_dispatch_records(dispatch_channel, station_link):
         data_values = {}
         for obs in station_record["observations"]:
             mapping = parameter_channel_mapping[obs.parameter_id]
-            data_value = getattr(obs, mapping["value_field"])
-            channel_unit = mapping["channel_unit"]
-            if channel_unit != obs.parameter.unit:
-                data_value = mapping["adl_parameter"].convert_value_to_units(data_value, channel_unit)
+            data_value = convert_to_channel_unit(mapping, getattr(obs, mapping["value_field"]))
             data_values[mapping["channel_parameter"]] = data_value
 
         records.append({
@@ -142,25 +166,15 @@ def get_dispatch_channel_data(dispatch_channel, station_link_ids=None):
         logger.error(
             f"[DISPATCH] No parameter mappings found for dispatch channel {channel_name}. Skipping...")
         return {}
-    
-    parameter_mappings_ids = parameter_mappings.values_list("parameter_id", flat=True)
-    
+
     network_connections = dispatch_channel.network_connections.all()
     
     if not network_connections.exists():
         logger.error(f"[DISPATCH] No network connections found for dispatch channel {channel_name}. Skipping...")
         return {}
     
-    send_agg_data = dispatch_channel.send_aggregated_data
-    
-    parameter_channel_mapping = {
-        pm.parameter_id: {
-            "channel_parameter": pm.channel_parameter,
-            "adl_parameter": pm.parameter,
-            "value_field": "value" if not send_agg_data else pm.aggregation_measure,
-            "channel_unit": pm.channel_unit
-        } for pm in parameter_mappings
-    }
+    parameter_channel_mapping = get_parameter_channel_mapping(dispatch_channel, parameter_mappings)
+    parameter_mappings_ids = set(parameter_channel_mapping)
     
     # get station links for the dispatch channel that are enabled to send data
     station_links = dispatch_channel.stations_allowed_to_send()
@@ -216,16 +230,9 @@ def get_dispatch_channel_data(dispatch_channel, station_link_ids=None):
             obs_list = station_record["observations"]
             wigos_id = station_record["wigos_id"]
             for obs in obs_list:
-                key = parameter_channel_mapping[obs.parameter_id]["channel_parameter"]
-                data_value = getattr(obs, parameter_channel_mapping[obs.parameter_id]["value_field"])
-                channel_unit = parameter_channel_mapping[obs.parameter_id]["channel_unit"]
-                
-                # convert value to channel unit if necessary
-                if channel_unit != obs.parameter.unit:
-                    adl_parameter = parameter_channel_mapping[obs.parameter_id]["adl_parameter"]
-                    data_value = adl_parameter.convert_value_to_units(data_value, channel_unit)
-                
-                data_values[key] = data_value
+                mapping = parameter_channel_mapping[obs.parameter_id]
+                data_value = convert_to_channel_unit(mapping, getattr(obs, mapping["value_field"]))
+                data_values[mapping["channel_parameter"]] = data_value
             
             record = {
                 "station_id": station_id,

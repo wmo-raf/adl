@@ -123,6 +123,26 @@ utilities:
 - `get_dispatch_channel_data()` — aggregates records by station and timestamp
 - Channel parameter mappings translate internal `DataParameter` keys to the external schema expected by the target
   system
+- `DispatchChannel.get_channel_unit(mapping)` decides the unit each mapped value is sent in — the stored
+  `channel_unit` by default; `Wis2BoxUpload` overrides it to use its csv2bufr template's unit, and returns `None` to
+  leave out a mapping whose unit cannot convert
+- Mapping hooks on `DispatchChannel`: `clean_parameter_mapping(mapping)` validates a mapping and
+  `prepare_parameter_mapping(mapping)` adjusts it just before it is saved. Dispatch channels use `DispatchChannelForm`
+  (`base_form_class`), which attaches child mappings to the channel before validation so these hooks can run
+- A channel whose destination columns are fixed returns them from `get_parameter_mapping_spec()` and uses
+  `DispatchChannel.matching_parameter_panels`: `ParameterMappingPanel` (`core/panels.py`) renders one row per column
+  over the same `parameter_mappings` formset. Channels returning `None` keep `parameter_panels` (the inline list)
+- `DispatchChannel.match_parameter_mappings(items, name_of, is_live)` is the one place mappings are sorted onto spec
+  columns; the panel, `ParameterMappingFormSet.clean` (`dispatch_forms.py`, refuses to save while any live,
+  non-deleted mapping is unmatched) and `get_unmatched_parameter_mappings()` (saved rows, used by the
+  `UnmatchedMappingsColumn` badge on `/dispatch-channels/`) all share it. Unmatched mappings are never migrated away;
+  dispatch ignores them until the channel is edited
+- A channel whose spec can be switched sets `parameter_mapping_spec_field` and returns every spec from
+  `get_parameter_mapping_specs()`; the panel then embeds them as JSON (`#parameter-matching-specs`, with the
+  parameters that fit each column) and `parameter_matching.js` rebuilds the rows on change. `DispatchChannelForm`
+  remembers the stored spec on init; `ParameterMappingRowForm` then deletes mappings whose column the new spec lacks
+  (`is_parameter_mapping_dropped`: it was a column before, and is not now) and re-saves the rest so their unit is
+  re-derived. Names that were never columns stay unrecognised
 - `Wis2BoxUpload` builds its CSV from its csv2bufr template (`dispatchers/csv2bufr_templates.py`): each column is
   filled from the station, the observation time, or a parameter mapping (observation columns only). See
   `docs/adr/0001-wis2box-csv2bufr-templates.md`

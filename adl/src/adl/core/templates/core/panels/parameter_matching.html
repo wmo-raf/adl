@@ -1,0 +1,117 @@
+{% load i18n %}
+
+{% comment %}
+    The parameter matching panel: one fixed row per destination column. The
+    destination side (column, locked unit, hint) is display only; each row
+    submits its parameter, aggregation and the formset bookkeeping fields.
+    Styles and behaviour come from the panel's Media
+    (adl/css/parameter_matching.css, adl/js/parameter_matching.js), since a
+    panel template is a form fragment with no extra_css or extra_js block.
+{% endcomment %}
+
+<div class="parameter-matching" data-parameter-matching data-used-in-label="{{ used_in_label }}">
+    {{ management_form }}
+
+    {% if non_form_errors %}
+        <div class="help-block help-critical">{{ non_form_errors }}</div>
+    {% endif %}
+
+    {% if spec_data %}{{ spec_data|json_script:"parameter-matching-specs" }}{% endif %}
+
+    <div class="help-block help-warning parameter-matching__dropped" data-role="dropped"{% if not parked %} hidden{% endif %}>
+        <p>{% trans "Switching the template will remove the mappings for these columns, which it does not have:" %}</p>
+        <ul data-role="dropped-list">
+            {% for row in parked %}
+                <li>{{ row.column.name }}</li>
+            {% endfor %}
+        </ul>
+    </div>
+
+    <p class="help">
+        {% trans "Pick the ADL parameter for each column you want to send. Leave a row empty to not send that column. Units are fixed by the destination; values are converted automatically." %}
+    </p>
+
+    <table class="listing parameter-matching__table">
+        <thead>
+        <tr>
+            <th>{% trans "Column" %}</th>
+            <th>{% trans "Unit" %}</th>
+            <th>{% trans "ADL parameter" %}</th>
+            <th>{% trans "Aggregation" %}</th>
+        </tr>
+        </thead>
+        {% for section in sections %}
+            <tbody>
+            <tr class="parameter-matching__section-row">
+                <th colspan="4" data-role="section-heading">{{ section.label }}</th>
+            </tr>
+            {% for row in section.rows %}
+                {% include "core/panels/parameter_matching_row.html" with row=row aggregating=aggregating %}
+            {% endfor %}
+            </tbody>
+        {% endfor %}
+    </table>
+
+    {% comment %}
+        Rows whose column the template lacks stay in the form, out of sight, so they
+        are submitted and removed on save, and come back if the template does.
+    {% endcomment %}
+    <table hidden>
+        <tbody data-role="parked">
+        {% for row in parked %}
+            {% include "core/panels/parameter_matching_row.html" with row=row aggregating=aggregating %}
+        {% endfor %}
+        </tbody>
+    </table>
+
+    {% comment %}
+        The blueprint of a row, for columns a template switch adds. The script fills in
+        the column and takes the next free form index in place of __prefix__.
+    {% endcomment %}
+    {% if spec_data %}
+        <template data-role="row-prototype">
+            {% include "core/panels/parameter_matching_row.html" with row=prototype aggregating=aggregating %}
+        </template>
+    {% endif %}
+
+    {% if unrecognised %}
+        <div class="help-block help-warning parameter-matching__unrecognised">
+            <p>{% trans "These mappings have no row in the table above, so they are not sent. Reassign each to a column, or remove it, to save the channel." %}</p>
+            <table class="listing">
+                <thead>
+                <tr>
+                    <th>{% trans "Stored column name" %}</th>
+                    <th>{% trans "ADL parameter" %}</th>
+                    <th>{% trans "Why it is listed" %}</th>
+                    <th>{% trans "Reassign to" %}</th>
+                    <th>{% trans "Remove" %}</th>
+                </tr>
+                </thead>
+                <tbody>
+                {% for subform, reason in unrecognised %}
+                    <tr data-unrecognised="{{ subform.channel_parameter.value }}">
+                        <td>
+                            <code>{{ subform.channel_parameter.value }}</code>
+                            {% for hidden in subform.hidden_fields %}{{ hidden }}{% endfor %}
+                            {% for error in subform.channel_parameter.errors %}
+                                <p class="error-message">{{ error }}</p>
+                            {% endfor %}
+                            {% for error in subform.non_field_errors %}
+                                <p class="error-message">{{ error }}</p>
+                            {% endfor %}
+                        </td>
+                        <td>
+                            {{ subform.instance.parameter.name|default:"—" }}
+                            <input type="hidden" name="{{ subform.parameter.html_name }}" value="{{ subform.parameter.value|default:'' }}">
+                            <input type="hidden" name="{{ subform.aggregation_measure.html_name }}" value="{{ subform.aggregation_measure.value|default:'' }}">
+                        </td>
+                        <td>{{ reason }}</td>
+                        <td>{{ subform.channel_parameter }}</td>
+                        <td>{{ subform.DELETE }}</td>
+                    </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    {% endif %}
+</div>
