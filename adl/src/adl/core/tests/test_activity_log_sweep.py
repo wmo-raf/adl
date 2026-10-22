@@ -1,10 +1,19 @@
 from datetime import timedelta
+from unittest.mock import patch
 
+from celery.exceptions import SoftTimeLimitExceeded
 from django.conf import settings
+from django.core.cache import cache
 from django.test import TestCase
 from django.utils import timezone as dj_tz
 
-from adl.core.tasks import sweep_stale_activity_logs
+from adl.core.tasks import (
+    SWEEP_INTERVAL_SECONDS,
+    SWEEP_LOCK_KEY,
+    SWEEP_LOCK_TTL_SECONDS,
+    SWEEP_TIME_LIMIT_SECONDS,
+    sweep_stale_activity_logs,
+)
 from adl.monitoring.models import StationLinkActivityLog
 from .factories import NetworkConnectionFactory, StationLinkFactory, Wis2BoxUploadFactory
 
@@ -153,6 +162,94 @@ class SweepThresholdTests(ActivityLogSweepTestCase):
         live.refresh_from_db()
         self.assertEqual(live.status, StationLinkActivityLog.ActivityStatus.STARTED)
         self.assertIsNone(live.message)
+
+
+class SweepBulkUpdateTests(ActivityLogSweepTestCase):
+    """
+    Regression: the sweep used to save stale rows one at a time. A server
+    upgrading past the release that added the pull side met 61k historic
+    STARTED rows, and the per-row sweep ran for hours on the dispatch queue,
+    starving every dispatch behind it.
+    """
+
+    def test_query_count_is_per_connection_and_channel_not_per_row(self):
+        links = [self.link, StationLinkFactory(), StationLinkFactory()]
+        for link in links:
+            for _ in range(5):
+                self._make_log("pull", age_seconds=1200, link=link)
+        for _ in range(5):
+            self._make_log("push", age_seconds=500)
+
+        # 3 connections, 1 channel: one list + one UPDATE per object, per side
+        with patch("adl.monitoring.health.evaluate_all_connections"):
+            with self.assertNumQueries(1 + 3 + 1 + 1):
+                swept = sweep_stale_activity_logs()
+
+        self.assertEqual(swept, 20)
+        self.assertFalse(StationLinkActivityLog.objects.filter(
+            status=StationLinkActivityLog.ActivityStatus.STARTED).exists())
+
+    def test_swept_pull_and_push_rows_get_their_own_message(self):
+        pull_log = self._make_log("pull", age_seconds=1200)
+        push_log = self._make_log("push", age_seconds=500)
+
+        sweep_stale_activity_logs()
+
+        pull_log.refresh_from_db()
+        push_log.refresh_from_db()
+        self.assertTrue(pull_log.message.startswith("Ingestion worker died"))
+        self.assertTrue(push_log.message.startswith("Dispatch worker died"))
+
+
+class SweepLockTests(ActivityLogSweepTestCase):
+    def tearDown(self):
+        cache.delete(SWEEP_LOCK_KEY)
+
+    def test_overlapping_sweep_skips_without_touching_rows(self):
+        log = self._make_log("pull", age_seconds=1200)
+        cache.add(SWEEP_LOCK_KEY, "locked", timeout=SWEEP_LOCK_TTL_SECONDS)
+
+        with patch("adl.monitoring.health.evaluate_all_connections") as evaluate:
+            swept = sweep_stale_activity_logs()
+
+        self.assertEqual(swept, 0)
+        evaluate.assert_not_called()
+        log.refresh_from_db()
+        self.assertEqual(log.status, StationLinkActivityLog.ActivityStatus.STARTED)
+
+    def test_lock_released_after_a_normal_run(self):
+        sweep_stale_activity_logs()
+
+        self.assertIsNone(cache.get(SWEEP_LOCK_KEY))
+
+    def test_lock_released_when_the_soft_time_limit_fires(self):
+        with patch("adl.monitoring.health.evaluate_all_connections",
+                   side_effect=SoftTimeLimitExceeded()):
+            with self.assertRaises(SoftTimeLimitExceeded):
+                sweep_stale_activity_logs()
+
+        self.assertIsNone(cache.get(SWEEP_LOCK_KEY))
+
+
+class SweepTimeBoundsTests(TestCase):
+    def test_sweep_has_time_limits_inside_its_interval(self):
+        task = sweep_stale_activity_logs
+        self.assertIsNotNone(task.soft_time_limit)
+        self.assertLess(task.soft_time_limit, task.time_limit)
+        self.assertEqual(task.time_limit, SWEEP_TIME_LIMIT_SECONDS)
+        self.assertLess(SWEEP_TIME_LIMIT_SECONDS, SWEEP_INTERVAL_SECONDS)
+
+    def test_lock_left_by_a_killed_sweep_expires_before_the_next_tick(self):
+        # A hard kill skips the finally that releases the lock
+        self.assertGreater(SWEEP_LOCK_TTL_SECONDS, SWEEP_TIME_LIMIT_SECONDS)
+        self.assertLess(SWEEP_LOCK_TTL_SECONDS, SWEEP_INTERVAL_SECONDS)
+
+    def test_queued_sweep_expires_at_the_next_tick(self):
+        from adl.config.celery import app
+
+        entry = app.conf.beat_schedule["sweep-stale-activity-logs-every-5-minutes"]
+        self.assertEqual(entry["schedule"], SWEEP_INTERVAL_SECONDS)
+        self.assertEqual(entry["options"]["expires"], SWEEP_INTERVAL_SECONDS)
 
 
 class SweepQueueRoutingTests(TestCase):
