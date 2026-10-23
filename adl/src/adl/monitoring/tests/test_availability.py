@@ -474,6 +474,12 @@ class ConnectionGridTests(MonthAvailabilityTestCase):
 
         self.assertIsNone(self.grid(connection, [link]).rows[0].percent)
 
+    def test_percent_does_not_round_up_to_100_with_missing_hours(self):
+        connection, (link,) = self.make_links(("Alpha", True))
+        self.fill(link, 9 * 24 - 1)  # 215 of 216 expected: 99.5%
+
+        self.assertEqual(self.grid(connection, [link]).rows[0].percent, 99)
+
     def test_enabled_links_rank_worst_first_by_missing_hours(self):
         connection, (a, b, c) = self.make_links(("Alpha", True), ("Bravo", True), ("Charlie", True))
         self.fill(a, 200)

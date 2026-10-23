@@ -264,7 +264,8 @@ class LinkMonthSummary:
         """Share of expected hours present, 0 to 100; ``None`` when none expected."""
         if not self.expected_hours:
             return None
-        return round(100 * self.present_hours / self.expected_hours)
+        # never rounds up to 100 while hours are still missing
+        return min(round(100 * self.present_hours / self.expected_hours), 99 if self.missing_hours else 100)
 
     @property
     def name(self):
