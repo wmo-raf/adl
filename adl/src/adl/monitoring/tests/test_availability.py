@@ -5,7 +5,7 @@ Tests write real ``ObservationRecord`` rows and read them back through
 are visible without a refresh.
 """
 
-from datetime import datetime, timedelta, timezone as py_tz
+from datetime import date, datetime, timedelta, timezone as py_tz
 
 from django.test import TestCase
 
@@ -19,9 +19,13 @@ from adl.monitoring.availability import (
     COMPLETE,
     EMPTY,
     NOT_EXPECTED,
+    MISSING,
     PARTIAL,
+    PRESENT,
+    day_availability,
     month_availability,
 )
+from adl.core.tests.helpers import make_mapping
 
 UTC = py_tz.utc
 
@@ -225,3 +229,197 @@ class CellTextTests(MonthAvailabilityTestCase):
 
         self.assertEqual(self.day(result, 5).label, "18/24")
         self.assertEqual(self.day(result, 25).label, "")
+
+
+class ParameterGapMarkerTests(MonthAvailabilityTestCase):
+    NOW = utc(2026, 3, 20, 12, 15)
+
+    def map_parameters(self, link, *parameters):
+        unit = parameters[0].unit
+        link.get_variable_mappings = lambda: [
+            make_mapping(p, unit, source_name=p.name) for p in parameters
+        ]
+
+    def test_complete_day_missing_a_mapped_parameter_for_some_hours_is_marked(self):
+        link = self.make_link(start_date=utc(2026, 3, 1))
+        temp, wind = DataParameterFactory(), DataParameterFactory()
+        self.map_parameters(link, temp, wind)
+        for hour in range(24):
+            self.record(link, utc(2026, 3, 5, hour, 30), temp)
+        for hour in range(23):
+            self.record(link, utc(2026, 3, 5, hour, 30), wind)
+
+        day = month_availability(link, 2026, 3, now=self.NOW).days[4]
+
+        self.assertEqual(day.state, COMPLETE)
+        self.assertTrue(day.has_parameter_gap)
+
+    def test_complete_day_with_every_mapped_parameter_has_no_marker(self):
+        link = self.make_link(start_date=utc(2026, 3, 1))
+        temp = DataParameterFactory()
+        self.map_parameters(link, temp)
+        self.fill_day(link, 2026, 3, 5)  # other parameter; temp is missing
+        for hour in range(24):
+            self.record(link, utc(2026, 3, 6, hour, 30), temp)
+
+        days = month_availability(link, 2026, 3, now=self.NOW).days
+
+        self.assertTrue(days[4].has_parameter_gap)
+        self.assertFalse(days[5].has_parameter_gap)
+
+    def test_day_missing_only_an_unmapped_parameter_has_no_marker(self):
+        link = self.make_link(start_date=utc(2026, 3, 1))
+        temp, unmapped = DataParameterFactory(), DataParameterFactory()
+        self.map_parameters(link, temp)
+        for hour in range(24):
+            self.record(link, utc(2026, 3, 5, hour, 30), temp)
+        self.record(link, utc(2026, 3, 5, 3, 30), unmapped)
+
+        day = month_availability(link, 2026, 3, now=self.NOW).days[4]
+
+        self.assertFalse(day.has_parameter_gap)
+
+    def test_no_mappings_means_no_markers(self):
+        link = self.make_link(start_date=utc(2026, 3, 1))
+        self.fill_day(link, 2026, 3, 5, hours=range(10))
+
+        days = month_availability(link, 2026, 3, now=self.NOW).days
+
+        self.assertFalse(any(d.has_parameter_gap for d in days))
+
+    def test_days_with_nothing_expected_have_no_marker(self):
+        link = self.make_link(start_date=utc(2026, 3, 10))
+        self.map_parameters(link, DataParameterFactory())
+
+        days = month_availability(link, 2026, 3, now=self.NOW).days
+
+        self.assertFalse(days[0].has_parameter_gap)  # before the floor
+        self.assertFalse(days[24].has_parameter_gap)  # future
+
+
+class DayAvailabilityTests(MonthAvailabilityTestCase):
+    NOW = utc(2026, 3, 20, 12, 15)
+
+    def setUp(self):
+        self.temp, self.wind = DataParameterFactory(), DataParameterFactory()
+
+    def map_parameters(self, link, *parameters):
+        link.get_variable_mappings = lambda: [
+            make_mapping(p, p.unit, source_name=p.name) for p in parameters
+        ]
+
+    def day_of(self, link, day=5, now=None):
+        return day_availability(link, date(2026, 3, day), now=now or self.NOW)
+
+    def row(self, detail, parameter):
+        return next(r for r in detail.rows if r.parameter == parameter)
+
+    def states(self, row):
+        return [c.state for c in row.cells]
+
+    def test_any_row_matches_the_month_calendar_cell(self):
+        link = self.make_link(start_date=utc(2026, 3, 1))
+        self.map_parameters(link, self.temp)
+        for hour in range(18):
+            self.record(link, utc(2026, 3, 5, hour, 30), self.temp)
+
+        detail = self.day_of(link)
+        cell = month_availability(link, 2026, 3, now=self.NOW).days[4]
+
+        self.assertEqual(len(detail.any_row.cells), 24)
+        self.assertEqual(
+            sum(c.state == PRESENT for c in detail.any_row.cells), cell.present_hours
+        )
+        self.assertEqual(
+            sum(c.state == MISSING for c in detail.any_row.cells), cell.missing_hours
+        )
+
+    def test_any_row_is_present_when_any_parameter_has_the_hour(self):
+        link = self.make_link(start_date=utc(2026, 3, 1))
+        self.map_parameters(link, self.temp, self.wind)
+        self.record(link, utc(2026, 3, 5, 2, 30), self.temp)
+        self.record(link, utc(2026, 3, 5, 3, 30), self.wind)
+
+        detail = self.day_of(link)
+
+        self.assertEqual(self.states(detail.any_row)[2:5], [PRESENT, PRESENT, MISSING])
+        self.assertEqual(self.states(self.row(detail, self.temp))[2:4], [PRESENT, MISSING])
+        self.assertEqual(self.states(self.row(detail, self.wind))[2:4], [MISSING, PRESENT])
+
+    def test_cells_carry_records_count_and_local_hour(self):
+        link = self.make_link(tz="Africa/Nairobi", start_date=utc(2026, 3, 1))
+        self.map_parameters(link, self.temp)
+        self.record(link, utc(2026, 3, 5, 6, 10), self.temp)
+        self.record(link, utc(2026, 3, 5, 6, 40), self.temp)
+
+        detail = self.day_of(link)
+        cell = detail.rows[0].cells[9]  # 06:00Z is 09:00 in Nairobi
+
+        self.assertEqual((cell.state, cell.records_count), (PRESENT, 2))
+        self.assertEqual(cell.local_time.strftime("%H:%M"), "09:00")
+        self.assertEqual(detail.rows[0].cells[0].records_count, 0)
+        self.assertEqual(detail.timezone_name, "Africa/Nairobi")
+
+    def test_mapped_parameter_without_data_is_a_row_of_missing_hours(self):
+        link = self.make_link(start_date=utc(2026, 3, 1))
+        self.map_parameters(link, self.temp, self.wind)
+        self.record(link, utc(2026, 3, 5, 2, 30), self.temp)
+
+        row = self.row(self.day_of(link), self.wind)
+
+        self.assertTrue(row.mapped)
+        self.assertEqual(self.states(row), [MISSING] * 24)
+
+    def test_unmapped_parameter_with_data_is_a_flagged_row(self):
+        link = self.make_link(start_date=utc(2026, 3, 1))
+        self.map_parameters(link, self.temp)
+        self.record(link, utc(2026, 3, 5, 2, 30), self.wind)
+
+        detail = self.day_of(link)
+
+        self.assertEqual([r.parameter for r in detail.rows], [self.temp, self.wind])
+        self.assertTrue(detail.rows[0].mapped)
+        self.assertFalse(detail.rows[1].mapped)
+        self.assertEqual(detail.rows[1].cells[2].state, PRESENT)
+
+    def test_data_of_another_station_link_is_ignored(self):
+        link = self.make_link(start_date=utc(2026, 3, 1))
+        other = self.make_link()
+        self.map_parameters(link, self.temp)
+        self.record(other, utc(2026, 3, 5, 2, 30), self.wind)
+
+        detail = self.day_of(link)
+
+        self.assertEqual([r.parameter for r in detail.rows], [self.temp])
+        self.assertEqual(self.states(detail.any_row), [MISSING] * 24)
+
+    def test_hours_outside_the_expected_range_are_not_expected(self):
+        link = self.make_link(start_date=utc(2026, 3, 20, 6, 0))
+        self.map_parameters(link, self.temp)
+
+        detail = self.day_of(link, day=20, now=utc(2026, 3, 20, 10, 30))
+
+        # expected: 06:00 to 10:00 elapsed
+        self.assertEqual(
+            self.states(detail.any_row),
+            [NOT_EXPECTED] * 6 + [MISSING] * 4 + [NOT_EXPECTED] * 14,
+        )
+
+    def test_day_follows_the_local_calendar(self):
+        # 22:30Z on the 4th is 01:30 local on the 5th in Nairobi
+        link = self.make_link(tz="Africa/Nairobi", start_date=utc(2026, 3, 1))
+        self.map_parameters(link, self.temp)
+        self.record(link, utc(2026, 3, 4, 22, 30), self.temp)
+
+        detail = self.day_of(link)
+
+        self.assertEqual(detail.any_row.cells[1].state, PRESENT)
+        self.assertEqual(detail.any_row.cells[1].local_time.hour, 1)
+
+    def test_without_a_floor_nothing_is_expected(self):
+        link = self.make_link()
+        self.map_parameters(link, self.temp)
+
+        detail = self.day_of(link)
+
+        self.assertEqual(set(self.states(detail.any_row)), {NOT_EXPECTED})

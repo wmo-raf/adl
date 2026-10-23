@@ -40,3 +40,9 @@ meanings.
 : An expected hour with no record for any parameter. An hour is present if at
   least one record exists for any parameter in it, so a gap is a missing
   hour, not a missing value.
+
+**parameter gap**
+: A currently mapped parameter (per `get_variable_mappings()`) with no record
+  in an expected hour that is otherwise present. Shown as a corner marker on
+  the month calendar cell and as a missing hour in that parameter's row of the
+  day view. Parameters with data but no current mapping never count as gaps.

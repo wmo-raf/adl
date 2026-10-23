@@ -1,17 +1,21 @@
 """The Data availability page: URL-param parsing, rendering, and access."""
 
-from datetime import datetime, timezone as py_tz
+from datetime import date, datetime, timezone as py_tz
+from unittest import mock
 
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Permission
 from django.test import TestCase
 from django.urls import reverse
 
+from adl.core.models import StationLink
 from adl.core.tests.factories import (
+    DataParameterFactory,
     NetworkConnectionFactory,
     ObservationRecordFactory,
     StationLinkFactory,
 )
+from adl.core.tests.helpers import make_mapping
 
 
 class DataAvailabilityViewTests(TestCase):
@@ -123,6 +127,102 @@ def availability_tz(link):
     from zoneinfo import ZoneInfo
 
     return ZoneInfo(str(link.timezone))
+
+
+class DayViewTests(TestCase):
+    def setUp(self):
+        user = get_user_model().objects.create_superuser(
+            username="monitor", email="monitor@example.com", password="pw"
+        )
+        self.client.force_login(user)
+        self.url = reverse("data_availability")
+        self.connection = NetworkConnectionFactory(stations_timezone="Africa/Nairobi")
+        self.link = StationLinkFactory(network_connection=self.connection)
+        self.temp, self.wind = DataParameterFactory(), DataParameterFactory()
+        self.patch_mappings(self.temp)
+
+    def patch_mappings(self, *parameters):
+        mappings = [make_mapping(p, p.unit, source_name=p.name) for p in parameters]
+        patcher = mock.patch.object(
+            StationLink, "get_variable_mappings", lambda self: mappings
+        )
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def record(self, parameter, hour):
+        ObservationRecordFactory(
+            station=self.link.station,
+            connection=self.connection,
+            parameter=parameter,
+            time=datetime(2026, 3, 5, hour, 30, tzinfo=py_tz.utc),
+        )
+
+    def get(self, **params):
+        params.setdefault("station_link", self.link.id)
+        return self.client.get(self.url, params)
+
+    def test_day_param_renders_the_matrix_directly(self):
+        self.record(self.temp, 6)
+        self.record(self.wind, 6)
+
+        response = self.get(month="2026-03", day="2026-03-05")
+
+        self.assertEqual(response.status_code, 200)
+        detail = response.context["day_detail"]
+        self.assertEqual(detail.date, date(2026, 3, 5))
+        self.assertContains(response, "5 March 2026")
+        self.assertContains(response, "Any parameter")
+        self.assertContains(response, self.temp.name)
+        self.assertContains(response, self.wind.name)
+        self.assertContains(response, "not currently mapped")
+        self.assertContains(response, "availability-hour--present")
+        self.assertContains(response, "2 records")  # tooltip of the any row
+
+    def test_breadcrumb_links_back_to_the_month(self):
+        response = self.get(day="2026-03-05")
+
+        month_url = f"{self.url}?station_link={self.link.id}&month=2026-03"
+        self.assertEqual(response.context["month_url"], month_url)
+        self.assertContains(response, month_url.replace("&", "&amp;"))
+
+    def test_month_page_has_no_day_matrix(self):
+        response = self.get(month="2026-03")
+
+        self.assertNotIn("day_detail", response.context)
+
+    def test_calendar_cells_link_to_their_day(self):
+        response = self.get(month="2026-03")
+
+        self.assertContains(
+            response, f"{self.url}?station_link={self.link.id}&amp;day=2026-03-05"
+        )
+
+    def test_corner_marker_on_a_day_missing_a_mapped_parameter(self):
+        self.record(self.wind, 6)  # temp is mapped but has no data on the 5th
+
+        response = self.get(month="2026-03")
+
+        self.assertContains(response, " availability-cell--gap\"")
+
+    def test_no_corner_marker_without_a_parameter_gap(self):
+        self.patch_mappings()
+
+        response = self.get(month="2026-03")
+
+        self.assertNotContains(response, " availability-cell--gap\"")
+
+    def test_invalid_day_falls_back_to_the_month(self):
+        for day in ("2026-02-30", "garbage", "2026-3-5", "0000-01-01", ""):
+            with self.subTest(day=day):
+                response = self.get(day=day, month="2026-03")
+                self.assertEqual(response.status_code, 200)
+                self.assertNotIn("day_detail", response.context)
+                self.assertIn("availability", response.context)
+
+    def test_day_alone_shows_that_days_month_calendar_context(self):
+        response = self.get(day="2026-03-05")
+
+        self.assertEqual(response.context["availability"].month, 3)
 
 
 class DataAvailabilityAccessTests(TestCase):
