@@ -587,6 +587,10 @@
                             {% endif %}
                         {% endif %}
                         {% if item.check.message %}<p class="availability-meta">{{ item.check.message }}{% if item.check.category %} ({{ item.check.category }}){% endif %}</p>{% endif %}
+                        {% if item.can_fetch_instead %}
+                            <p><button type="button" class="button button-small button-secondary availability-fetch-instead"
+                                       data-start="{{ item.check.window_start.isoformat }}" data-end="{{ item.check.window_end.isoformat }}">{% trans "Try by fetching data" %}</button></p>
+                        {% endif %}
                     </div>
                 {% endfor %}
             </section>
@@ -722,15 +726,7 @@
                         .catch(() => { status.textContent = '{% trans "Lost contact with the server." %}'; button.disabled = false; });
                 }
 
-                button.addEventListener('click', function () {
-                    if (!selection) return;
-                    const cells = rowCells(selection.row).slice(selection.from, selection.to + 1);
-                    const start = cells[0].dataset.start;
-                    const end = new Date(new Date(cells[cells.length - 1].dataset.start).getTime() + HOUR_MS).toISOString();
-                    const body = new URLSearchParams({
-                        station_link: bar.dataset.stationLink, start: start, end: end,
-                        parameter: selection.row.dataset.parameter || '',
-                    });
+                function submit(body) {
                     button.disabled = true;
                     status.textContent = '{% trans "Checking…" %}';
                     fetch(bar.dataset.url, {
@@ -750,6 +746,29 @@
                             }
                         })
                         .catch(() => { status.textContent = '{% trans "Lost contact with the server." %}'; button.disabled = false; });
+                }
+
+                button.addEventListener('click', function () {
+                    if (!selection) return;
+                    const cells = rowCells(selection.row).slice(selection.from, selection.to + 1);
+                    const start = cells[0].dataset.start;
+                    const end = new Date(new Date(cells[cells.length - 1].dataset.start).getTime() + HOUR_MS).toISOString();
+                    submit(new URLSearchParams({
+                        station_link: bar.dataset.stationLink, start: start, end: end,
+                        parameter: selection.row.dataset.parameter || '',
+                    }));
+                });
+
+                // a listing that did not answer: explicitly ask for tier 2 on the same window
+                document.querySelectorAll('.availability-fetch-instead').forEach((fetchButton) => {
+                    fetchButton.addEventListener('click', function () {
+                        bar.hidden = false;
+                        selectionText.textContent = '';
+                        submit(new URLSearchParams({
+                            station_link: bar.dataset.stationLink, start: fetchButton.dataset.start,
+                            end: fetchButton.dataset.end, fetch: '1',
+                        }));
+                    });
                 });
             }
         });

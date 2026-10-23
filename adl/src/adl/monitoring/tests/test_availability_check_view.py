@@ -152,6 +152,7 @@ class CheckPostTests(CheckViewTestCase):
     def test_refusals_map_to_status_codes(self):
         for error, status in (
             (gap_service.CheckInFlight("busy"), 409),
+            (gap_service.CheckCoolingDown("wait"), 429),
             (gap_service.InvalidWindow("too long"), 400),
             (gap_service.CheckUnavailable("no source"), 400),
         ):
@@ -287,6 +288,29 @@ class DayViewRenderingTests(CheckViewTestCase):
         self.assertContains(response, "Check did not answer")
         self.assertContains(response, "no route to host")
         self.assertContains(response, "TCP_TIMEOUT")
+
+    def test_a_failed_listing_offers_the_explicit_fetch_action(self):
+        self.store(tier=TIER_LISTING, status=SourceCheckStatus.FAILED, message="no route")
+
+        response = self.day()
+
+        self.assertContains(response, "Try by fetching data")
+        self.assertContains(response, 'data-start="2026-03-05T06:00:00+00:00"')
+
+    def test_a_failed_fetch_or_an_answered_listing_offers_no_fetch_action(self):
+        self.store(tier=TIER_FETCH, status=SourceCheckStatus.FAILED)
+        self.store(tier=TIER_LISTING, status=SourceCheckStatus.OK)
+
+        self.assertNotContains(self.day(), "Try by fetching data")
+
+    def test_a_malformed_listing_stored_message_is_shown_with_the_action(self):
+        self.store(tier=TIER_LISTING, status=SourceCheckStatus.MALFORMED,
+                   message="The plugin returned str instead of an AvailabilityCheckResult.")
+
+        response = self.day()
+
+        self.assertContains(response, "returned str instead")
+        self.assertContains(response, "Try by fetching data")
 
     def test_per_parameter_breakdown_is_listed(self):
         parameter = DataParameterFactory(name="Air temperature")

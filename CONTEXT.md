@@ -65,6 +65,9 @@ meanings.
   row. It is answered by the first tier available: the station link's own
   cheap `check_availability()` (a listing), otherwise core fetches and parses
   the window through `get_station_data`, counts records per hour and per
-  parameter, and saves nothing. The answer is stored, shown on the hours it
+  parameter, and saves nothing. A cheap check that fails, times out or returns
+  something malformed is stored and shown as such; it never falls through to
+  fetching by itself, only the operator's explicit "Try by fetching data" does,
+  and the cheap check is held to one dial per station link per minute. The answer is stored, shown on the hours it
   covers, and says which tier answered. One check or recovery runs per station
   link at a time.
