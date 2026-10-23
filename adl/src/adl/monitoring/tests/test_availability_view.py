@@ -185,6 +185,10 @@ class DayViewTests(TestCase):
         self.assertEqual(response.context["month_url"], month_url)
         self.assertContains(response, month_url.replace("&", "&amp;"))
 
+    def test_day_page_has_no_month_pager(self):
+        self.assertContains(self.get(month="2026-03"), "availability-nav\"")
+        self.assertNotContains(self.get(day="2026-03-05"), "availability-nav\"")
+
     def test_month_page_has_no_day_matrix(self):
         response = self.get(month="2026-03")
 

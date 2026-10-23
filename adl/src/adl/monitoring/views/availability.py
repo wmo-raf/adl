@@ -92,9 +92,9 @@ def data_availability(request):
     link_id = _positive_int(request.GET.get("station_link"))
     if link_id:
         station_link = (
-            StationLink.objects.filter(id=link_id)
-            .select_related("network_connection", "station")
-            .first()
+            # no select_related on the polymorphic connection: it would load the
+            # base class, hiding the plugin subclass' ``variable_mappings``
+            StationLink.objects.filter(id=link_id).select_related("station").first()
         )
 
     connection_id = _positive_int(request.GET.get("connection"))

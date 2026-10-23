@@ -288,11 +288,13 @@
                     <a href="{{ monitoring_url }}">{% trans "Station link monitoring" %}</a>
                 </p>
             </div>
+            {% if not day_detail %}
             <div class="availability-nav">
                 <a href="{{ prev_url }}" class="button button-small button-secondary">&larr; {% trans "Previous" %}</a>
                 <span class="availability-month">{{ month_start|date:"F Y" }}</span>
                 <a href="{{ next_url }}" class="button button-small button-secondary">{% trans "Next" %} &rarr;</a>
             </div>
+            {% endif %}
         </div>
 
     {% if day_detail %}
