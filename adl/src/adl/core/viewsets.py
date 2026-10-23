@@ -19,6 +19,7 @@ from .utils import (
     get_dispatch_channel_more_buttons,
     get_connection_list_more_buttons,
     get_extra_model_admin_header_buttons,
+    get_station_link_availability_url,
     get_station_link_list_more_buttons,
     get_station_link_view_data_url,
 )
@@ -222,7 +223,12 @@ class StationLinkInspectView(generic.InspectView):
                 _("View Data"),
                 url=get_station_link_view_data_url(self.object),
                 icon_name="table",
-            )
+            ),
+            HeaderButton(
+                _("Data availability"),
+                url=get_station_link_availability_url(self.object),
+                icon_name="date",
+            ),
         ]
         buttons.extend(get_extra_model_admin_header_buttons(self.object))
         buttons.extend(super().get_header_buttons())

@@ -89,13 +89,14 @@ class StationLinkInspectHeaderTests(SimpleTestCase):
         labels = [getattr(b, "label", None) for b in buttons]
         self.assertIn("Direct fetch files", labels)
 
-    def test_view_data_is_the_only_header_button_without_plugin_links(self):
+    def test_core_links_are_the_only_header_buttons_without_plugin_links(self):
         view = self._view_for(_LinkWithoutPages())
         header_buttons = [
             b for b in view.get_header_buttons() if isinstance(b, HeaderButton)
         ]
-        self.assertEqual([b.label for b in header_buttons], ["View Data"])
+        self.assertEqual([b.label for b in header_buttons], ["View Data", "Data availability"])
         self.assertEqual(header_buttons[0].url, get_station_link_view_data_url(_LinkWithoutPages()))
+        self.assertEqual(header_buttons[1].url, "/monitoring/availability/?station_link=7")
 
 
 class ViewDataLinkTests(SimpleTestCase):
@@ -108,6 +109,7 @@ class ViewDataLinkTests(SimpleTestCase):
     def test_row_menu_offers_view_data_before_plugin_links(self):
         buttons = get_station_link_list_more_buttons(_LinkWithPages())
         self.assertEqual(
-            [b.label for b in buttons], ["View Data", "Direct fetch files"]
+            [b.label for b in buttons],
+            ["View Data", "Data availability", "Direct fetch files"],
         )
         self.assertIsInstance(buttons[0], ListingButton)

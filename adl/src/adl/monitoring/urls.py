@@ -8,6 +8,7 @@ from .views import (
     station_link_monitoring
 )
 
+from .views.availability import data_availability
 from .views.activity import NetworkConnectionActivityView, DispatchChannelMonitoringView
 from .views.health import (
     connection_health,
@@ -17,6 +18,7 @@ from .views.health import (
 )
 
 urlpatterns = [
+    path('availability/', data_availability, name='data_availability'),
     path('connection/<int:connection_id>/health/', connection_health,
          name='connection_health'),
     path('connection/<int:connection_id>/health/probe-source/', connection_probe_source,
