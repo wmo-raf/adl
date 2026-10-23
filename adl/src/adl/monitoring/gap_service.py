@@ -38,7 +38,12 @@ from adl.core.availability_checks import (
     normalise_availability_check_result,
 )
 from adl.core.classification import classify_failure
-from adl.core.probes import PROBE_WALL_CLOCK_SECONDS, ProbeTimeout, run_bounded
+from adl.core.probes import (
+    PROBE_WALL_CLOCK_SECONDS,
+    ProbeTimeout,
+    claim_probe_cooldown,
+    run_bounded,
+)
 from adl.core.redaction import redact_secrets
 from adl.core.source_checks import SourceCheckStatus
 from .availability import HOUR, MISSING, _mapped_parameters, missing_hours
@@ -65,6 +70,15 @@ class CheckUnavailable(GapServiceError):
 
 class CheckInFlight(GapServiceError):
     """A check or recovery is already running for this station link."""
+
+
+class CheckCoolingDown(GapServiceError):
+    """The station link's source was asked very recently; wait before asking again."""
+
+
+def cooldown_key(station_link_id):
+    """The cache key of the per-station-link cooldown on the listing dial."""
+    return f"availability-cooldown-{station_link_id}"
 
 
 def inflight_key(station_link_id):
@@ -307,6 +321,10 @@ def check(station_link, start, end, parameter_id=None, force_fetch=False, now=No
 
     try:
         if station_link.availability_check_supported and not force_fetch:
+            # claim before dialling, and never release: a crashed listing still dialled
+            if not claim_probe_cooldown(cooldown_key(station_link.id), dj_timezone.now()):
+                raise CheckCoolingDown(
+                    _("This source was checked a moment ago. Wait a minute before checking again."))
             result = run_listing_check(station_link, window)
             if result.status != SourceCheckStatus.UNSUPPORTED:
                 stored = store_result(station_link, window, result, now=now)

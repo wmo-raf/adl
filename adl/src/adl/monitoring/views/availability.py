@@ -135,9 +135,9 @@ def _matrix_rows(day_detail, overlay):
     return [build(day_detail.any_row, True)] + [build(row, False) for row in day_detail.rows]
 
 
-def _check_items(overlay, tz):
+def _check_items(overlay, tz, can_check=False):
     """The stored checks of the day, with their window in the station's local time."""
-    return [
+    items = [
         {
             "summary": summary,
             "check": summary.check,
@@ -146,9 +146,22 @@ def _check_items(overlay, tz):
             "by_listing": summary.check.tier == TIER_LISTING,
             "by_fetch": summary.check.tier == TIER_FETCH,
             "ok": summary.check.status == SourceCheckStatus.OK,
+            # a listing that did not answer never falls through by itself; the
+            # operator asks for the expensive fetch explicitly
+            "can_fetch_instead": can_check
+            and summary.check.tier == TIER_LISTING
+            and summary.check.status != SourceCheckStatus.OK,
         }
         for summary in overlay.summaries
     ]
+    # newest first: a later check that overlaps the window supersedes a failed one
+    for index, item in enumerate(items):
+        item["can_fetch_instead"] = item["can_fetch_instead"] and not any(
+            newer["check"].window_start < item["check"].window_end
+            and newer["check"].window_end > item["check"].window_start
+            for newer in items[:index]
+        )
+    return items
 
 
 def data_availability(request):
@@ -223,12 +236,13 @@ def data_availability(request):
             overlay = gap_service.day_check_overlay(station_link, day_detail)
             context["day_detail"] = day_detail
             context["matrix_rows"] = _matrix_rows(day_detail, overlay)
-            context["check_items"] = _check_items(
-                overlay, ZoneInfo(str(station_link.timezone)))
-            context["can_check"] = (
+            can_check = (
                 station_link.network_connection.has_external_source
                 and can_manage_connection(request.user, station_link.network_connection)
             )
+            context["check_items"] = _check_items(
+                overlay, ZoneInfo(str(station_link.timezone)), can_check)
+            context["can_check"] = can_check
             context["check_instant"] = station_link.availability_check_supported
             context["check_url"] = reverse("availability_check")
 
@@ -312,6 +326,8 @@ def availability_check(request):
         )
     except gap_service.CheckInFlight as exc:
         return _json_error(exc, 409)
+    except gap_service.CheckCoolingDown as exc:
+        return _json_error(exc, 429)
     except gap_service.GapServiceError as exc:
         return _json_error(exc, 400)
 

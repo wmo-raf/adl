@@ -29,6 +29,7 @@ from adl.core.tests.helpers import make_mapping, make_test_plugin
 from adl.monitoring import gap_service
 from adl.monitoring.availability import day_availability
 from adl.monitoring.gap_service import (
+    CheckCoolingDown,
     CheckInFlight,
     CheckUnavailable,
     InvalidWindow,
@@ -367,6 +368,75 @@ class ListingTierTests(GapServiceTestCase):
             check(self.link, *self.window(), force_fetch=True, now=NOW)
 
         self.assertEqual(calls, [])
+        delay.assert_called_once()
+
+
+class ListingFailureHandlingTests(GapServiceTestCase):
+    def test_a_listing_over_the_wall_clock_is_a_stored_timeout_not_a_wedge(self):
+        self.support_listing(lambda self, start, end: AvailabilityCheckResult(
+            status=SourceCheckStatus.OK))
+
+        with patch.object(gap_service, "run_bounded", side_effect=gap_service.ProbeTimeout), \
+                patch.object(run_availability_check, "delay") as delay:
+            outcome = check(self.link, *self.window(), now=NOW)
+
+        delay.assert_not_called()
+        self.assertEqual(outcome.check.status, SourceCheckStatus.FAILED)
+        self.assertEqual(outcome.check.tier, TIER_LISTING)
+        self.assertIn("did not complete", outcome.check.message)
+        self.assertIsNone(cache.get(gap_service.inflight_key(self.link.id)))
+
+    def test_a_failed_listing_message_is_stored_redacted(self):
+        def boom(self, start, end):
+            raise OSError("login failed password=hunter2")
+        self.support_listing(boom)
+
+        outcome = check(self.link, *self.window(), now=NOW)
+
+        self.assertNotIn("hunter2", outcome.check.message)
+
+    def test_the_explicit_fetch_request_enqueues_tier_two_after_a_failure(self):
+        self.support_listing(lambda self, start, end: AvailabilityCheckResult(
+            status=SourceCheckStatus.FAILED, message="no route"))
+        check(self.link, *self.window(), now=NOW)
+
+        with patch.object(run_availability_check, "delay") as delay:
+            outcome = check(self.link, *self.window(), force_fetch=True, now=NOW)
+
+        delay.assert_called_once()
+        self.assertEqual(outcome.tier, TIER_FETCH)
+
+
+class ListingCooldownTests(GapServiceTestCase):
+    def setUp(self):
+        super().setUp()
+        self.calls = []
+        self.support_listing(lambda s, start, end: self.calls.append(1)
+                             or AvailabilityCheckResult(status=SourceCheckStatus.OK))
+
+    def test_a_second_listing_inside_the_cooldown_is_refused_without_dialling(self):
+        check(self.link, *self.window(), now=NOW)
+
+        with self.assertRaises(CheckCoolingDown):
+            check(self.link, *self.window(), now=NOW)
+
+        self.assertEqual(len(self.calls), 1)
+        self.assertIsNone(cache.get(gap_service.inflight_key(self.link.id)))
+
+    def test_the_cooldown_is_keyed_per_station_link(self):
+        check(self.link, *self.window(), now=NOW)
+        other = self.make_link()
+
+        check(other, *self.window(), now=NOW)
+
+        self.assertEqual(len(self.calls), 2)
+
+    def test_the_explicit_fetch_is_not_held_back_by_the_listing_cooldown(self):
+        check(self.link, *self.window(), now=NOW)
+
+        with patch.object(run_availability_check, "delay") as delay:
+            check(self.link, *self.window(), force_fetch=True, now=NOW)
+
         delay.assert_called_once()
 
 
