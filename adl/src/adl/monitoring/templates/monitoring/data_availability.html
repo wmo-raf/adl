@@ -1,0 +1,264 @@
+{% extends "wagtailadmin/generic/base.html" %}
+{% load i18n wagtailadmin_tags %}
+
+{% block titletag %}{% trans "Data availability" %}{% endblock %}
+
+{% block extra_css %}
+    {{ block.super }}
+    <style>
+        .availability-selectors {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: flex-end;
+            gap: 1rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .availability-selectors label {
+            display: block;
+            margin-bottom: 0.25rem;
+            color: var(--w-color-text-label);
+        }
+
+        .availability-header {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            justify-content: space-between;
+            gap: 1rem;
+            margin-bottom: 1rem;
+        }
+
+        .availability-nav {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+
+        .availability-month {
+            min-width: 9rem;
+            text-align: center;
+            font-weight: 700;
+        }
+
+        .availability-meta {
+            margin: 0;
+            color: var(--w-color-text-meta);
+        }
+
+        .availability-calendar {
+            width: 100%;
+            table-layout: fixed;
+            border-collapse: separate;
+            border-spacing: 4px;
+        }
+
+        .availability-calendar th {
+            padding: 0.25rem;
+            color: var(--w-color-text-meta);
+            font-weight: 600;
+            text-align: center;
+        }
+
+        .availability-cell {
+            height: 4.5rem;
+            padding: 0.4rem 0.5rem;
+            vertical-align: top;
+            border: 1px solid var(--w-color-border-furniture);
+            border-radius: 4px;
+            background: var(--w-color-surface-field);
+        }
+
+        .availability-cell--pad {
+            border-color: transparent;
+            background: transparent;
+        }
+
+        .availability-day {
+            display: block;
+            font-weight: 600;
+        }
+
+        .availability-count {
+            display: block;
+            margin-top: 0.25rem;
+            font-size: 0.875rem;
+            font-variant-numeric: tabular-nums;
+        }
+
+        .availability-cell--complete {
+            background: var(--w-color-positive-100);
+        }
+
+        .availability-cell--not_expected {
+            background: var(--w-color-grey-50);
+            color: var(--w-color-grey-400);
+        }
+
+        .availability-cell--empty {
+            background: var(--w-color-critical-200);
+        }
+
+        .availability-cell--partial-1 {
+            background: color-mix(in srgb, var(--w-color-critical-200) 20%, var(--w-color-surface-field));
+        }
+
+        .availability-cell--partial-2 {
+            background: color-mix(in srgb, var(--w-color-critical-200) 35%, var(--w-color-surface-field));
+        }
+
+        .availability-cell--partial-3 {
+            background: color-mix(in srgb, var(--w-color-critical-200) 50%, var(--w-color-surface-field));
+        }
+
+        .availability-cell--partial-4 {
+            background: color-mix(in srgb, var(--w-color-critical-200) 65%, var(--w-color-surface-field));
+        }
+
+        .availability-legend {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 1.25rem;
+            margin-top: 1rem;
+            color: var(--w-color-text-meta);
+        }
+
+        .availability-legend span::before {
+            content: "";
+            display: inline-block;
+            width: 0.9rem;
+            height: 0.9rem;
+            margin-right: 0.4rem;
+            vertical-align: -0.1rem;
+            border: 1px solid var(--w-color-border-furniture);
+            border-radius: 2px;
+            background: var(--legend-colour);
+        }
+
+        .availability-legend .legend-note::before {
+            display: none;
+        }
+
+        .availability-legend .legend-complete {
+            --legend-colour: var(--w-color-positive-100);
+        }
+
+        .availability-legend .legend-partial {
+            --legend-colour: color-mix(in srgb, var(--w-color-critical-200) 50%, var(--w-color-surface-field));
+        }
+
+        .availability-legend .legend-empty {
+            --legend-colour: var(--w-color-critical-200);
+        }
+
+        .availability-legend .legend-not-expected {
+            --legend-colour: var(--w-color-grey-50);
+        }
+    </style>
+{% endblock %}
+
+{% block main_content %}
+    <form method="get" class="availability-selectors" id="availability-form">
+        <div>
+            <label for="availability-connection">{% trans "Connection" %}</label>
+            <select name="connection" id="availability-connection">
+                <option value="">{% trans "Select a connection" %}</option>
+                {% for connection in connections %}
+                    <option value="{{ connection.id }}"{% if connection.id == connection_id %} selected{% endif %}>
+                        {{ connection.name }}
+                    </option>
+                {% endfor %}
+            </select>
+        </div>
+        <div>
+            <label for="availability-station-link">{% trans "Station link" %}</label>
+            <select name="station_link" id="availability-station-link"{% if not connection_id %} disabled{% endif %}>
+                <option value="">{% trans "Select a station link" %}</option>
+                {% for link in station_links %}
+                    <option value="{{ link.id }}"{% if station_link and link.id == station_link.id %} selected{% endif %}>
+                        {{ link.station.name }}
+                    </option>
+                {% endfor %}
+            </select>
+        </div>
+        <button type="submit" class="button button-secondary">{% trans "Show" %}</button>
+    </form>
+
+    {% if not station_link %}
+        <div class="help-block help-info">
+            <p>
+                {% if connection_id %}
+                    {% trans "Choose a station link to see its data availability." %}
+                {% else %}
+                    {% trans "Choose a connection, then a station link, to see its data availability." %}
+                {% endif %}
+            </p>
+        </div>
+    {% else %}
+        <div class="availability-header">
+            <div>
+                <h2>{{ station_link }}</h2>
+                <p class="availability-meta">
+                    {% blocktrans with tz=availability.timezone_name %}Days are local days in the {{ tz }} timezone.{% endblocktrans %}
+                    <a href="{{ monitoring_url }}">{% trans "Station link monitoring" %}</a>
+                </p>
+            </div>
+            <div class="availability-nav">
+                <a href="{{ prev_url }}" class="button button-small button-secondary">&larr; {% trans "Previous" %}</a>
+                <span class="availability-month">{{ month_start|date:"F Y" }}</span>
+                <a href="{{ next_url }}" class="button button-small button-secondary">{% trans "Next" %} &rarr;</a>
+            </div>
+        </div>
+
+        <table class="availability-calendar">
+            <thead>
+            <tr>
+                {% for weekday in weekdays %}
+                    <th scope="col">{{ weekday|date:"D" }}</th>
+                {% endfor %}
+            </tr>
+            </thead>
+            <tbody>
+            {% for week in weeks %}
+                <tr>
+                    {% for day in week %}
+                        {% if day %}
+                            <td class="availability-cell availability-cell--{{ day.state }}{% if day.state == 'partial' %} availability-cell--partial-{{ day.level }}{% endif %}">
+                                <span class="availability-day">{{ day.date.day }}</span>
+                                {% if day.label %}<span class="availability-count">{{ day.label }}</span>{% endif %}
+                            </td>
+                        {% else %}
+                            <td class="availability-cell availability-cell--pad"></td>
+                        {% endif %}
+                    {% endfor %}
+                </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+
+        <div class="availability-legend">
+            <span class="legend-complete">{% trans "Complete" %}</span>
+            <span class="legend-partial">{% trans "Partial — darker means more missing hours" %}</span>
+            <span class="legend-empty">{% trans "No data" %}</span>
+            <span class="legend-not-expected">{% trans "Not expected" %}</span>
+            <span class="legend-note">{% trans "Counts show hours with data / hours expected" %}</span>
+        </div>
+    {% endif %}
+{% endblock %}
+
+{% block extra_js %}
+    {{ block.super }}
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            const form = document.getElementById('availability-form');
+            const connection = document.getElementById('availability-connection');
+            const stationLink = document.getElementById('availability-station-link');
+
+            // A new connection invalidates the chosen station link
+            connection.addEventListener('change', function () {
+                stationLink.disabled = true;
+                form.submit();
+            });
+        });
+    </script>
+{% endblock %}

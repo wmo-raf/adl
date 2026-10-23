@@ -19,3 +19,24 @@ meanings.
   filled from the station's metadata (`latitude`, `wsi_series`,
   `thermometer_height`) or from the observation time (`year` … `minute`).
   Only observation columns can be the target of a parameter mapping.
+
+## Monitoring
+
+**expected hour**
+: An hour in which a station link should have data: every hour from the
+  station link's **availability floor** up to now. Hours before the floor and
+  hours still to come (today's remaining hours) are not expected, and the
+  hour in progress is not expected until it has elapsed. A station link with no
+  floor expects nothing.
+
+**availability floor**
+: The earliest hour a station link is expected to have data for. It is the
+  collection start date (`get_first_collection_date()`) when the plugin sets
+  one, otherwise the hour of the link's first saved record. The start date
+  wins even when it predates the first record, which is what makes the hours
+  between them gaps.
+
+**gap**
+: An expected hour with no record for any parameter. An hour is present if at
+  least one record exists for any parameter in it, so a gap is a missing
+  hour, not a missing value.
