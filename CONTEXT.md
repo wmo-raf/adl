@@ -42,7 +42,8 @@ meanings.
   hour, not a missing value.
 
 **parameter gap**
-: A currently mapped parameter (per `get_variable_mappings()`) with no record
-  in an expected hour that is otherwise present. Shown as a corner marker on
+: An expected hour in which a currently mapped parameter (per
+  `get_variable_mappings()`) has no record, whether or not other parameters
+  reported in that hour. Shown as a corner marker on
   the month calendar cell and as a missing hour in that parameter's row of the
   day view. Parameters with data but no current mapping never count as gaps.
