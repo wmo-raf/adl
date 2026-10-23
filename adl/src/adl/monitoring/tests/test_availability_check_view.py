@@ -321,6 +321,17 @@ class DayViewRenderingTests(CheckViewTestCase):
 
         self.assertContains(self.day(), "Try by fetching data")
 
+    def test_the_fetch_action_carries_the_checks_parameter(self):
+        parameter = DataParameterFactory()
+        self.store(tier=TIER_LISTING, status=SourceCheckStatus.FAILED, parameter=parameter)
+
+        self.assertContains(self.day(), f'data-parameter="{parameter.id}"')
+
+    def test_an_any_parameter_check_carries_no_parameter(self):
+        self.store(tier=TIER_LISTING, status=SourceCheckStatus.FAILED)
+
+        self.assertContains(self.day(), 'data-parameter=""')
+
     def test_a_malformed_listing_stored_message_is_shown_with_the_action(self):
         self.store(tier=TIER_LISTING, status=SourceCheckStatus.MALFORMED,
                    message="The plugin returned str instead of an AvailabilityCheckResult.")

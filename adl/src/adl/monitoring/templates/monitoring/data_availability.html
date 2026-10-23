@@ -589,7 +589,7 @@
                         {% if item.check.message %}<p class="availability-meta">{{ item.check.message }}{% if item.check.category %} ({{ item.check.category }}){% endif %}</p>{% endif %}
                         {% if item.can_fetch_instead %}
                             <p><button type="button" class="button button-small button-secondary availability-fetch-instead"
-                                       data-start="{{ item.check.window_start.isoformat }}" data-end="{{ item.check.window_end.isoformat }}">{% trans "Try by fetching data" %}</button></p>
+                                       data-start="{{ item.check.window_start.isoformat }}" data-end="{{ item.check.window_end.isoformat }}" data-parameter="{{ item.check.parameter_id|default_if_none:'' }}">{% trans "Try by fetching data" %}</button></p>
                         {% endif %}
                     </div>
                 {% endfor %}
@@ -767,6 +767,7 @@
                         submit(new URLSearchParams({
                             station_link: bar.dataset.stationLink, start: fetchButton.dataset.start,
                             end: fetchButton.dataset.end, fetch: '1',
+                            parameter: fetchButton.dataset.parameter || '',
                         }));
                     });
                 });

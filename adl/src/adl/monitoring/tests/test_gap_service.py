@@ -407,6 +407,22 @@ class ListingFailureHandlingTests(GapServiceTestCase):
         self.assertEqual(outcome.tier, TIER_FETCH)
 
 
+class StoredParameterTests(GapServiceTestCase):
+    def test_a_check_remembers_the_parameter_row_it_was_made_from(self):
+        self.support_listing(lambda s, start, end: AvailabilityCheckResult(
+            status=SourceCheckStatus.FAILED, message="down"))
+
+        stored = check(self.link, *self.window(), parameter_id=self.parameter.id, now=NOW).check
+
+        self.assertEqual(stored.parameter_id, self.parameter.id)
+
+    def test_an_any_parameter_check_stores_no_parameter(self):
+        self.support_listing(lambda s, start, end: AvailabilityCheckResult(
+            status=SourceCheckStatus.FAILED, message="down"))
+
+        self.assertIsNone(check(self.link, *self.window(), now=NOW).check.parameter_id)
+
+
 class ListingCooldownTests(GapServiceTestCase):
     def setUp(self):
         super().setUp()

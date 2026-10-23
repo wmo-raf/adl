@@ -219,6 +219,9 @@ class AvailabilityCheck(models.Model):
     finishes, whichever tier answered; read by the day view, where the latest
     answer covering an hour applies and earlier ones are history.
 
+    ``parameter`` is the row the check was made from, ``None`` for any-parameter,
+    so a retry can ask the same question.
+
     ``ranges`` is a list of ``{"start", "end", "count", "label"}`` objects
     (ISO-8601 times) and ``parameter_coverage`` maps an ADL parameter id to the
     UTC hour starts in which the source has a value for it — populated only by
@@ -235,6 +238,9 @@ class AvailabilityCheck(models.Model):
                                      verbose_name=_("Station Link"))
     window_start = models.DateTimeField(verbose_name=_("Window Start"))
     window_end = models.DateTimeField(verbose_name=_("Window End"))
+    parameter = models.ForeignKey('core.DataParameter', on_delete=models.CASCADE,
+                                  null=True, blank=True, related_name="+",
+                                  verbose_name=_("Parameter"))
     created_at = models.DateTimeField(verbose_name=_("Created At"))
     tier = models.CharField(max_length=20, verbose_name=_("Tier"))
     status = models.CharField(max_length=20, verbose_name=_("Status"))
