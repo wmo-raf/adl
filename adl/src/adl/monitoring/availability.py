@@ -149,12 +149,8 @@ def _mapped_parameters(station_link):
     return list(parameters.values())
 
 
-def month_availability(station_link, year, month, now=None):
-    """Per-local-day availability of ``station_link`` for one calendar month."""
-    now = (now or dj_timezone.now()).astimezone(py_tz.utc)
-    tz = ZoneInfo(str(station_link.timezone))
-    floor = _availability_floor(station_link)
-
+def _month_boundaries(year, month, tz):
+    """UTC starts of each local day of the month, plus the end of the last."""
     days_in_month = monthrange(year, month)[1]
     boundaries = [
         datetime(year, month, day, tzinfo=tz).astimezone(py_tz.utc)
@@ -165,6 +161,48 @@ def month_availability(station_link, year, month, now=None):
         .replace(hour=0, minute=0)
         .astimezone(py_tz.utc)
     )
+    return boundaries
+
+
+def _month_days(year, month, boundaries, floor, now, buckets, parameter_buckets):
+    """Per-day availability from sorted UTC bucket lists.
+
+    ``buckets`` holds the hours with any record, ``parameter_buckets`` maps each
+    mapped parameter id to its own sorted hours.
+    """
+    elapsed_until = _floor_hour(now)
+    days = []
+    for index in range(len(boundaries) - 1):
+        lo = _ceil_hour(boundaries[index])
+        hi = min(_ceil_hour(boundaries[index + 1]), elapsed_until)
+        if floor is None:
+            # nothing is expected anywhere without a floor
+            lo = hi
+        else:
+            lo = max(lo, floor)
+
+        expected = max(0, int((hi - lo) / HOUR))
+        present = bisect_left(buckets, hi) - bisect_left(buckets, lo) if expected else 0
+        has_gap = bool(expected) and any(
+            bisect_left(values, hi) - bisect_left(values, lo) < expected
+            for values in parameter_buckets.values()
+        )
+        days.append(DayAvailability(
+            date=date(year, month, index + 1),
+            expected_hours=expected,
+            present_hours=present,
+            has_parameter_gap=has_gap,
+        ))
+    return days
+
+
+def month_availability(station_link, year, month, now=None):
+    """Per-local-day availability of ``station_link`` for one calendar month."""
+    now = (now or dj_timezone.now()).astimezone(py_tz.utc)
+    tz = ZoneInfo(str(station_link.timezone))
+    floor = _availability_floor(station_link)
+
+    boundaries = _month_boundaries(year, month, tz)
     first_bucket = _ceil_hour(boundaries[0])
     last_bucket_end = _ceil_hour(boundaries[-1])
 
@@ -193,37 +231,154 @@ def month_availability(station_link, year, month, now=None):
         for values in parameter_buckets.values():
             values.sort()
 
-    elapsed_until = _floor_hour(now)
-    days = []
-    for index in range(days_in_month):
-        lo = _ceil_hour(boundaries[index])
-        hi = min(_ceil_hour(boundaries[index + 1]), elapsed_until)
-        if floor is None:
-            # nothing is expected anywhere without a floor
-            lo = hi
-        else:
-            lo = max(lo, floor)
-
-        expected = max(0, int((hi - lo) / HOUR))
-        present = bisect_left(buckets, hi) - bisect_left(buckets, lo) if expected else 0
-        has_gap = bool(expected) and any(
-            bisect_left(values, hi) - bisect_left(values, lo) < expected
-            for values in parameter_buckets.values()
-        )
-        days.append(DayAvailability(
-            date=date(year, month, index + 1),
-            expected_hours=expected,
-            present_hours=present,
-            has_parameter_gap=has_gap,
-        ))
-
     return MonthAvailability(
         year=year,
         month=month,
         timezone_name=str(station_link.timezone),
-        days=days,
+        days=_month_days(year, month, boundaries, floor, now, buckets, parameter_buckets),
         floor=floor,
     )
+
+
+@dataclass(frozen=True)
+class LinkMonthSummary:
+    station_link: object
+    enabled: bool
+    timezone_name: str
+    days: List[DayAvailability]
+
+    @property
+    def expected_hours(self):
+        return sum(day.expected_hours for day in self.days)
+
+    @property
+    def present_hours(self):
+        return sum(day.present_hours for day in self.days)
+
+    @property
+    def missing_hours(self):
+        return self.expected_hours - self.present_hours
+
+    @property
+    def percent(self):
+        """Share of expected hours present, 0 to 100; ``None`` when none expected."""
+        if not self.expected_hours:
+            return None
+        return round(100 * self.present_hours / self.expected_hours)
+
+    @property
+    def name(self):
+        return self.station_link.station.name
+
+
+@dataclass(frozen=True)
+class ConnectionGrid:
+    year: int
+    month: int
+    days_in_month: int
+    rows: List[LinkMonthSummary]  # enabled links, in the requested order
+    disabled_rows: List[LinkMonthSummary]  # always alphabetical, never ranked
+
+
+SORT_MISSING = "missing"
+SORT_NAME = "name"
+
+
+def _link_mapped_ids(station_link):
+    ids = []
+    for mapping in station_link.get_variable_mappings() or []:
+        parameter_id = getattr(mapping, "adl_parameter_id", None)
+        if parameter_id is None:
+            parameter = getattr(mapping, "adl_parameter", None)
+            parameter_id = getattr(parameter, "id", None)
+        if parameter_id is not None and parameter_id not in ids:
+            ids.append(parameter_id)
+    return ids
+
+
+def connection_availability(connection, station_links, year, month, sort=SORT_MISSING, now=None):
+    """Month availability of every station link of ``connection``.
+
+    The records of all links are read with one aggregate query (plus one more
+    for the first record of links without a collection start date) and rolled
+    up in Python. Enabled links are ranked worst-first by missing expected
+    hours, or alphabetically for ``sort="name"``; disabled links are listed
+    apart, alphabetically.
+    """
+    now = (now or dj_timezone.now()).astimezone(py_tz.utc)
+    station_links = list(station_links)
+    days_in_month = monthrange(year, month)[1]
+    if not station_links:
+        return ConnectionGrid(year, month, days_in_month, [], [])
+
+    def zone_name(link):
+        if link.use_connection_timezone:
+            return str(connection.stations_timezone)
+        return str(link.timezone_info)
+
+    zones = {link.id: ZoneInfo(zone_name(link)) for link in station_links}
+    boundaries = {link.id: _month_boundaries(year, month, zones[link.id]) for link in station_links}
+    window_start = _ceil_hour(min(b[0] for b in boundaries.values()))
+    window_end = _ceil_hour(max(b[-1] for b in boundaries.values()))
+
+    # station id -> {parameter id: [UTC buckets]}
+    by_station = {}
+    rows = HourlyObsAgg.objects.filter(
+        connection_id=connection.id,
+        station_id__in=[link.station_id for link in station_links],
+        bucket__gte=window_start,
+        bucket__lt=window_end,
+    ).values_list("station_id", "parameter_id", "bucket")
+    for station_id, parameter_id, bucket in rows:
+        by_station.setdefault(station_id, {}).setdefault(parameter_id, []).append(
+            bucket.astimezone(py_tz.utc)
+        )
+
+    start_dates = {link.id: link.get_first_collection_date() for link in station_links}
+    first_records = {}
+    if any(start is None for start in start_dates.values()):
+        first_records = {
+            row["station_id"]: row["first"]
+            for row in HourlyObsAgg.objects.filter(
+                connection_id=connection.id,
+                station_id__in=[link.station_id for link in station_links],
+            ).values("station_id").annotate(first=Min("bucket"))
+        }
+
+    summaries = []
+    for link in station_links:
+        start = start_dates[link.id]
+        if start is not None:
+            floor = _floor_hour(start.astimezone(py_tz.utc))
+        else:
+            first = first_records.get(link.station_id)
+            floor = first.astimezone(py_tz.utc) if first else None
+
+        per_parameter = by_station.get(link.station_id, {})
+        buckets = sorted({bucket for values in per_parameter.values() for bucket in values})
+        parameter_buckets = {
+            parameter_id: sorted(per_parameter.get(parameter_id, []))
+            for parameter_id in _link_mapped_ids(link)
+        }
+        summaries.append(LinkMonthSummary(
+            station_link=link,
+            enabled=link.enabled,
+            timezone_name=str(zones[link.id]),
+            days=_month_days(
+                year, month, boundaries[link.id], floor, now, buckets, parameter_buckets
+            ),
+        ))
+
+    def by_name(summary):
+        return (summary.name.lower(), summary.station_link.id)
+
+    enabled = [summary for summary in summaries if summary.enabled]
+    disabled = sorted((summary for summary in summaries if not summary.enabled), key=by_name)
+    if sort == SORT_NAME:
+        enabled.sort(key=by_name)
+    else:
+        enabled.sort(key=lambda summary: (-summary.missing_hours, *by_name(summary)))
+    return ConnectionGrid(year, month, days_in_month, enabled, disabled)
 
 
 def day_availability(station_link, day, now=None):

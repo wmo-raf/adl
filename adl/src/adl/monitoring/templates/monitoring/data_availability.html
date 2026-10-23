@@ -190,6 +190,58 @@
             background: color-mix(in srgb, var(--w-color-critical-200) 65%, var(--w-color-surface-field));
         }
 
+        .availability-grid-wrap {
+            overflow-x: auto;
+        }
+
+        .availability-grid {
+            border-collapse: separate;
+            border-spacing: 2px;
+        }
+
+        .availability-grid thead th {
+            padding: 0;
+            text-align: center;
+            font-size: 0.75rem;
+            font-weight: 400;
+            color: var(--w-color-text-meta);
+        }
+
+        .availability-grid th.availability-grid-label {
+            padding-right: 0.75rem;
+            text-align: left;
+            white-space: nowrap;
+        }
+
+        .availability-grid .availability-cell {
+            min-width: 2.4rem;
+            height: 2.2rem;
+            padding: 0.15rem;
+            text-align: center;
+            vertical-align: middle;
+        }
+
+        .availability-grid .availability-count {
+            margin-top: 0;
+            font-size: 0.65rem;
+        }
+
+        .availability-grid .availability-grid-summary {
+            padding-left: 0.75rem;
+            white-space: nowrap;
+            font-variant-numeric: tabular-nums;
+        }
+
+        .availability-grid tr.availability-row--muted {
+            opacity: 0.6;
+        }
+
+        .availability-disabled summary {
+            cursor: pointer;
+            margin: 1rem 0 0.5rem;
+            font-weight: 600;
+        }
+
         .availability-legend {
             display: flex;
             flex-wrap: wrap;
@@ -269,15 +321,108 @@
         <button type="submit" class="button button-secondary">{% trans "Show" %}</button>
     </form>
 
-    {% if not station_link %}
+    {% if not station_link and not grid %}
         <div class="help-block help-info">
             <p>
-                {% if connection_id %}
-                    {% trans "Choose a station link to see its data availability." %}
-                {% else %}
-                    {% trans "Choose a connection, then a station link, to see its data availability." %}
-                {% endif %}
+                {% trans "Choose a connection to see the availability of its station links." %}
             </p>
+        </div>
+    {% elif not station_link %}
+        <div class="availability-header">
+            <div>
+                <h2>{% trans "Connection grid" %}</h2>
+                <p class="availability-meta">
+                    {% trans "Days are local days in each station link's timezone." %}
+                    {% trans "Sorted by" %}
+                    {% if grid_sort == "name" %}
+                        <a href="{{ sort_missing_url }}">{% trans "most missing hours" %}</a> | <strong>{% trans "name" %}</strong>
+                    {% else %}
+                        <strong>{% trans "most missing hours" %}</strong> | <a href="{{ sort_name_url }}">{% trans "name" %}</a>
+                    {% endif %}
+                </p>
+            </div>
+            <div class="availability-nav">
+                <a href="{{ prev_url }}" class="button button-small button-secondary">&larr; {% trans "Previous" %}</a>
+                <span class="availability-month">{{ month_start|date:"F Y" }}</span>
+                <a href="{{ next_url }}" class="button button-small button-secondary">{% trans "Next" %} &rarr;</a>
+            </div>
+        </div>
+
+        {% if not grid_rows and not grid_disabled_rows %}
+            <div class="help-block help-info"><p>{% trans "This connection has no station links." %}</p></div>
+        {% else %}
+        <div class="availability-grid-wrap">
+            <table class="availability-grid">
+                <thead>
+            <tr>
+                <th scope="col"></th>
+                {% for day in grid_days %}<th scope="col">{{ day }}</th>{% endfor %}
+                <th scope="col"></th>
+            </tr>
+            </thead>
+                <tbody>
+                {% for row in grid_rows %}
+                <tr>
+                    <th scope="row" class="availability-grid-label"><a href="{{ row.month_url }}">{{ row.summary.name }}</a></th>
+                    {% for cell in row.cells %}
+                        {% with day=cell.0 %}
+                        <td class="availability-cell availability-cell--{{ day.state }}{% if day.state == 'partial' %} availability-cell--partial-{{ day.level }}{% endif %}{% if day.has_parameter_gap %} availability-cell--gap{% endif %}"{% if day.has_parameter_gap %} title="{% trans 'A mapped parameter is missing for some expected hours' %}"{% endif %}>
+                            <a href="{{ cell.1 }}" class="availability-cell-link" aria-label="{{ row.summary.name }}, {{ day.date|date:'j F Y' }}"></a>
+                            {% if day.label %}<span class="availability-count">{{ day.label }}</span>{% endif %}
+                        </td>
+                        {% endwith %}
+                    {% endfor %}
+                    <td class="availability-grid-summary">
+                        {% if row.summary.percent is None %}&mdash;{% else %}{{ row.summary.present_hours }}/{{ row.summary.expected_hours }} h ({{ row.summary.percent }}%){% endif %}
+                    </td>
+                </tr>
+            {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% if grid_disabled_rows %}
+            <details class="availability-disabled">
+                <summary>{% blocktrans count n=grid_disabled_rows|length %}Disabled ({{ n }}){% plural %}Disabled ({{ n }}){% endblocktrans %}</summary>
+                <div class="availability-grid-wrap">
+                    <table class="availability-grid">
+                        <thead>
+            <tr>
+                <th scope="col"></th>
+                {% for day in grid_days %}<th scope="col">{{ day }}</th>{% endfor %}
+                <th scope="col"></th>
+            </tr>
+            </thead>
+                        <tbody>
+                        {% for row in grid_disabled_rows %}
+                <tr class="availability-row--muted">
+                    <th scope="row" class="availability-grid-label"><a href="{{ row.month_url }}">{{ row.summary.name }}</a></th>
+                    {% for cell in row.cells %}
+                        {% with day=cell.0 %}
+                        <td class="availability-cell availability-cell--{{ day.state }}{% if day.state == 'partial' %} availability-cell--partial-{{ day.level }}{% endif %}{% if day.has_parameter_gap %} availability-cell--gap{% endif %}"{% if day.has_parameter_gap %} title="{% trans 'A mapped parameter is missing for some expected hours' %}"{% endif %}>
+                            <a href="{{ cell.1 }}" class="availability-cell-link" aria-label="{{ row.summary.name }}, {{ day.date|date:'j F Y' }}"></a>
+                            {% if day.label %}<span class="availability-count">{{ day.label }}</span>{% endif %}
+                        </td>
+                        {% endwith %}
+                    {% endfor %}
+                    <td class="availability-grid-summary">
+                        {% if row.summary.percent is None %}&mdash;{% else %}{{ row.summary.present_hours }}/{{ row.summary.expected_hours }} h ({{ row.summary.percent }}%){% endif %}
+                    </td>
+                </tr>
+            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </details>
+        {% endif %}
+        {% endif %}
+
+        <div class="availability-legend">
+            <span class="legend-complete">{% trans "Complete" %}</span>
+            <span class="legend-partial">{% trans "Partial — darker means more missing hours" %}</span>
+            <span class="legend-empty">{% trans "No data" %}</span>
+            <span class="legend-gap">{% trans "A mapped parameter is missing for some expected hours" %}</span>
+            <span class="legend-not-expected">{% trans "Not expected" %}</span>
+            <span class="legend-note">{% trans "Counts show hours with data / hours expected" %}</span>
         </div>
     {% else %}
         <div class="availability-header">
