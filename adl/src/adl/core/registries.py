@@ -30,6 +30,7 @@ from celery.exceptions import SoftTimeLimitExceeded
 from django.core.exceptions import ImproperlyConfigured
 from django.utils import timezone as dj_timezone
 
+from . import aggregates
 from .classification import mark_failed, stamp_failure
 from .date_utils import make_record_timezone_aware
 from .logging import TaskLogger
@@ -1085,6 +1086,20 @@ class Plugin(Instance):
             activity_log.save()
             if not bypass_lock:
                 cache.delete(lock_key)
+
+            # The aggregate's refresh policy only reaches back 90 days, so a save
+            # into an explicit (possibly older) window must refresh that window.
+            # Scheduled incremental runs are covered by the policy.
+            explicit_window = initial_start_date or initial_end_date
+            if explicit_window and tally.saved and tally.earliest and tally.latest:
+                try:
+                    aggregates.refresh_hourly_aggregate(tally.earliest, tally.latest)
+                except Exception as e:
+                    log.error(
+                        "Hourly aggregate refresh failed for %s (%s to %s): %s; "
+                        "the saved records are intact.",
+                        station_link, tally.earliest, tally.latest, e
+                    )
 
         return tally.saved
     
