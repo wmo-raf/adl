@@ -223,14 +223,17 @@ def run_fetch_check(station_link, window) -> AvailabilityCheckResult:
             if not window.start <= observed < window.end:
                 continue
             hour = observed.replace(minute=0, second=0, microsecond=0)
+            has_value = False
             for mapping in mappings:
                 if record.get(mapping.source_parameter_name) is None:
                     continue
-                per_hour[hour] += 1
+                has_value = True
                 parameter_id = getattr(mapping, "adl_parameter_id", None)
                 if parameter_id is None:
                     parameter_id = mapping.adl_parameter.id
                 per_parameter.setdefault(parameter_id, Counter())[hour] += 1
+            if has_value:
+                per_hour[hour] += 1  # one record, however many parameters it carries
     except Exception as exc:
         logger.exception("[AVAILABILITY CHECK] fetch failed for station link %s", station_link.id)
         return normalise_availability_check_result(_failed(exc), TIER_FETCH)

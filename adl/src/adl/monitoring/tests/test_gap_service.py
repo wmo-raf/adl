@@ -206,6 +206,18 @@ class FetchTierTests(GapServiceTestCase):
         )
         self.assertEqual(ObservationRecord.objects.count(), before)
 
+    def test_a_record_with_several_mapped_values_counts_once_per_hour(self):
+        second = DataParameterFactory()
+        mappings = [self.mapping, make_mapping(second, None, source_name="rh")]
+        self.plugin.records = [{"observation_time": utc(2026, 3, 5, 6, 10), "te": 1.0, "rh": 2.0}]
+
+        with patch.object(StationLink, "get_variable_mappings", lambda self: mappings):
+            check(self.link, *self.window(), now=NOW)
+
+        stored = AvailabilityCheck.objects.get()
+        self.assertEqual([r["count"] for r in stored.ranges], [1])
+        self.assertEqual(set(stored.parameter_coverage), {str(self.parameter.id), str(second.id)})
+
     def test_values_the_station_link_does_not_map_are_not_counted(self):
         self.plugin.records = [{"observation_time": utc(2026, 3, 5, 6, 10), "unmapped": 1}]
 
