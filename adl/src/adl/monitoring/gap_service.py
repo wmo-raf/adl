@@ -321,7 +321,8 @@ def check(station_link, start, end, parameter_id=None, force_fetch=False, now=No
 
     try:
         if station_link.availability_check_supported and not force_fetch:
-            # claim before dialling, and never release: a crashed listing still dialled
+            # claim before dialling; a crashed listing still dialled, so it keeps the
+            # claim, but an UNSUPPORTED answer asked nothing of the source (below)
             if not claim_probe_cooldown(cooldown_key(station_link.id), dj_timezone.now()):
                 raise CheckCoolingDown(
                     _("This source was checked a moment ago. Wait a minute before checking again."))
@@ -330,6 +331,7 @@ def check(station_link, start, end, parameter_id=None, force_fetch=False, now=No
                 stored = store_result(station_link, window, result, now=now)
                 release(station_link.id)
                 return CheckOutcome(tier=TIER_LISTING, check=stored)
+            cache.delete(cooldown_key(station_link.id))
 
         task = run_availability_check.delay(
             station_link.id, window.start.isoformat(), window.end.isoformat(), parameter_id)
