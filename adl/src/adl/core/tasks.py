@@ -18,7 +18,7 @@ from adl.config.celery import app
 from adl.monitoring.models import StationLinkActivityLog
 from .broker_connection import bounded_broker_connection, bounded_inspect
 from .classification import mark_failed, stamp_failure
-from .dispatchers import get_station_dispatch_records
+from .dispatchers import advance_dispatch_cursor, get_station_dispatch_records
 from .logging import TaskLogger
 from .redaction import redact_secrets
 from .utils import get_object_or_none
@@ -699,7 +699,7 @@ def perform_channel_dispatch(self, channel_id, station_link_ids=None):
 
 @shared_task(bind=True, name="adl.core.tasks.dispatch_station")
 def dispatch_station(self, channel_id, station_link_id):
-    from .models import DispatchChannel, StationChannelDispatchStatus, StationLink
+    from .models import DispatchChannel, StationLink
 
     channel = get_object_or_none(DispatchChannel, id=channel_id)
     station_link = get_object_or_none(StationLink, id=station_link_id)
@@ -748,21 +748,9 @@ def dispatch_station(self, channel_id, station_link_id):
 
         previous_sent_obs_time = None
         if num_sent > 0 and last_sent_obs_time:
-            status = get_object_or_none(
-                StationChannelDispatchStatus,
-                channel_id=channel_id,
-                station_id=station_link.station_id,
+            previous_sent_obs_time = advance_dispatch_cursor(
+                channel_id, station_link.station_id, last_sent_obs_time
             )
-            if status:
-                previous_sent_obs_time = status.last_sent_obs_time
-                status.last_sent_obs_time = last_sent_obs_time
-                status.save()
-            else:
-                StationChannelDispatchStatus.objects.create(
-                    channel_id=channel_id,
-                    station_id=station_link.station_id,
-                    last_sent_obs_time=last_sent_obs_time,
-                )
 
         log.success = True
         log.records_count = num_sent

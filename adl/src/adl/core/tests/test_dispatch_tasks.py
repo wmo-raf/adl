@@ -56,6 +56,40 @@ class DispatchStationTests(DispatchTaskTestCase):
         self.assertEqual(checkpoint.last_sent_obs_time, self.obs_time)
 
 
+    def test_earlier_returned_time_leaves_checkpoint_unchanged(self):
+        later = self.obs_time + timedelta(hours=2)
+        StationChannelDispatchStatus.objects.create(
+            channel=self.channel, station=self.link.station, last_sent_obs_time=later
+        )
+
+        with patch("adl.core.tasks.get_station_dispatch_records", return_value=self.records), \
+                patch.object(Wis2BoxUpload, "send_station_data", return_value=(1, self.obs_time)):
+            dispatch_station(self.channel.id, self.link.id)
+
+        checkpoint = StationChannelDispatchStatus.objects.get(
+            channel=self.channel, station=self.link.station
+        )
+        self.assertEqual(checkpoint.last_sent_obs_time, later)
+
+        log = StationLinkActivityLog.objects.get()
+        self.assertEqual(log.obs_start_time, later)
+        self.assertEqual(log.obs_end_time, self.obs_time)
+
+    def test_later_returned_time_advances_checkpoint(self):
+        StationChannelDispatchStatus.objects.create(
+            channel=self.channel, station=self.link.station,
+            last_sent_obs_time=self.obs_time - timedelta(hours=1),
+        )
+
+        with patch("adl.core.tasks.get_station_dispatch_records", return_value=self.records), \
+                patch.object(Wis2BoxUpload, "send_station_data", return_value=(1, self.obs_time)):
+            dispatch_station(self.channel.id, self.link.id)
+
+        checkpoint = StationChannelDispatchStatus.objects.get(
+            channel=self.channel, station=self.link.station
+        )
+        self.assertEqual(checkpoint.last_sent_obs_time, self.obs_time)
+
     def test_timed_out_dispatch_logged_as_failed_without_raising(self):
         with patch("adl.core.tasks.get_station_dispatch_records", return_value=self.records), \
                 patch.object(Wis2BoxUpload, "send_station_data", side_effect=SoftTimeLimitExceeded()):

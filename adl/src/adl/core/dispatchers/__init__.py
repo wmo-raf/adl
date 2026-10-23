@@ -253,8 +253,37 @@ def get_dispatch_channel_data(dispatch_channel, station_link_ids=None):
     return station_records_by_id
 
 
+def advance_dispatch_cursor(channel_id, station_id, sent_obs_time):
+    """Move a channel's per-station cursor forward to ``sent_obs_time``.
+
+    The cursor is monotonic: it only advances to the later of the stored and
+    new values. Returns the cursor as it was before the call (``None`` if the
+    station had no status row yet).
+    """
+    from adl.core.models import StationChannelDispatchStatus
+
+    status = get_object_or_none(
+        StationChannelDispatchStatus,
+        channel_id=channel_id,
+        station_id=station_id,
+    )
+    if not status:
+        StationChannelDispatchStatus.objects.create(
+            channel_id=channel_id,
+            station_id=station_id,
+            last_sent_obs_time=sent_obs_time,
+        )
+        return None
+
+    previous = status.last_sent_obs_time
+    if previous is None or sent_obs_time > previous:
+        status.last_sent_obs_time = sent_obs_time
+        status.save()
+    return previous
+
+
 def run_dispatch_channel(dispatcher_id, station_link_ids=None):
-    from adl.core.models import DispatchChannel, StationChannelDispatchStatus, StationLink
+    from adl.core.models import DispatchChannel, StationLink
     dispatch_channel = get_object_or_none(DispatchChannel, id=dispatcher_id)
     
     if not dispatch_channel:
@@ -307,22 +336,9 @@ def run_dispatch_channel(dispatcher_id, station_link_ids=None):
                 
                 total_num_of_records += num_of_sent_records
                 
-                station_dispatch_status = get_object_or_none(
-                    StationChannelDispatchStatus,
-                    channel_id=dispatch_channel.id,
-                    station_id=station_id
+                previous_sent_obs_time = advance_dispatch_cursor(
+                    dispatch_channel.id, station_id, last_sent_obs_time
                 )
-                
-                if station_dispatch_status:
-                    previous_sent_obs_time = station_dispatch_status.last_sent_obs_time
-                    station_dispatch_status.last_sent_obs_time = last_sent_obs_time
-                    station_dispatch_status.save()
-                else:
-                    StationChannelDispatchStatus.objects.create(
-                        channel_id=dispatch_channel.id,
-                        station_id=station_id,
-                        last_sent_obs_time=last_sent_obs_time
-                    )
             
             log.success = True
             log.records_count = num_of_sent_records
