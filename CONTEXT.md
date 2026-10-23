@@ -55,3 +55,16 @@ meanings.
   present out of expected hours. Enabled links are ranked worst-first by
   missing expected hours (or alphabetically); disabled links are listed apart
   and never ranked.
+
+**availability check**
+: A read-only question to the source about one **gap** window of a station
+  link: does the source have data for it? Distinct from the **source check**,
+  which asks whether the source is reachable and offers anything for a
+  station at all, whatever the period. The window is exactly a selected run of
+  missing hours, at most one local day, and never from an unmapped parameter's
+  row. It is answered by the first tier available: the station link's own
+  cheap `check_availability()` (a listing), otherwise core fetches and parses
+  the window through `get_station_data`, counts records per hour and per
+  parameter, and saves nothing. The answer is stored, shown on the hours it
+  covers, and says which tier answered. One check or recovery runs per station
+  link at a time.
