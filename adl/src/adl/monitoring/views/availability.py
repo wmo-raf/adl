@@ -1,15 +1,23 @@
 import calendar
 import re
-from datetime import date
+from datetime import date, datetime
 from urllib.parse import urlencode
 from zoneinfo import ZoneInfo
 
+from celery.result import AsyncResult
+from django.core.exceptions import PermissionDenied
+from django.http import JsonResponse
 from django.shortcuts import render
+from django.views.decorators.http import require_GET, require_POST
 from django.urls import reverse
 from django.utils import timezone as dj_timezone
 from django.utils.translation import gettext as _
 
+from adl.core.availability_checks import TIER_FETCH, TIER_LISTING
 from adl.core.models import NetworkConnection, StationLink
+from adl.core.permissions import can_manage_connection
+from adl.core.source_checks import SourceCheckStatus
+from .. import gap_service
 from ..availability import (
     SORT_MISSING,
     SORT_NAME,
@@ -108,6 +116,41 @@ def _calendar_weeks(availability, station_link_id):
     ]
 
 
+def _matrix_rows(day_detail, overlay):
+    """The day view's rows, any-parameter row first, each cell paired with what
+    the stored availability checks say about it."""
+    def build(row, is_any):
+        parameter_id = None if is_any else row.parameter.id
+        return {
+            "is_any": is_any,
+            "parameter": row.parameter,
+            "parameter_id": parameter_id,
+            "mapped": row.mapped,
+            "cells": [
+                {"cell": cell, "mark": overlay.cells.get((parameter_id, cell.start))}
+                for cell in row.cells
+            ],
+        }
+
+    return [build(day_detail.any_row, True)] + [build(row, False) for row in day_detail.rows]
+
+
+def _check_items(overlay, tz):
+    """The stored checks of the day, with their window in the station's local time."""
+    return [
+        {
+            "summary": summary,
+            "check": summary.check,
+            "local_start": summary.check.window_start.astimezone(tz),
+            "local_end": summary.check.window_end.astimezone(tz),
+            "by_listing": summary.check.tier == TIER_LISTING,
+            "by_fetch": summary.check.tier == TIER_FETCH,
+            "ok": summary.check.status == SourceCheckStatus.OK,
+        }
+        for summary in overlay.summaries
+    ]
+
+
 def data_availability(request):
     """Month calendar of a station link's data availability, or the connection
     grid of all its links when only a connection is chosen.
@@ -176,7 +219,18 @@ def data_availability(request):
             "monitoring_url": reverse("station_link_monitoring", args=[station_link.id]),
         })
         if day:
-            context["day_detail"] = day_availability(station_link, day)
+            day_detail = day_availability(station_link, day)
+            overlay = gap_service.day_check_overlay(station_link, day_detail)
+            context["day_detail"] = day_detail
+            context["matrix_rows"] = _matrix_rows(day_detail, overlay)
+            context["check_items"] = _check_items(
+                overlay, ZoneInfo(str(station_link.timezone)))
+            context["can_check"] = (
+                station_link.network_connection.has_external_source
+                and can_manage_connection(request.user, station_link.network_connection)
+            )
+            context["check_instant"] = station_link.availability_check_supported
+            context["check_url"] = reverse("availability_check")
 
     elif connection_id:
         connection = connections.get(id=connection_id)
@@ -200,3 +254,93 @@ def data_availability(request):
         })
 
     return render(request, "monitoring/data_availability.html", context)
+
+
+def _json_error(message, status):
+    return JsonResponse({"error": str(message)}, status=status)
+
+
+def _parse_instant(value):
+    """An aware datetime from an ISO-8601 string (``Z`` allowed), or ``None``."""
+    try:
+        parsed = datetime.fromisoformat((value or "").replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    return parsed if parsed.tzinfo is not None else None
+
+
+def _managed_station_link(request, link_id):
+    """The station link, or a ``PermissionDenied``/``None``: the check actions
+    are gated on managing its connection, which holds the credentials the
+    action will use."""
+    station_link = StationLink.objects.filter(id=link_id).first() if link_id else None
+    if station_link is None:
+        return None
+    if not can_manage_connection(request.user, station_link.network_connection):
+        raise PermissionDenied
+    return station_link
+
+
+@require_POST
+def availability_check(request):
+    """Ask the source whether it has data for a window of a station link.
+
+    ``station_link``, ``start`` and ``end`` (ISO-8601, any offset), optionally
+    ``parameter`` (the selected row) and ``fetch=1`` (skip the cheap check and
+    fetch the data). Answers ``{"state": "SUCCESS", "check_id": ...}`` when the
+    listing tier answered at once, or ``{"state": "PENDING", "task_id": ...}``
+    when a background task will; poll :func:`availability_check_status`.
+    """
+    station_link = _managed_station_link(request, _positive_int(request.POST.get("station_link")))
+    if station_link is None:
+        return _json_error(_("Unknown station link."), 404)
+
+    start = _parse_instant(request.POST.get("start"))
+    end = _parse_instant(request.POST.get("end"))
+    if start is None or end is None:
+        return _json_error(_("The window needs aware start and end times."), 400)
+
+    raw_parameter = request.POST.get("parameter")
+    parameter_id = _positive_int(raw_parameter)
+    if raw_parameter and parameter_id is None:
+        return _json_error(_("Unknown parameter."), 400)
+
+    try:
+        outcome = gap_service.check(
+            station_link, start, end, parameter_id=parameter_id,
+            force_fetch=request.POST.get("fetch") == "1",
+        )
+    except gap_service.CheckInFlight as exc:
+        return _json_error(exc, 409)
+    except gap_service.GapServiceError as exc:
+        return _json_error(exc, 400)
+
+    if outcome.check is not None:
+        return JsonResponse({"state": "SUCCESS", "tier": outcome.tier,
+                             "check_id": outcome.check.id})
+    return JsonResponse({"state": "PENDING", "tier": outcome.tier, "task_id": outcome.task_id})
+
+
+@require_GET
+def availability_check_status(request, task_id):
+    """The state of a background availability check, for the page to poll.
+
+    ``station_link`` must be given and manageable by the user, and the stored
+    result must belong to it, so a task id alone reveals nothing.
+    """
+    station_link = _managed_station_link(request, _positive_int(request.GET.get("station_link")))
+    if station_link is None:
+        return _json_error(_("Unknown station link."), 404)
+
+    result = AsyncResult(task_id)
+    if result.state == "SUCCESS":
+        from ..models import AvailabilityCheck
+        if not AvailabilityCheck.objects.filter(
+                id=result.result, station_link=station_link).exists():
+            return _json_error(_("Unknown task."), 404)
+        return JsonResponse({"state": "SUCCESS", "check_id": result.result})
+    if result.state in ("FAILURE", "REVOKED"):
+        # the failure text may carry a secret; the stored result, not the task, reports causes
+        return JsonResponse({"state": "FAILURE", "message": str(
+            _("The availability check could not run to completion. See the application logs."))})
+    return JsonResponse({"state": "PENDING"})

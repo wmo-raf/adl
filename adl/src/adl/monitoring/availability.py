@@ -100,6 +100,11 @@ class HourCell:
     state: str
     records_count: int
 
+    @property
+    def iso(self):
+        """The UTC hour start, as sent back by the check form."""
+        return self.start.isoformat()
+
 
 @dataclass(frozen=True)
 class ParameterRow:
@@ -449,3 +454,37 @@ def day_availability(station_link, day, now=None):
         rows=rows,
         floor=floor,
     )
+
+
+def missing_hours(station_link, start, end, parameter_id=None, now=None):
+    """UTC hour starts in ``[start, end)`` that are *missing*: expected, and
+    with no record, for any parameter or (given ``parameter_id``) for that one.
+
+    The gap service validates a check window against this, and intersects a
+    source's covered ranges with it.
+    """
+    now = (now or dj_timezone.now()).astimezone(py_tz.utc)
+    start = start.astimezone(py_tz.utc)
+    end = end.astimezone(py_tz.utc)
+    floor = _availability_floor(station_link)
+    elapsed_until = _floor_hour(now)
+
+    hours = []
+    hour = _ceil_hour(start)
+    while hour < end:
+        if floor is not None and floor <= hour < elapsed_until:
+            hours.append(hour)
+        hour += HOUR
+    if not hours:
+        return []
+
+    records = HourlyObsAgg.objects.filter(
+        station_id=station_link.station_id,
+        connection_id=station_link.network_connection_id,
+        bucket__gte=hours[0],
+        bucket__lt=hours[-1] + HOUR,
+    )
+    if parameter_id is not None:
+        records = records.filter(parameter_id=parameter_id)
+    present = {bucket.astimezone(py_tz.utc) for bucket in records.values_list("bucket", flat=True)}
+    return [hour for hour in hours if hour not in present]

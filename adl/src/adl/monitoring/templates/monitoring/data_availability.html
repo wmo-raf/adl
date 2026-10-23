@@ -242,6 +242,61 @@
             font-weight: 600;
         }
 
+        .availability-hour--selectable {
+            cursor: pointer;
+        }
+
+        .availability-hour--selected {
+            outline: 3px solid var(--w-color-primary);
+            outline-offset: -3px;
+        }
+
+        .availability-hour--source-has_data {
+            box-shadow: inset 0 0 0 3px var(--w-color-positive-100);
+            background: repeating-linear-gradient(45deg, var(--w-color-critical-200) 0 4px, var(--w-color-surface-field) 4px 8px);
+        }
+
+        .availability-hour--source-nothing {
+            background-image: linear-gradient(var(--w-color-grey-400), var(--w-color-grey-400));
+            background-size: 100% 2px;
+            background-repeat: no-repeat;
+            background-position: center;
+        }
+
+        .availability-check-bar {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 0.75rem;
+            margin: 1rem 0 0.5rem;
+        }
+
+        .availability-check-bar[hidden] {
+            display: none;
+        }
+
+        .availability-checks {
+            margin-top: 1rem;
+        }
+
+        .availability-check {
+            margin-bottom: 0.75rem;
+            padding: 0.5rem 0.75rem;
+            border-left: 4px solid var(--w-color-border-furniture);
+        }
+
+        .availability-check--has-data {
+            border-left-color: var(--w-color-warning-100, #c26a00);
+        }
+
+        .availability-check--failed {
+            border-left-color: var(--w-color-critical-200);
+        }
+
+        .availability-check p {
+            margin: 0;
+        }
+
         .availability-legend {
             display: flex;
             flex-wrap: wrap;
@@ -286,6 +341,14 @@
             border-right-color: var(--w-color-warning-100, #c26a00);
             border-radius: 0;
             background: none;
+        }
+
+        .availability-legend .legend-source-has {
+            --legend-colour: repeating-linear-gradient(45deg, var(--w-color-critical-200) 0 3px, var(--w-color-surface-field) 3px 6px);
+        }
+
+        .availability-legend .legend-source-none {
+            --legend-colour: var(--w-color-grey-50);
         }
 
         .availability-legend .legend-not-expected {
@@ -460,20 +523,16 @@
                 </tr>
                 </thead>
                 <tbody>
-                <tr class="availability-any-row">
-                    <th scope="row">{% trans "Any parameter" %}</th>
-                    {% for cell in day_detail.any_row.cells %}
-                        <td class="availability-hour availability-hour--{{ cell.state }}" title="{{ cell.local_time|date:'H:i' }} — {% blocktrans count n=cell.records_count %}{{ n }} record{% plural %}{{ n }} records{% endblocktrans %}"></td>
-                    {% endfor %}
-                </tr>
-                {% for row in day_detail.rows %}
-                    <tr>
+                {% for row in matrix_rows %}
+                    <tr{% if row.is_any %} class="availability-any-row"{% endif %} data-parameter="{{ row.parameter_id|default_if_none:'' }}">
                         <th scope="row">
-                            {{ row.parameter.name }}
+                            {% if row.is_any %}{% trans "Any parameter" %}{% else %}{{ row.parameter.name }}{% endif %}
                             {% if not row.mapped %}<span class="availability-unmapped">{% trans "not currently mapped" %}</span>{% endif %}
                         </th>
-                        {% for cell in row.cells %}
-                            <td class="availability-hour availability-hour--{{ cell.state }}" title="{{ cell.local_time|date:'H:i' }} — {% blocktrans count n=cell.records_count %}{{ n }} record{% plural %}{{ n }} records{% endblocktrans %}"></td>
+                        {% for item in row.cells %}
+                            <td class="availability-hour availability-hour--{{ item.cell.state }}{% if item.mark %} availability-hour--source-{{ item.mark }}{% endif %}{% if can_check and item.cell.state == 'missing' and row.mapped %} availability-hour--selectable{% endif %}"
+                                data-start="{{ item.cell.iso }}"
+                                title="{{ item.cell.local_time|date:'H:i' }} — {% blocktrans count n=item.cell.records_count %}{{ n }} record{% plural %}{{ n }} records{% endblocktrans %}{% if item.mark == 'has_data' %} — {% trans 'Source has data, not recovered' %}{% elif item.mark == 'nothing' %} — {% trans 'Source has nothing' %}{% endif %}"></td>
                         {% endfor %}
                     </tr>
                 {% endfor %}
@@ -481,10 +540,64 @@
             </table>
         </div>
 
+        {% if can_check %}
+            <div class="availability-check-bar" id="availability-check-bar" hidden
+                 data-url="{{ check_url }}" data-station-link="{{ station_link.id }}"
+                 data-csrf="{{ csrf_token }}" data-status-url="{% url 'availability_check_status' task_id='TASK' %}">
+                <span id="availability-check-selection"></span>
+                <button type="button" class="button button-small" id="availability-check-button">{% trans "Check source" %}</button>
+                <span class="availability-meta" id="availability-check-note">
+                    {% if check_instant %}{% trans "The answer is instant (the source is asked for a listing)." %}
+                    {% else %}{% trans "Runs in the background: the source's data is fetched and parsed, and nothing is saved." %}{% endif %}
+                </span>
+                <span id="availability-check-status" role="status"></span>
+            </div>
+            <p class="availability-meta">{% trans "Select a run of missing hours in a row to check whether the source has data for it." %}</p>
+        {% endif %}
+
+        {% if check_items %}
+            <section class="availability-checks" aria-label="{% trans 'Source checks' %}">
+                <h3>{% trans "Source checks" %}</h3>
+                {% for item in check_items %}
+                    <div class="availability-check availability-check--{% if not item.ok %}failed{% elif item.summary.verdict == 'has_data' %}has-data{% else %}nothing{% endif %}">
+                        <p>
+                            <strong>
+                                {% if not item.ok %}
+                                    {% trans "Check did not answer" %}
+                                {% elif item.summary.verdict == 'has_data' %}
+                                    {% if item.check.recovered %}{% trans "Source had data, recovered" %}{% else %}{% trans "Source has data, not recovered" %}{% endif %}
+                                {% else %}
+                                    {% trans "Source has nothing" %}
+                                {% endif %}
+                            </strong>
+                            &mdash; {{ item.local_start|date:"H:i" }}&ndash;{{ item.local_end|date:"H:i" }},
+                            {% if item.by_listing %}{% trans "checked by file listing" %}{% else %}{% trans "checked by fetching and parsing data" %}{% endif %},
+                            {{ item.check.created_at|date:"j M H:i" }}
+                        </p>
+                        {% if item.ok %}
+                            <p class="availability-meta">
+                                {% blocktrans with covered=item.summary.covered total=item.summary.missing_total %}Covers {{ covered }} of {{ total }} missing hours.{% endblocktrans %}
+                            </p>
+                            {% if item.summary.parameter_counts %}
+                                <ul class="availability-meta">
+                                    {% for parameter, count in item.summary.parameter_counts %}
+                                        <li>{{ parameter.name }}: {% blocktrans count n=count %}{{ n }} hour with data{% plural %}{{ n }} hours with data{% endblocktrans %}</li>
+                                    {% endfor %}
+                                </ul>
+                            {% endif %}
+                        {% endif %}
+                        {% if item.check.message %}<p class="availability-meta">{{ item.check.message }}{% if item.check.category %} ({{ item.check.category }}){% endif %}</p>{% endif %}
+                    </div>
+                {% endfor %}
+            </section>
+        {% endif %}
+
         <div class="availability-legend">
             <span class="legend-complete">{% trans "Data present" %}</span>
             <span class="legend-empty">{% trans "Missing" %}</span>
             <span class="legend-not-expected">{% trans "Not expected" %}</span>
+            <span class="legend-source-has">{% trans "Source has data, not recovered" %}</span>
+            <span class="legend-source-none">{% trans "Source has nothing" %}</span>
             <span class="legend-note">{% trans "Hours are local; hover a cell for its record count" %}</span>
         </div>
     {% else %}
@@ -542,6 +655,103 @@
                 stationLink.disabled = true;
                 form.submit();
             });
+
+            // --- availability check: select a run of missing hours, ask the source
+            const bar = document.getElementById('availability-check-bar');
+            if (bar) {
+                const status = document.getElementById('availability-check-status');
+                const selectionText = document.getElementById('availability-check-selection');
+                const button = document.getElementById('availability-check-button');
+                const HOUR_MS = 3600 * 1000;
+                let selection = null; // {row, from, to} as indices into the row's cells
+
+                const rowCells = (row) => Array.from(row.querySelectorAll('td.availability-hour'));
+
+                function render() {
+                    document.querySelectorAll('.availability-hour--selected')
+                        .forEach((cell) => cell.classList.remove('availability-hour--selected'));
+                    bar.hidden = !selection;
+                    if (!selection) return;
+                    const cells = rowCells(selection.row).slice(selection.from, selection.to + 1);
+                    cells.forEach((cell) => cell.classList.add('availability-hour--selected'));
+                    const hours = cells.length;
+                    selectionText.textContent = selection.row.querySelector('th').textContent.trim().split('\n')[0]
+                        + ': ' + hours + ' h';
+                    status.textContent = '';
+                    button.disabled = false;
+                }
+
+                document.querySelectorAll('td.availability-hour--selectable').forEach((cell) => {
+                    cell.addEventListener('click', function () {
+                        const row = cell.parentElement;
+                        const cells = rowCells(row);
+                        const index = cells.indexOf(cell);
+                        if (selection && selection.row === row) {
+                            if (selection.from === index && selection.to === index) {
+                                selection = null;
+                                return render();
+                            }
+                            const lo = Math.min(selection.from, index);
+                            const hi = Math.max(selection.to, index);
+                            const contiguous = cells.slice(lo, hi + 1)
+                                .every((c) => c.classList.contains('availability-hour--selectable'));
+                            if (contiguous) {
+                                selection = {row: row, from: lo, to: hi};
+                                return render();
+                            }
+                        }
+                        selection = {row: row, from: index, to: index};
+                        render();
+                    });
+                });
+
+                function poll(taskId) {
+                    const url = bar.dataset.statusUrl.replace('TASK', encodeURIComponent(taskId))
+                        + '?station_link=' + encodeURIComponent(bar.dataset.stationLink);
+                    fetch(url, {headers: {'X-Requested-With': 'XMLHttpRequest'}})
+                        .then((response) => response.json())
+                        .then((data) => {
+                            if (data.state === 'SUCCESS') return window.location.reload();
+                            if (data.state === 'FAILURE' || data.error) {
+                                status.textContent = data.message || data.error;
+                                button.disabled = false;
+                                return;
+                            }
+                            window.setTimeout(() => poll(taskId), 2000);
+                        })
+                        .catch(() => { status.textContent = '{% trans "Lost contact with the server." %}'; button.disabled = false; });
+                }
+
+                button.addEventListener('click', function () {
+                    if (!selection) return;
+                    const cells = rowCells(selection.row).slice(selection.from, selection.to + 1);
+                    const start = cells[0].dataset.start;
+                    const end = new Date(new Date(cells[cells.length - 1].dataset.start).getTime() + HOUR_MS).toISOString();
+                    const body = new URLSearchParams({
+                        station_link: bar.dataset.stationLink, start: start, end: end,
+                        parameter: selection.row.dataset.parameter || '',
+                    });
+                    button.disabled = true;
+                    status.textContent = '{% trans "Checking…" %}';
+                    fetch(bar.dataset.url, {
+                        method: 'POST',
+                        headers: {'X-CSRFToken': bar.dataset.csrf, 'X-Requested-With': 'XMLHttpRequest'},
+                        body: body,
+                    })
+                        .then((response) => response.json())
+                        .then((data) => {
+                            if (data.error) {
+                                status.textContent = data.error;
+                                button.disabled = false;
+                            } else if (data.state === 'SUCCESS') {
+                                window.location.reload();
+                            } else {
+                                poll(data.task_id);
+                            }
+                        })
+                        .catch(() => { status.textContent = '{% trans "Lost contact with the server." %}'; button.disabled = false; });
+                });
+            }
         });
     </script>
 {% endblock %}
