@@ -279,6 +279,7 @@ def store_result(station_link, window, result, now=None) -> AvailabilityCheck:
         station_link=station_link,
         window_start=window.start,
         window_end=window.end,
+        parameter_id=window.parameter_id,
         created_at=now or dj_timezone.now(),
         tier=result.tier,
         status=result.status,
