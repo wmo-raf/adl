@@ -137,7 +137,7 @@ def _matrix_rows(day_detail, overlay):
 
 def _check_items(overlay, tz, can_check=False):
     """The stored checks of the day, with their window in the station's local time."""
-    return [
+    items = [
         {
             "summary": summary,
             "check": summary.check,
@@ -154,6 +154,14 @@ def _check_items(overlay, tz, can_check=False):
         }
         for summary in overlay.summaries
     ]
+    # newest first: a later check that overlaps the window supersedes a failed one
+    for index, item in enumerate(items):
+        item["can_fetch_instead"] = item["can_fetch_instead"] and not any(
+            newer["check"].window_start < item["check"].window_end
+            and newer["check"].window_end > item["check"].window_start
+            for newer in items[:index]
+        )
+    return items
 
 
 def data_availability(request):

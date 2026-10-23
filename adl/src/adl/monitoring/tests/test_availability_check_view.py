@@ -11,11 +11,12 @@ from datetime import datetime, timezone as py_tz
 from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
+from django.core.cache import cache
 from django.contrib.auth.models import Permission
 from django.test import TestCase
 from django.urls import reverse
 
-from adl.core.availability_checks import TIER_FETCH, TIER_LISTING
+from adl.core.availability_checks import TIER_FETCH, TIER_LISTING, AvailabilityCheckResult
 from adl.core.models import StationLink
 from adl.core.source_checks import SourceCheckStatus
 from adl.core.tests.factories import (
@@ -25,6 +26,7 @@ from adl.core.tests.factories import (
 )
 from adl.monitoring import gap_service
 from adl.monitoring.models import AvailabilityCheck
+from adl.monitoring.tasks import run_availability_check
 
 UTC = py_tz.utc
 NOW = datetime(2026, 3, 10, 0, 0, tzinfo=UTC)
@@ -303,6 +305,22 @@ class DayViewRenderingTests(CheckViewTestCase):
 
         self.assertNotContains(self.day(), "Try by fetching data")
 
+    def test_a_later_check_of_the_same_window_retires_the_fetch_action(self):
+        self.store(tier=TIER_LISTING, status=SourceCheckStatus.FAILED,
+                   created_at=utc(2026, 3, 9, 10))
+        self.store(tier=TIER_FETCH, status=SourceCheckStatus.OK,
+                   created_at=utc(2026, 3, 9, 11))
+
+        self.assertNotContains(self.day(), "Try by fetching data")
+
+    def test_a_later_check_of_another_window_leaves_the_fetch_action(self):
+        self.store(tier=TIER_LISTING, status=SourceCheckStatus.FAILED,
+                   created_at=utc(2026, 3, 9, 10))
+        self.store(tier=TIER_FETCH, status=SourceCheckStatus.OK, created_at=utc(2026, 3, 9, 11),
+                   window_start=utc(2026, 3, 5, 12), window_end=utc(2026, 3, 5, 14))
+
+        self.assertContains(self.day(), "Try by fetching data")
+
     def test_a_malformed_listing_stored_message_is_shown_with_the_action(self):
         self.store(tier=TIER_LISTING, status=SourceCheckStatus.MALFORMED,
                    message="The plugin returned str instead of an AvailabilityCheckResult.")
@@ -322,3 +340,72 @@ class DayViewRenderingTests(CheckViewTestCase):
             response = self.day()
 
         self.assertContains(response, "Air temperature: 1 hour with data")
+
+
+class CheckThroughTheRealServiceTests(CheckViewTestCase):
+    """POSTs that go through the real gap service; only the plugin is stubbed."""
+
+    def setUp(self):
+        super().setUp()
+        cache.clear()
+        self.addCleanup(cache.clear)
+        self.listing = [AvailabilityCheckResult(status=SourceCheckStatus.OK)]
+        patchers = (
+            patch.object(StationLink, "get_first_collection_date", lambda self: utc(2026, 3, 1)),
+            patch.object(StationLink, "get_variable_mappings", lambda self: []),
+            patch.object(StationLink, "availability_check_supported", True),
+            patch.object(StationLink, "check_availability",
+                         lambda link, start, end: self.listing[0]),
+            patch("django.utils.timezone.now", return_value=NOW),
+        )
+        for patcher in patchers:
+            patcher.start()
+            self.addCleanup(patcher.stop)
+
+    def test_a_supported_link_is_answered_in_the_request_and_nothing_is_queued(self):
+        with patch.object(run_availability_check, "delay") as delay:
+            body = self.post().json()
+
+        delay.assert_not_called()
+        self.assertEqual((body["state"], body["tier"]), ("SUCCESS", TIER_LISTING))
+
+    def test_an_unsupported_answer_falls_through_to_the_background_check(self):
+        self.listing[0] = AvailabilityCheckResult(status=SourceCheckStatus.UNSUPPORTED)
+
+        with patch.object(run_availability_check, "delay") as delay:
+            delay.return_value.id = "task-9"
+            body = self.post().json()
+
+        self.assertEqual(body, {"state": "PENDING", "tier": TIER_FETCH, "task_id": "task-9"})
+
+    def test_a_second_press_inside_the_cooldown_is_a_429(self):
+        self.post()
+
+        response = self.post()
+
+        self.assertEqual(response.status_code, 429)
+
+    def test_a_failed_listing_is_stored_and_the_explicit_fetch_then_queues(self):
+        self.listing[0] = AvailabilityCheckResult(status=SourceCheckStatus.FAILED, message="down")
+
+        with patch.object(run_availability_check, "delay") as delay:
+            delay.return_value.id = "task-2"
+            first = self.post().json()
+            delay.assert_not_called()
+            second = self.post(fetch="1").json()
+
+        self.assertEqual(first["state"], "SUCCESS")
+        self.assertEqual(AvailabilityCheck.objects.get(id=first["check_id"]).status,
+                         SourceCheckStatus.FAILED)
+        self.assertEqual((second["state"], second["tier"]), ("PENDING", TIER_FETCH))
+
+    def test_a_malformed_listing_is_stored_redacted_and_not_queued(self):
+        self.listing[0] = "token=abc123secret"
+
+        with patch.object(run_availability_check, "delay") as delay:
+            body = self.post().json()
+
+        delay.assert_not_called()
+        stored = AvailabilityCheck.objects.get(id=body["check_id"])
+        self.assertEqual(stored.status, SourceCheckStatus.MALFORMED)
+        self.assertEqual(stored.tier, TIER_LISTING)
