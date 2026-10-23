@@ -47,3 +47,11 @@ meanings.
   reported in that hour. Shown as a corner marker on
   the month calendar cell and as a missing hour in that parameter's row of the
   day view. Parameters with data but no current mapping never count as gaps.
+
+**connection grid**
+: The availability page for a connection with no station link chosen: one row
+  per station link, one column per local day, each cell using the month
+  calendar's state, count and corner marker, and each row ending in hours
+  present out of expected hours. Enabled links are ranked worst-first by
+  missing expected hours (or alphabetically); disabled links are listed apart
+  and never ranked.

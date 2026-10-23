@@ -7,12 +7,15 @@ are visible without a refresh.
 
 from datetime import date, datetime, timedelta, timezone as py_tz
 
+from django.db import connection as connection_db
 from django.test import TestCase
+from django.test.utils import CaptureQueriesContext
 
 from adl.core.tests.factories import (
     DataParameterFactory,
     NetworkConnectionFactory,
     ObservationRecordFactory,
+    StationFactory,
     StationLinkFactory,
 )
 from adl.monitoring.availability import (
@@ -22,6 +25,7 @@ from adl.monitoring.availability import (
     MISSING,
     PARTIAL,
     PRESENT,
+    connection_availability,
     day_availability,
     month_availability,
 )
@@ -423,3 +427,129 @@ class DayAvailabilityTests(MonthAvailabilityTestCase):
         detail = self.day_of(link)
 
         self.assertEqual(set(self.states(detail.any_row)), {NOT_EXPECTED})
+
+
+class ConnectionGridTests(MonthAvailabilityTestCase):
+    NOW = utc(2026, 3, 10, 0, 0)
+
+    def make_links(self, *specs, tz="UTC"):
+        """Links of one connection; each spec is ``(name, enabled)``."""
+        connection = NetworkConnectionFactory(stations_timezone=tz)
+        links = []
+        for name, enabled in specs:
+            link = StationLinkFactory(
+                network_connection=connection,
+                station=StationFactory(name=name),
+                enabled=enabled,
+            )
+            link.get_first_collection_date = lambda: utc(2026, 3, 1)
+            links.append(link)
+        return connection, links
+
+    def fill(self, link, hours):
+        parameter = DataParameterFactory()
+        for hour in range(hours):
+            self.record(link, utc(2026, 3, 1, 0, 30) + timedelta(hours=hour), parameter)
+
+    def grid(self, connection, links, **kwargs):
+        return connection_availability(connection, links, 2026, 3, now=self.NOW, **kwargs)
+
+    def test_rows_carry_day_lists_and_hour_summaries(self):
+        connection, (link,) = self.make_links(("Alpha", True))
+        self.fill(link, 48)
+
+        grid = self.grid(connection, [link])
+
+        row = grid.rows[0]
+        self.assertEqual(len(row.days), 31)
+        self.assertEqual(row.days[0].state, COMPLETE)
+        self.assertEqual(row.expected_hours, 9 * 24)
+        self.assertEqual(row.present_hours, 48)
+        self.assertEqual(row.missing_hours, 9 * 24 - 48)
+        self.assertEqual(row.percent, round(100 * 48 / 216))
+
+    def test_percent_is_none_when_nothing_is_expected(self):
+        connection, (link,) = self.make_links(("Alpha", True))
+        link.get_first_collection_date = lambda: utc(2026, 4, 1)
+
+        self.assertIsNone(self.grid(connection, [link]).rows[0].percent)
+
+    def test_percent_does_not_round_up_to_100_with_missing_hours(self):
+        connection, (link,) = self.make_links(("Alpha", True))
+        self.fill(link, 9 * 24 - 1)  # 215 of 216 expected: 99.5%
+
+        self.assertEqual(self.grid(connection, [link]).rows[0].percent, 99)
+
+    def test_enabled_links_rank_worst_first_by_missing_hours(self):
+        connection, (a, b, c) = self.make_links(("Alpha", True), ("Bravo", True), ("Charlie", True))
+        self.fill(a, 200)
+        self.fill(b, 10)
+        self.fill(c, 100)
+
+        grid = self.grid(connection, [a, b, c])
+
+        self.assertEqual([row.name for row in grid.rows], ["Bravo", "Charlie", "Alpha"])
+
+    def test_sort_name_orders_alphabetically(self):
+        connection, (a, b, c) = self.make_links(("Charlie", True), ("alpha", True), ("Bravo", True))
+        self.fill(c, 200)
+
+        grid = self.grid(connection, [a, b, c], sort="name")
+
+        self.assertEqual([row.name for row in grid.rows], ["alpha", "Bravo", "Charlie"])
+
+    def test_disabled_links_are_separated_and_never_ranked(self):
+        connection, (a, b, c) = self.make_links(("Alpha", True), ("Bravo", False), ("Aaa", False))
+        self.fill(a, 200)
+
+        grid = self.grid(connection, [a, b, c])
+
+        self.assertEqual([row.name for row in grid.rows], ["Alpha"])
+        self.assertEqual([row.name for row in grid.disabled_rows], ["Aaa", "Bravo"])
+
+    def test_corner_marker_follows_the_links_mapped_parameters(self):
+        connection, (link,) = self.make_links(("Alpha", True))
+        mapped = DataParameterFactory()
+        link.get_variable_mappings = lambda: [make_mapping(mapped, None)]
+        for hour in range(24):
+            self.record(link, utc(2026, 3, 1, hour, 30), DataParameterFactory())
+
+        day = self.grid(connection, [link]).rows[0].days[0]
+
+        self.assertEqual(day.state, COMPLETE)
+        self.assertTrue(day.has_parameter_gap)
+
+    def test_matches_the_single_link_month_view(self):
+        connection, (link,) = self.make_links(("Alpha", True), tz="Africa/Nairobi")
+        self.fill(link, 30)
+
+        grid_days = self.grid(connection, [link]).rows[0].days
+        month_days = month_availability(link, 2026, 3, now=self.NOW).days
+
+        self.assertEqual(grid_days, month_days)
+
+    def test_uses_each_links_own_timezone_when_not_the_connections(self):
+        connection, (link,) = self.make_links(("Alpha", True))
+        link.use_connection_timezone = False
+        link.timezone_info = "Africa/Nairobi"
+
+        self.assertEqual(self.grid(connection, [link]).rows[0].timezone_name, "Africa/Nairobi")
+
+    def test_empty_connection_has_an_empty_grid(self):
+        connection, _links = self.make_links()
+
+        grid = self.grid(connection, [])
+
+        self.assertEqual((grid.rows, grid.disabled_rows), ([], []))
+
+    def test_query_count_does_not_grow_with_the_number_of_links(self):
+        def count(n):
+            connection, links = self.make_links(*[(f"Station {n}-{i}", True) for i in range(n)])
+            for link in links:
+                link.get_first_collection_date = lambda: None  # forces the first-record query
+                self.fill(link, 3)
+            with CaptureQueriesContext(connection_db) as queries:
+                self.grid(connection, links)
+            return len(queries)
+
+        self.assertEqual(count(2), count(12))

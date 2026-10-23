@@ -5,7 +5,9 @@ from unittest import mock
 
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Permission
+from django.db import connection as db_connection
 from django.test import TestCase
+from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 
 from adl.core.models import StationLink
@@ -13,6 +15,7 @@ from adl.core.tests.factories import (
     DataParameterFactory,
     NetworkConnectionFactory,
     ObservationRecordFactory,
+    StationFactory,
     StationLinkFactory,
 )
 from adl.core.tests.helpers import make_mapping
@@ -38,6 +41,7 @@ class DataAvailabilityViewTests(TestCase):
         self.assertNotIn("availability", response.context)
         self.assertContains(response, "Choose a connection")
         self.assertContains(response, self.connection.name)
+        self.assertNotIn("grid", response.context)
 
     def test_connection_alone_lists_only_its_station_links(self):
         other = StationLinkFactory()
@@ -46,7 +50,7 @@ class DataAvailabilityViewTests(TestCase):
 
         self.assertEqual(response.context["station_links"], [self.link])
         self.assertNotIn(other, response.context["station_links"])
-        self.assertContains(response, "Choose a station link")
+        self.assertIn("grid", response.context)
 
     def test_station_link_alone_derives_the_connection(self):
         response = self.get(station_link=self.link.id, month="2026-03")
@@ -121,6 +125,101 @@ class DataAvailabilityViewTests(TestCase):
     def test_invalid_month_falls_back_to_the_current_month(self):
         response = self.get(station_link=self.link.id, month="2026-13")
         self.assertIn("availability", response.context)
+
+
+class ConnectionGridViewTests(TestCase):
+    def setUp(self):
+        user = get_user_model().objects.create_superuser(
+            username="monitor", email="monitor@example.com", password="pw"
+        )
+        self.client.force_login(user)
+        self.url = reverse("data_availability")
+        self.connection = NetworkConnectionFactory(stations_timezone="Africa/Nairobi")
+        self.link = StationLinkFactory(network_connection=self.connection)
+
+    def get(self, **params):
+        return self.client.get(self.url, params)
+
+    def make_link(self, name, enabled=True):
+        link = StationLinkFactory(
+            network_connection=self.connection, station=StationFactory(name=name), enabled=enabled
+        )
+        return link
+
+    def test_connection_alone_renders_the_grid_with_summaries(self):
+        ObservationRecordFactory(
+            station=self.link.station,
+            connection=self.connection,
+            time=datetime(2026, 3, 5, 6, 30, tzinfo=py_tz.utc),
+        )
+
+        response = self.get(connection=self.connection.id, month="2026-03")
+
+        self.assertContains(response, "March 2026")
+        self.assertContains(response, self.link.station.name)
+        self.assertContains(response, "availability-grid")
+        self.assertContains(response, "1/15")  # day cell: floor is 09:00 local on 5 Mar
+        summary = response.context["grid_rows"][0]["summary"]
+        self.assertEqual(summary.present_hours, 1)
+        self.assertContains(response, f"1/{summary.expected_hours} h (")
+        self.assertEqual([r["summary"].station_link for r in response.context["grid_rows"]], [self.link])
+
+    def test_cells_and_labels_link_to_day_and_month_views(self):
+        response = self.get(connection=self.connection.id, month="2026-03")
+
+        self.assertContains(response, f"{self.url}?station_link={self.link.id}&amp;day=2026-03-07")
+        row = response.context["grid_rows"][0]
+        self.assertEqual(row["month_url"], f"{self.url}?station_link={self.link.id}&month=2026-03")
+        self.assertContains(response, f'href="{row["month_url"].replace("&", "&amp;")}"')
+        self.assertEqual(len(row["cells"]), 31)
+
+    def test_sort_name_is_linkable_and_alphabetical(self):
+        zulu = self.make_link("Zulu")
+        alpha = self.make_link("Alpha")
+        ObservationRecordFactory(
+            station=alpha.station,
+            connection=self.connection,
+            time=datetime(2026, 3, 1, 0, 30, tzinfo=py_tz.utc),
+        )
+
+        by_name = self.get(connection=self.connection.id, month="2026-03", sort="name")
+        worst_first = self.get(connection=self.connection.id, month="2026-03")
+
+        names = lambda r: [row["summary"].name for row in r.context["grid_rows"]]
+        self.assertEqual(names(by_name), sorted(names(by_name), key=str.lower))
+        # only Alpha has a floor, so only it has expected (and missing) hours
+        self.assertEqual(names(worst_first)[0], "Alpha")
+        self.assertIn("sort=name", by_name.context["next_url"])
+        self.assertIn("sort=name", worst_first.context["sort_name_url"])
+        self.assertNotIn("sort=name", worst_first.context["next_url"])
+
+    def test_disabled_links_sit_in_a_collapsed_group(self):
+        self.make_link("Dormant", enabled=False)
+
+        response = self.get(connection=self.connection.id, month="2026-03")
+
+        self.assertContains(response, "Disabled (1)")
+        self.assertContains(response, "<details")
+        self.assertNotIn("Dormant", [r["summary"].name for r in response.context["grid_rows"]])
+        self.assertEqual(
+            [r["summary"].name for r in response.context["grid_disabled_rows"]], ["Dormant"]
+        )
+
+    def test_unknown_sort_falls_back_to_worst_first(self):
+        response = self.get(connection=self.connection.id, sort="zzz")
+        self.assertEqual(response.context["grid_sort"], "missing")
+
+    def test_renders_for_a_connection_with_many_station_links_in_bounded_queries(self):
+        with CaptureQueriesContext(db_connection) as one:
+            self.get(connection=self.connection.id, month="2026-03")
+
+        for number in range(40):
+            self.make_link(f"Many {number}")
+        with CaptureQueriesContext(db_connection) as many:
+            response = self.get(connection=self.connection.id, month="2026-03")
+
+        self.assertEqual(len(response.context["grid_rows"]), 41)
+        self.assertEqual(len(many), len(one))
 
 
 def availability_tz(link):

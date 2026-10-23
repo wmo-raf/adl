@@ -1,6 +1,7 @@
 import calendar
 import re
 from datetime import date
+from urllib.parse import urlencode
 from zoneinfo import ZoneInfo
 
 from django.shortcuts import render
@@ -9,7 +10,13 @@ from django.utils import timezone as dj_timezone
 from django.utils.translation import gettext as _
 
 from adl.core.models import NetworkConnection, StationLink
-from ..availability import day_availability, month_availability
+from ..availability import (
+    SORT_MISSING,
+    SORT_NAME,
+    connection_availability,
+    day_availability,
+    month_availability,
+)
 
 MONTH_PARAM = re.compile(r"^(\d{4})-(0[1-9]|1[0-2])$")
 DAY_PARAM = re.compile(r"^(\d{4})-(\d{2})-(\d{2})$")
@@ -64,6 +71,27 @@ def _day_url(station_link_id, day):
     return f"{reverse('data_availability')}?station_link={station_link_id}&day={day.isoformat()}"
 
 
+def _grid_url(connection_id, year, month, sort):
+    params = {"connection": connection_id, "month": _month_param(year, month)}
+    if sort == SORT_NAME:
+        params["sort"] = SORT_NAME
+    return f"{reverse('data_availability')}?{urlencode(params)}"
+
+
+def _grid_rows(summaries):
+    """Template rows of a connection grid: label link plus a day link per cell."""
+    return [
+        {
+            "summary": summary,
+            "month_url": _availability_url(
+                summary.station_link.id, summary.days[0].date.year, summary.days[0].date.month
+            ),
+            "cells": [(day, _day_url(summary.station_link.id, day.date)) for day in summary.days],
+        }
+        for summary in summaries
+    ]
+
+
 def _calendar_weeks(availability, station_link_id):
     """Rows of seven cells, Monday first; ``None`` pads days outside the month.
 
@@ -81,10 +109,11 @@ def _calendar_weeks(availability, station_link_id):
 
 
 def data_availability(request):
-    """Month calendar of a station link's data availability.
+    """Month calendar of a station link's data availability, or the connection
+    grid of all its links when only a connection is chosen.
 
     All state lives in the query string (``connection``, ``station_link``,
-    ``month`` as ``YYYY-MM``, ``day`` as ``YYYY-MM-DD``); a valid ``day`` shows
+    ``month`` as ``YYYY-MM``, ``sort`` as ``name`` for the grid, ``day`` as ``YYYY-MM-DD``); a valid ``day`` shows
     that day's hour matrix instead of the month calendar; anything unknown or malformed is ignored, so
     every URL renders.
     """
@@ -148,5 +177,26 @@ def data_availability(request):
         })
         if day:
             context["day_detail"] = day_availability(station_link, day)
+
+    elif connection_id:
+        connection = connections.get(id=connection_id)
+        today = dj_timezone.localtime(dj_timezone.now(), ZoneInfo(str(connection.stations_timezone)))
+        year, month = _parse_month(request.GET.get("month")) or (today.year, today.month)
+        sort = SORT_NAME if request.GET.get("sort") == SORT_NAME else SORT_MISSING
+        grid = connection_availability(connection, station_links, year, month, sort=sort)
+        prev_year, prev_month = _shift_month(year, month, -1)
+        next_year, next_month = _shift_month(year, month, 1)
+        context.update({
+            "grid": grid,
+            "grid_rows": _grid_rows(grid.rows),
+            "grid_disabled_rows": _grid_rows(grid.disabled_rows),
+            "grid_days": list(range(1, grid.days_in_month + 1)),
+            "grid_sort": sort,
+            "month_start": date(year, month, 1),
+            "prev_url": _grid_url(connection_id, prev_year, prev_month, sort),
+            "next_url": _grid_url(connection_id, next_year, next_month, sort),
+            "sort_missing_url": _grid_url(connection_id, year, month, SORT_MISSING),
+            "sort_name_url": _grid_url(connection_id, year, month, SORT_NAME),
+        })
 
     return render(request, "monitoring/data_availability.html", context)
