@@ -431,6 +431,16 @@ class ListingCooldownTests(GapServiceTestCase):
 
         self.assertEqual(len(self.calls), 2)
 
+    def test_an_unsupported_answer_leaves_no_cooldown_behind(self):
+        self.support_listing(lambda s, start, end: AvailabilityCheckResult(
+            status=SourceCheckStatus.UNSUPPORTED))
+
+        with patch.object(run_availability_check, "delay"):
+            check(self.link, *self.window(), now=NOW)
+            cache.delete(gap_service.inflight_key(self.link.id))  # the task ended
+
+            check(self.link, *self.window(), now=NOW)  # not refused as cooling down
+
     def test_the_explicit_fetch_is_not_held_back_by_the_listing_cooldown(self):
         check(self.link, *self.window(), now=NOW)
 
