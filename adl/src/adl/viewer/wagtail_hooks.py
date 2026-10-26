@@ -58,6 +58,7 @@ def register_viewer_menu_item():
     ])
     
     submenu = Menu(items=[
+        MenuItem(_('Availability'), reverse_lazy('data_availability'), icon_name='table'),
         MenuItem(_('Table'), reverse_lazy('viewer_table'), icon_name='table'),
         MenuItem(_('Chart'), reverse_lazy('viewer_chart'), icon_name='chart-line'),
         MenuItem(_('Map'), reverse_lazy("viewer_map"), icon_name='site'),
