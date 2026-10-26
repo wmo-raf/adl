@@ -9,6 +9,10 @@ from adl.core.classification import FAILURE_CATEGORIES
 from .constants import CheckState
 
 
+TRIGGER_GAP_RECOVERY = "gap_recovery"
+TRIGGER_LATE_DISPATCH = "late_dispatch"
+
+
 @register_snippet
 class StationLinkActivityLog(TimescaleModel):
     # Written on every ingestion and dispatch run and never referenced by
@@ -40,6 +44,8 @@ class StationLinkActivityLog(TimescaleModel):
     # items it resolved; 0 = it looked and found nothing; n = it found n.
     sources_count = models.PositiveIntegerField(default=None, null=True, blank=True)
     messages_count = models.PositiveIntegerField(default=0)
+    # What started the run, when it was not a routine pull; "" for a routine one
+    trigger = models.CharField(max_length=50, blank=True, default="")
     obs_start_time = models.DateTimeField(blank=True, null=True, verbose_name="Observation Start Time")
     obs_end_time = models.DateTimeField(blank=True, null=True, verbose_name="Observation End Time")
     dispatch_channel = models.ForeignKey('core.DispatchChannel', on_delete=models.CASCADE, related_name='activity_logs',
@@ -210,3 +216,62 @@ class NetworkConnectionHealthTransition(models.Model):
 
     def __str__(self):
         return f"{self.connection} - {self.from_status} -> {self.to_status} at {self.at}"
+
+
+class AvailabilityCheck(models.Model):
+    """
+    One stored answer to an availability check: did the source have data for a
+    gap window of a station link? Written by the gap service whenever a check
+    finishes, whichever tier answered; read by the day view, where the latest
+    answer covering an hour applies and earlier ones are history.
+
+    ``parameter`` is the row the check was made from, ``None`` for any-parameter,
+    so a retry can ask the same question.
+
+    ``ranges`` is a list of ``{"start", "end", "count", "label"}`` objects
+    (ISO-8601 times) and ``parameter_coverage`` maps an ADL parameter id to the
+    UTC hour starts in which the source has a value for it — populated only by
+    the fetch tier. ``recovered`` is set once a gap recovery of the window has
+    saved something (its counts are kept in ``recovery_fetched`` and
+    ``recovery_saved``), which is what separates "source has data, not recovered" from a gap
+    that has been dealt with.
+
+    Rows are dropped by the daily monitoring cleanup with the same cutoff as
+    the activity log: one retention policy.
+    """
+
+    station_link = models.ForeignKey('core.StationLink', on_delete=models.CASCADE,
+                                     related_name="availability_checks",
+                                     verbose_name=_("Station Link"))
+    window_start = models.DateTimeField(verbose_name=_("Window Start"))
+    window_end = models.DateTimeField(verbose_name=_("Window End"))
+    parameter = models.ForeignKey('core.DataParameter', on_delete=models.CASCADE,
+                                  null=True, blank=True, related_name="+",
+                                  verbose_name=_("Parameter"))
+    created_at = models.DateTimeField(verbose_name=_("Created At"))
+    tier = models.CharField(max_length=20, verbose_name=_("Tier"))
+    status = models.CharField(max_length=20, verbose_name=_("Status"))
+    category = models.CharField(max_length=50, blank=True, null=True,
+                                choices=[(c, c) for c in FAILURE_CATEGORIES],
+                                verbose_name=_("Category"))
+    message = models.TextField(blank=True, default="", verbose_name=_("Message"))
+    ranges = models.JSONField(default=list, blank=True, verbose_name=_("Ranges"))
+    parameter_coverage = models.JSONField(blank=True, null=True,
+                                          verbose_name=_("Parameter Coverage"))
+    recovered = models.BooleanField(default=False, verbose_name=_("Recovered"))
+    # What the recovery of this check's window reported; ``NULL`` until one ran
+    recovery_fetched = models.PositiveIntegerField(null=True, blank=True,
+                                                   verbose_name=_("Recovery Fetched"))
+    recovery_saved = models.PositiveIntegerField(null=True, blank=True,
+                                                 verbose_name=_("Recovery Saved"))
+
+    class Meta:
+        verbose_name = _("Availability Check")
+        verbose_name_plural = _("Availability Checks")
+        indexes = [
+            models.Index(fields=["station_link", "window_start"], name="avail_check_link_start_idx"),
+            models.Index(fields=["created_at"], name="avail_check_created_idx"),
+        ]
+
+    def __str__(self):
+        return f"{self.station_link} - {self.tier} - {self.status} at {self.created_at}"

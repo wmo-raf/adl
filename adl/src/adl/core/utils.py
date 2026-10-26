@@ -336,13 +336,23 @@ def get_station_link_view_data_url(station_link):
     )
 
 
+def get_station_link_availability_url(station_link):
+    """URL to the Data availability page for this station link."""
+    return reverse("data_availability") + f"?station_link={station_link.id}"
+
+
 def get_station_link_list_more_buttons(station_link):
     buttons = [
         ListingButton(
             gettext("View Data"),
             url=get_station_link_view_data_url(station_link),
             icon_name="table",
-        )
+        ),
+        ListingButton(
+            gettext("Data availability"),
+            url=get_station_link_availability_url(station_link),
+            icon_name="date",
+        ),
     ]
     buttons.extend(get_extra_model_admin_link_buttons(station_link))
     return buttons

@@ -8,6 +8,16 @@ from .views import (
     station_link_monitoring
 )
 
+from .views.availability import (
+    availability_check,
+    availability_check_status,
+    availability_recover,
+    availability_recover_status,
+    availability_send_window,
+    availability_send_window_status,
+    availability_running,
+    data_availability,
+)
 from .views.activity import NetworkConnectionActivityView, DispatchChannelMonitoringView
 from .views.health import (
     connection_health,
@@ -17,6 +27,17 @@ from .views.health import (
 )
 
 urlpatterns = [
+    path('availability/', data_availability, name='data_availability'),
+    path('availability/check/', availability_check, name='availability_check'),
+    path('availability/check/<str:task_id>/', availability_check_status,
+         name='availability_check_status'),
+    path('availability/running/', availability_running, name='availability_running'),
+    path('availability/recover/', availability_recover, name='availability_recover'),
+    path('availability/recover/<str:task_id>/', availability_recover_status,
+         name='availability_recover_status'),
+    path('availability/send-window/', availability_send_window, name='availability_send_window'),
+    path('availability/send-window/<str:task_id>/', availability_send_window_status,
+         name='availability_send_window_status'),
     path('connection/<int:connection_id>/health/', connection_health,
          name='connection_health'),
     path('connection/<int:connection_id>/health/probe-source/', connection_probe_source,

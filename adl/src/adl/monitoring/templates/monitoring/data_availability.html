@@ -1,0 +1,928 @@
+{% extends "wagtailadmin/generic/base.html" %}
+{% load i18n wagtailadmin_tags %}
+
+{% block titletag %}{% trans "Data availability" %}{% endblock %}
+
+{% block extra_css %}
+    {{ block.super }}
+    <style>
+        .availability-selectors {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: flex-end;
+            gap: 1rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .availability-selectors label {
+            display: block;
+            margin-bottom: 0.25rem;
+            color: var(--w-color-text-label);
+        }
+
+        .availability-header {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            justify-content: space-between;
+            gap: 1rem;
+            margin-bottom: 1rem;
+        }
+
+        .availability-nav {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+
+        .availability-month {
+            min-width: 9rem;
+            text-align: center;
+            font-weight: 700;
+        }
+
+        .availability-late-dispatch {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 0.5rem;
+            margin-top: 0.5rem;
+        }
+        .availability-meta {
+            margin: 0;
+            color: var(--w-color-text-meta);
+        }
+
+        .availability-calendar {
+            width: 100%;
+            table-layout: fixed;
+            border-collapse: separate;
+            border-spacing: 4px;
+        }
+
+        .availability-calendar th {
+            padding: 0.25rem;
+            color: var(--w-color-text-meta);
+            font-weight: 600;
+            text-align: center;
+        }
+
+        .availability-cell {
+            height: 4.5rem;
+            padding: 0.4rem 0.5rem;
+            vertical-align: top;
+            border: 1px solid var(--w-color-border-furniture);
+            border-radius: 4px;
+            background: var(--w-color-surface-field);
+        }
+
+        .availability-cell--pad {
+            border-color: transparent;
+            background: transparent;
+        }
+
+        .availability-cell {
+            position: relative;
+        }
+
+        .availability-cell a.availability-cell-link {
+            position: absolute;
+            inset: 0;
+            border-radius: 4px;
+        }
+
+        .availability-cell--gap::after {
+            content: "";
+            position: absolute;
+            top: 0;
+            right: 0;
+            border-style: solid;
+            border-width: 0 0.9rem 0.9rem 0;
+            border-color: transparent var(--w-color-warning-100, #c26a00) transparent transparent;
+            pointer-events: none;
+        }
+
+        .availability-panel {
+            margin-bottom: 1.5rem;
+            background: var(--w-color-surface-field);
+            border: 1px solid var(--w-color-border-furniture);
+            border-radius: 4px;
+        }
+
+        .availability-panel__header {
+            padding: 0.6rem 1rem;
+            background: var(--w-color-grey-50);
+            border-bottom: 1px solid var(--w-color-border-furniture);
+            border-radius: 4px 4px 0 0;
+        }
+
+        .availability-panel__title {
+            margin: 0;
+            font-size: 1rem;
+            font-weight: 600;
+        }
+
+        .availability-panel__body {
+            padding: 1rem;
+        }
+
+        .availability-panel__body > .availability-legend:first-child {
+            margin-top: 0;
+            margin-bottom: 1rem;
+        }
+
+        .availability-panel__body > .availability-wholeday {
+            margin-bottom: 1rem;
+        }
+
+        .availability-checks-table .status-badge {
+            white-space: nowrap;
+        }
+
+        .availability-checks-detail summary {
+            cursor: pointer;
+        }
+
+        .availability-checks-detail summary::before {
+            content: "\25B8";
+            display: inline-block;
+            width: 1rem;
+        }
+
+        .availability-checks-detail details[open] > summary::before {
+            content: "\25BE";
+        }
+
+        table.listing.availability-params-table {
+            width: auto;
+            min-width: 18rem;
+        }
+
+        table.listing.availability-params-table .availability-zero {
+            color: var(--w-color-text-meta);
+        }
+
+        .availability-matrix-wrap {
+            overflow-x: auto;
+        }
+
+        .availability-matrix {
+            border-collapse: separate;
+            border-spacing: 2px;
+        }
+
+        .availability-matrix th {
+            padding: 0 0.5rem 0 0;
+            text-align: left;
+            font-weight: 600;
+            white-space: nowrap;
+        }
+
+        .availability-matrix thead th {
+            padding: 0;
+            text-align: center;
+            font-size: 0.75rem;
+            font-weight: 400;
+            color: var(--w-color-text-meta);
+        }
+
+        .availability-matrix .availability-unmapped {
+            display: block;
+            font-weight: 400;
+            font-size: 0.75rem;
+            color: var(--w-color-text-meta);
+        }
+
+        .availability-matrix tr.availability-any-row th,
+        .availability-matrix tr.availability-any-row td {
+            border-bottom: 2px solid var(--w-color-border-furniture);
+        }
+
+        .availability-hour {
+            min-width: 2.2rem;
+            height: 1.6rem;
+            border-radius: 2px;
+            padding: 0 0.15rem;
+            text-align: center;
+            font-size: 0.75rem;
+            line-height: 1.6rem;
+            font-variant-numeric: tabular-nums;
+        }
+
+        .availability-hour--present {
+            background: var(--w-color-positive-100);
+        }
+
+        .availability-hour--missing {
+            background: var(--w-color-critical-200);
+        }
+
+        .availability-hour--not_expected {
+            background: var(--w-color-grey-50);
+        }
+
+        .availability-day {
+            display: block;
+            font-weight: 600;
+        }
+
+        .availability-count {
+            display: block;
+            margin-top: 0.25rem;
+            font-size: 0.875rem;
+            font-variant-numeric: tabular-nums;
+        }
+
+        .availability-cell--complete {
+            background: var(--w-color-positive-100);
+        }
+
+        .availability-cell--not_expected {
+            background: var(--w-color-grey-50);
+            color: var(--w-color-grey-400);
+        }
+
+        .availability-cell--empty {
+            background: var(--w-color-critical-200);
+        }
+
+        .availability-cell--partial-1 {
+            background: color-mix(in srgb, var(--w-color-critical-200) 20%, var(--w-color-surface-field));
+        }
+
+        .availability-cell--partial-2 {
+            background: color-mix(in srgb, var(--w-color-critical-200) 35%, var(--w-color-surface-field));
+        }
+
+        .availability-cell--partial-3 {
+            background: color-mix(in srgb, var(--w-color-critical-200) 50%, var(--w-color-surface-field));
+        }
+
+        .availability-cell--partial-4 {
+            background: color-mix(in srgb, var(--w-color-critical-200) 65%, var(--w-color-surface-field));
+        }
+
+        .availability-grid-wrap {
+            overflow-x: auto;
+        }
+
+        .availability-grid {
+            border-collapse: separate;
+            border-spacing: 2px;
+        }
+
+        .availability-grid thead th {
+            padding: 0;
+            text-align: center;
+            font-size: 0.75rem;
+            font-weight: 400;
+            color: var(--w-color-text-meta);
+        }
+
+        .availability-grid th.availability-grid-label {
+            padding-right: 0.75rem;
+            text-align: left;
+            white-space: nowrap;
+        }
+
+        .availability-grid .availability-cell {
+            min-width: 2.4rem;
+            height: 2.2rem;
+            padding: 0.15rem;
+            text-align: center;
+            vertical-align: middle;
+        }
+
+        .availability-grid .availability-count {
+            margin-top: 0;
+            font-size: 0.65rem;
+        }
+
+        .availability-grid .availability-grid-summary {
+            padding-left: 0.75rem;
+            white-space: nowrap;
+            font-variant-numeric: tabular-nums;
+        }
+
+        .availability-grid tr.availability-row--muted {
+            opacity: 0.6;
+        }
+
+        .availability-disabled summary {
+            cursor: pointer;
+            margin: 1rem 0 0.5rem;
+            font-weight: 600;
+        }
+
+        .availability-hour--source-has_data {
+            box-shadow: inset 0 0 0 3px var(--w-color-positive-100);
+            background: repeating-linear-gradient(45deg, var(--w-color-critical-200) 0 4px, var(--w-color-surface-field) 4px 8px);
+        }
+
+        .availability-running {
+            position: absolute;
+            top: 0.2rem;
+            right: 0.3rem;
+            width: 0.7rem;
+            height: 0.7rem;
+            border: 2px solid var(--w-color-primary);
+            border-right-color: transparent;
+            border-radius: 50%;
+            animation: availability-spin 0.9s linear infinite;
+            pointer-events: none;
+        }
+
+        @keyframes availability-spin {
+            to { transform: rotate(360deg); }
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+            .availability-running { animation: none; }
+        }
+
+        .availability-checked {
+            position: absolute;
+            bottom: 0.15rem;
+            right: 0.3rem;
+            font-weight: 700;
+            pointer-events: none;
+        }
+
+        .availability-wholeday {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 0.75rem;
+            margin-bottom: 1rem;
+        }
+
+        .availability-checks {
+            margin: 1rem 0;
+        }
+
+        .availability-checks-table {
+            margin-bottom: 0.5rem;
+        }
+
+        .availability-checks-detail td {
+            padding-top: 0;
+        }
+
+        .availability-legend {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 1.25rem;
+            margin-top: 1rem;
+            color: var(--w-color-text-meta);
+        }
+
+        .availability-legend span::before {
+            content: "";
+            display: inline-block;
+            width: 0.9rem;
+            height: 0.9rem;
+            margin-right: 0.4rem;
+            vertical-align: -0.1rem;
+            border: 1px solid var(--w-color-border-furniture);
+            border-radius: 2px;
+            background: var(--legend-colour);
+        }
+
+        .availability-legend .legend-note::before {
+            display: none;
+        }
+
+        .availability-legend .legend-complete {
+            --legend-colour: var(--w-color-positive-100);
+        }
+
+        .availability-legend .legend-partial {
+            --legend-colour: color-mix(in srgb, var(--w-color-critical-200) 50%, var(--w-color-surface-field));
+        }
+
+        .availability-legend .legend-empty {
+            --legend-colour: var(--w-color-critical-200);
+        }
+
+        .availability-legend .legend-gap::before {
+            width: 0;
+            height: 0;
+            border: 0.45rem solid transparent;
+            border-top-color: var(--w-color-warning-100, #c26a00);
+            border-right-color: var(--w-color-warning-100, #c26a00);
+            border-radius: 0;
+            background: none;
+        }
+
+        .availability-legend .legend-source-has {
+            --legend-colour: repeating-linear-gradient(45deg, var(--w-color-critical-200) 0 3px, var(--w-color-surface-field) 3px 6px);
+        }
+
+        .availability-legend .legend-not-expected {
+            --legend-colour: var(--w-color-grey-50);
+        }
+    </style>
+{% endblock %}
+
+{% block main_content %}
+    <form method="get" class="availability-selectors" id="availability-form">
+        <div>
+            <label for="availability-connection">{% trans "Connection" %}</label>
+            <select name="connection" id="availability-connection">
+                <option value="">{% trans "Select a connection" %}</option>
+                {% for connection in connections %}
+                    <option value="{{ connection.id }}"{% if connection.id == connection_id %} selected{% endif %}>
+                        {{ connection.name }}
+                    </option>
+                {% endfor %}
+            </select>
+        </div>
+        <div>
+            <label for="availability-station-link">{% trans "Station link" %}</label>
+            <select name="station_link" id="availability-station-link"{% if not connection_id %} disabled{% endif %}>
+                <option value="">{% trans "Select a station link" %}</option>
+                {% for link in station_links %}
+                    <option value="{{ link.id }}"{% if station_link and link.id == station_link.id %} selected{% endif %}>
+                        {{ link.station.name }}
+                    </option>
+                {% endfor %}
+            </select>
+        </div>
+        <button type="submit" class="button button-secondary">{% trans "Show" %}</button>
+    </form>
+
+    {% if not station_link and not grid %}
+        <div class="help-block help-info">
+            <p>
+                {% trans "Choose a connection to see the availability of its station links." %}
+            </p>
+        </div>
+    {% elif not station_link %}
+        <div class="availability-header">
+            <div>
+                <h2>{% trans "Connection grid" %}</h2>
+                <p class="availability-meta">
+                    {% trans "Days are local days in each station link's timezone." %}
+                    {% trans "Sorted by" %}
+                    {% if grid_sort == "name" %}
+                        <a href="{{ sort_missing_url }}">{% trans "most missing hours" %}</a> | <strong>{% trans "name" %}</strong>
+                    {% else %}
+                        <strong>{% trans "most missing hours" %}</strong> | <a href="{{ sort_name_url }}">{% trans "name" %}</a>
+                    {% endif %}
+                </p>
+            </div>
+            <div class="availability-nav">
+                <a href="{{ prev_url }}" class="button button-small button-secondary">&larr; {% trans "Previous" %}</a>
+                <span class="availability-month">{{ month_start|date:"F Y" }}</span>
+                <a href="{{ next_url }}" class="button button-small button-secondary">{% trans "Next" %} &rarr;</a>
+            </div>
+        </div>
+
+        {% if not grid_rows and not grid_disabled_rows %}
+            <div class="help-block help-info"><p>{% trans "This connection has no station links." %}</p></div>
+        {% else %}
+<section class="availability-panel">
+<header class="availability-panel__header"><h2 class="availability-panel__title">{% trans 'Station links' %}</h2></header>
+<div class="availability-panel__body">
+        <div class="availability-grid-wrap">
+            <table class="availability-grid">
+                <thead>
+            <tr>
+                <th scope="col"></th>
+                {% for day in grid_days %}<th scope="col">{{ day }}</th>{% endfor %}
+                <th scope="col"></th>
+            </tr>
+            </thead>
+                <tbody>
+                {% for row in grid_rows %}
+                <tr>
+                    <th scope="row" class="availability-grid-label"><a href="{{ row.month_url }}">{{ row.summary.name }}</a></th>
+                    {% for cell in row.cells %}
+                        {% with day=cell.0 %}
+                        <td class="availability-cell availability-cell--{{ day.state }}{% if day.state == 'partial' %} availability-cell--partial-{{ day.level }}{% endif %}{% if day.has_parameter_gap %} availability-cell--gap{% endif %}"{% if day.has_parameter_gap %} title="{% trans 'A mapped parameter is missing for some expected hours' %}"{% endif %}>
+                            <a href="{{ cell.1 }}" class="availability-cell-link" aria-label="{{ row.summary.name }}, {{ day.date|date:'j F Y' }}"></a>
+                            {% if day.label %}<span class="availability-count">{{ day.label }}</span>{% endif %}
+                            {% if row.running and row.running.day == day.date %}<span class="availability-running" title="{% if row.running.kind == 'recover' %}{% trans 'Recovering' %}{% else %}{% trans 'Checking' %}{% endif %}{% if row.running.since %} {% blocktrans with since=row.running.since|date:'H:i' %}since {{ since }}{% endblocktrans %}{% endif %}"><span class="w-sr-only">{% trans "Source check running" %}</span></span>{% endif %}
+                            {% if day.checked %}<span class="availability-checked" title="{% trans 'The source was asked about every gap on this day' %}"><span aria-hidden="true">&#10003;</span><span class="w-sr-only">{% trans "Checked" %}</span></span>{% endif %}
+                        </td>
+                        {% endwith %}
+                    {% endfor %}
+                    <td class="availability-grid-summary">
+                        {% if row.summary.percent is None %}&mdash;{% else %}{{ row.summary.present_hours }}/{{ row.summary.expected_hours }} h ({{ row.summary.percent }}%){% endif %}
+                    </td>
+                </tr>
+            {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% if grid_disabled_rows %}
+            <details class="availability-disabled">
+                <summary>{% blocktrans count n=grid_disabled_rows|length %}Disabled ({{ n }}){% plural %}Disabled ({{ n }}){% endblocktrans %}</summary>
+                <div class="availability-grid-wrap">
+                    <table class="availability-grid">
+                        <thead>
+            <tr>
+                <th scope="col"></th>
+                {% for day in grid_days %}<th scope="col">{{ day }}</th>{% endfor %}
+                <th scope="col"></th>
+            </tr>
+            </thead>
+                        <tbody>
+                        {% for row in grid_disabled_rows %}
+                <tr class="availability-row--muted">
+                    <th scope="row" class="availability-grid-label"><a href="{{ row.month_url }}">{{ row.summary.name }}</a></th>
+                    {% for cell in row.cells %}
+                        {% with day=cell.0 %}
+                        <td class="availability-cell availability-cell--{{ day.state }}{% if day.state == 'partial' %} availability-cell--partial-{{ day.level }}{% endif %}{% if day.has_parameter_gap %} availability-cell--gap{% endif %}"{% if day.has_parameter_gap %} title="{% trans 'A mapped parameter is missing for some expected hours' %}"{% endif %}>
+                            <a href="{{ cell.1 }}" class="availability-cell-link" aria-label="{{ row.summary.name }}, {{ day.date|date:'j F Y' }}"></a>
+                            {% if day.label %}<span class="availability-count">{{ day.label }}</span>{% endif %}
+                            {% if row.running and row.running.day == day.date %}<span class="availability-running" title="{% if row.running.kind == 'recover' %}{% trans 'Recovering' %}{% else %}{% trans 'Checking' %}{% endif %}{% if row.running.since %} {% blocktrans with since=row.running.since|date:'H:i' %}since {{ since }}{% endblocktrans %}{% endif %}"><span class="w-sr-only">{% trans "Source check running" %}</span></span>{% endif %}
+                            {% if day.checked %}<span class="availability-checked" title="{% trans 'The source was asked about every gap on this day' %}"><span aria-hidden="true">&#10003;</span><span class="w-sr-only">{% trans "Checked" %}</span></span>{% endif %}
+                        </td>
+                        {% endwith %}
+                    {% endfor %}
+                    <td class="availability-grid-summary">
+                        {% if row.summary.percent is None %}&mdash;{% else %}{{ row.summary.present_hours }}/{{ row.summary.expected_hours }} h ({{ row.summary.percent }}%){% endif %}
+                    </td>
+                </tr>
+            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </details>
+        {% endif %}
+        <div class="availability-legend">
+            <span class="legend-complete">{% trans "Complete" %}</span>
+            <span class="legend-partial">{% trans "Partial — darker means more missing hours" %}</span>
+            <span class="legend-empty">{% trans "No data" %}</span>
+            <span class="legend-gap">{% trans "A mapped parameter is missing for some expected hours" %}</span>
+            <span class="legend-not-expected">{% trans "Not expected" %}</span>
+            <span class="legend-checked">&#10003; {% trans "Source asked about every gap" %}</span>
+            <span class="legend-note">{% trans "Counts show hours with data / hours expected" %}</span>
+        </div>
+</div>
+</section>
+        {% endif %}
+    {% else %}
+        <div class="availability-header">
+            <div>
+                <h2>{{ station_link }}</h2>
+                <p class="availability-meta">
+                    {% blocktrans with tz=availability.timezone_name %}Days are local days in the {{ tz }} timezone.{% endblocktrans %}
+                    <a href="{{ monitoring_url }}">{% trans "Station link monitoring" %}</a>
+                </p>
+            </div>
+            {% if not day_detail %}
+            <div class="availability-nav">
+                <a href="{{ prev_url }}" class="button button-small button-secondary">&larr; {% trans "Previous" %}</a>
+                <span class="availability-month">{{ month_start|date:"F Y" }}</span>
+                <a href="{{ next_url }}" class="button button-small button-secondary">{% trans "Next" %} &rarr;</a>
+            </div>
+            {% endif %}
+        </div>
+
+    {% if day_detail %}
+        <nav class="availability-header" aria-label="{% trans 'Breadcrumb' %}">
+            <p class="availability-meta">
+                <a href="{{ month_url }}">{{ month_start|date:"F Y" }}</a> &rsaquo; {{ day_detail.date|date:"j F Y" }}
+            </p>
+        </nav>
+
+        {% if can_check or check_items %}
+<section class="availability-panel">
+<header class="availability-panel__header"><h2 class="availability-panel__title">{% trans 'Source checks' %}</h2></header>
+<div class="availability-panel__body"{% if can_check %} id="availability-panel" data-station-link="{{ station_link.id }}"
+     data-csrf="{{ csrf_token }}" data-day="{{ day_detail.date.isoformat }}"
+     data-running-url="{{ running_url }}" data-running="{% if panel.state == 'running' %}1{% endif %}"
+     data-check-url="{{ check_url }}" data-status-url="{% url 'availability_check_status' task_id='TASK' %}"
+     data-recover-url="{% url 'availability_recover' %}" data-recover-status-url="{% url 'availability_recover_status' task_id='TASK' %}"
+     data-send-url="{% url 'availability_send_window' %}" data-send-status-url="{% url 'availability_send_window_status' task_id='TASK' %}"{% endif %}>
+    {% if can_check %}
+        <div class="availability-wholeday">
+            {% if not panel %}
+                <span class="availability-meta">{% trans "No mapped parameter is missing, so there is nothing to check." %}</span>
+            {% elif panel.state == 'running' %}
+                <span><strong>
+                    {% if panel.running.kind == 'recover' %}{% trans "Recovering" %}{% else %}{% trans "Checking" %}{% endif %}{% if panel.running.day %} {{ panel.running.day|date:"j M" }}{% endif %}&hellip;
+                </strong>
+                    {% if panel.running.since %}<span class="availability-meta">{% blocktrans with since=panel.running.since|date:"H:i" %}since {{ since }}{% endblocktrans %}</span>{% endif %}
+                </span>
+                <button type="button" class="button button-small" disabled>{% trans "Check source" %}</button>
+            {% else %}
+                <button type="button" class="button button-small" data-action="check">
+                    {% if check_items %}{% trans "Check source again" %}{% else %}{% trans "Check source" %}{% endif %}
+                    ({{ panel.whole_day.span }}, {{ panel.whole_day.hours }} h)
+                </button>
+                <span class="availability-meta">
+                    {% if check_instant %}{% trans "The check is instant (the source is asked for a listing)." %}
+                    {% else %}{% trans "The check runs in the background: the source's data is fetched and parsed, and nothing is saved." %}{% endif %}
+                </span>
+            {% endif %}
+            <span id="availability-panel-status" role="status"></span>
+        </div>
+    {% endif %}
+    {% if check_items %}
+        <table class="listing availability-checks-table">
+                        <thead>
+                        <tr>
+                            <th scope="col">{% trans "Checked" %}</th>
+                            <th scope="col">{% trans "Window" %}</th>
+                            <th scope="col">{% trans "Method" %}</th>
+                            <th scope="col">{% trans "Result" %}</th>
+                            <th scope="col">{% trans "Covers" %}</th>
+                            <th scope="col">{% trans "Recovery" %}</th>
+                        </tr>
+                        </thead>
+                        <tbody>
+                        {% for item in check_items %}
+                            <tr>
+                                <td>{{ item.check.created_at|date:"j M H:i" }}</td>
+                                <td>{{ item.span }}</td>
+                                <td>{% if item.by_listing %}{% trans "File listing" %}{% else %}{% trans "Fetched and parsed" %}{% endif %}</td>
+                                <td>
+                                    {% if not item.ok %}<span class="status-badge status-badge--failed">{% trans "Did not answer" %}</span>
+                                    {% elif item.summary.verdict == 'has_data' %}<span class="status-badge status-badge--warning">{% trans "Source has data" %}</span>
+                                    {% else %}<span class="status-badge status-badge--muted">{% trans "Source has nothing" %}</span>{% endif %}
+                                </td>
+                                <td>{% if item.ok %}{% blocktrans with covered=item.summary.covered total=item.summary.missing_total %}{{ covered }} of {{ total }} missing hours{% endblocktrans %}{% else %}&mdash;{% endif %}</td>
+                                <td>
+                                    {% if item.check.recovery_saved is not None %}
+                                        {% if item.check.recovered %}
+                                            {% blocktrans with fetched=item.check.recovery_fetched saved=item.check.recovery_saved %}Recovered: fetched {{ fetched }} source record(s), saved {{ saved }} observation(s){% endblocktrans %}
+                                        {% else %}
+                                            {% blocktrans with fetched=item.check.recovery_fetched %}Recovery saved nothing (fetched {{ fetched }}){% endblocktrans %}
+                                        {% endif %}
+                                    {% elif item.ok and item.summary.verdict == 'has_data' %}
+                                        {% trans "Not recovered" %}
+                                    {% else %}&mdash;{% endif %}
+                                    {% if forloop.first and late_dispatch %}
+                                        <div class="availability-late-dispatch">
+                                            <span class="availability-meta">{% trans "Send this window to:" %}</span>
+                                            {% for channel in late_dispatch.channels %}
+                                                <button type="button" class="button button-small button-secondary" data-action="send-window"
+                                                        data-check="{{ late_dispatch.check.id }}" data-channel="{{ channel.id }}">{{ channel.name }}</button>
+                                            {% endfor %}
+                                        </div>
+                                    {% endif %}
+                                    {% if forloop.first and panel %}
+                                        {% if panel.state == 'recover' %}
+                                            <button type="button" class="button button-small" data-action="recover"
+                                                    data-check="{{ item.check.id }}">{% trans "Recover" %}</button>
+                                        {% elif panel.latest.can_fetch_instead %}
+                                            <button type="button" class="button button-small button-secondary" data-action="check" data-fetch="1">{% trans "Try by fetching data" %}</button>
+                                        {% endif %}
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            {% if item.check.message %}
+                                <tr class="availability-checks-detail">
+                                    <td colspan="6" class="availability-meta">{{ item.check.message }}{% if item.check.category %} ({{ item.check.category }}){% endif %}</td>
+                                </tr>
+                            {% endif %}
+                            {% if item.ok and item.summary.parameter_counts %}
+                                <tr class="availability-checks-detail">
+                                    <td colspan="6">
+                                        <details>
+                                            <summary class="availability-meta">{% trans "Per parameter" %}</summary>
+                                            <table class="listing availability-params-table">
+                                                <thead>
+                                                <tr>
+                                                    <th scope="col">{% trans "Parameter" %}</th>
+                                                    <th scope="col">{% trans "Hours with data" %}</th>
+                                                </tr>
+                                                </thead>
+                                                <tbody>
+                                                {% for parameter, count in item.summary.parameter_counts %}
+                                                    <tr{% if not count %} class="availability-zero"{% endif %}>
+                                                        <td>{{ parameter.name }}</td>
+                                                        <td>{{ count }}</td>
+                                                    </tr>
+                                                {% endfor %}
+                                                </tbody>
+                                            </table>
+                                        </details>
+                                    </td>
+                                </tr>
+                            {% endif %}
+                        {% endfor %}
+                        </tbody>
+                    </table>
+    {% elif panel %}
+        <p class="availability-meta">{% trans "No checks for this day yet." %}</p>
+    {% endif %}
+</div>
+</section>
+        {% endif %}
+
+<section class="availability-panel">
+<header class="availability-panel__header"><h2 class="availability-panel__title">{% trans 'Hourly data' %}</h2></header>
+<div class="availability-panel__body">
+        <div class="availability-legend">
+            <span class="legend-complete">{% trans "Data present" %}</span>
+            <span class="legend-empty">{% trans "Missing" %}</span>
+            <span class="legend-not-expected">{% trans "Not expected" %}</span>
+            <span class="legend-source-has">{% trans "Source has data, not recovered" %}</span>
+            <span class="legend-note">{% trans "Hours are local; hover a cell for its record count" %}</span>
+        </div>
+
+        <div class="availability-matrix-wrap">
+            <table class="availability-matrix">
+                <thead>
+                <tr>
+                    <th scope="col"></th>
+                    {% for cell in day_detail.any_row.cells %}
+                        <th scope="col">{{ cell.local_time|date:"H:i" }}</th>
+                    {% endfor %}
+                </tr>
+                </thead>
+                <tbody>
+                {% for row in matrix_rows %}
+                    <tr{% if row.is_any %} class="availability-any-row"{% endif %}>
+                        <th scope="row">
+                            {% if row.is_any %}{% trans "Any parameter" %}{% else %}{{ row.parameter.name }}{% endif %}
+                            {% if not row.mapped %}<span class="availability-unmapped">{% trans "not currently mapped" %}</span>{% endif %}
+                        </th>
+                        {% for item in row.cells %}
+                            <td class="availability-hour availability-hour--{{ item.cell.state }}{% if item.mark == 'has_data' %} availability-hour--source-has_data{% endif %}"
+                                data-start="{{ item.cell.iso }}"
+                                title="{{ item.cell.local_time|date:'H:i' }} — {% blocktrans count n=item.cell.records_count %}{{ n }} record{% plural %}{{ n }} records{% endblocktrans %}{% if item.mark == 'has_data' %} — {% trans 'Source has data, not recovered' %}{% elif item.mark == 'nothing' %} — {% trans 'Source has nothing' %}{% endif %}">{% if item.cell.records_count %}{{ item.cell.records_count }}{% endif %}</td>
+                        {% endfor %}
+                    </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+</div>
+</section>
+
+    {% else %}
+        {% if watch_running %}<span id="availability-running-watch" hidden data-url="{{ running_url }}" data-station-link="{{ station_link.id }}"></span>{% endif %}
+<section class="availability-panel">
+<header class="availability-panel__header"><h2 class="availability-panel__title">{% trans 'Availability by day' %}</h2></header>
+<div class="availability-panel__body">
+        <table class="availability-calendar">
+            <thead>
+            <tr>
+                {% for weekday in weekdays %}
+                    <th scope="col">{{ weekday|date:"D" }}</th>
+                {% endfor %}
+            </tr>
+            </thead>
+            <tbody>
+            {% for week in weeks %}
+                <tr>
+                    {% for cell in week %}
+                        {% if cell %}
+                            {% with day=cell.0 %}
+                            <td class="availability-cell availability-cell--{{ day.state }}{% if day.state == 'partial' %} availability-cell--partial-{{ day.level }}{% endif %}{% if day.has_parameter_gap %} availability-cell--gap{% endif %}"{% if day.has_parameter_gap %} title="{% trans 'A mapped parameter is missing for some expected hours' %}"{% endif %}>
+                                <a href="{{ cell.1 }}" class="availability-cell-link" aria-label="{{ day.date|date:'j F Y' }}"></a>
+                                <span class="availability-day">{{ day.date.day }}</span>
+                                {% if day.label %}<span class="availability-count">{{ day.label }}</span>{% endif %}
+                                {% if running and running.day == day.date %}<span class="availability-running" title="{% if running.kind == 'recover' %}{% trans 'Recovering' %}{% else %}{% trans 'Checking' %}{% endif %}{% if running.since %} {% blocktrans with since=running.since|date:'H:i' %}since {{ since }}{% endblocktrans %}{% endif %}"><span class="w-sr-only">{% trans "Source check running" %}</span></span>{% endif %}
+                                {% if day.checked %}<span class="availability-checked" title="{% trans 'The source was asked about every gap on this day' %}"><span aria-hidden="true">&#10003;</span><span class="w-sr-only">{% trans "Checked" %}</span></span>{% endif %}
+                            </td>
+                            {% endwith %}
+                        {% else %}
+                            <td class="availability-cell availability-cell--pad"></td>
+                        {% endif %}
+                    {% endfor %}
+                </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+
+        <div class="availability-legend">
+            <span class="legend-complete">{% trans "Complete" %}</span>
+            <span class="legend-partial">{% trans "Partial — darker means more missing hours" %}</span>
+            <span class="legend-empty">{% trans "No data" %}</span>
+            <span class="legend-gap">{% trans "A mapped parameter is missing for some expected hours" %}</span>
+            <span class="legend-not-expected">{% trans "Not expected" %}</span>
+            <span class="legend-note">{% trans "Counts show hours with data / hours expected" %}</span>
+        </div>
+</div>
+</section>
+    {% endif %}
+    {% endif %}
+{% endblock %}
+
+{% block extra_js %}
+    {{ block.super }}
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            const form = document.getElementById('availability-form');
+            const connection = document.getElementById('availability-connection');
+            const stationLink = document.getElementById('availability-station-link');
+
+            // A new connection invalidates the chosen station link
+            connection.addEventListener('change', function () {
+                stationLink.disabled = true;
+                form.submit();
+            });
+
+            // --- month calendar: a run is in flight, wait for it to end, then show the result
+            const watch = document.getElementById('availability-running-watch');
+            if (watch) {
+                const again = () => {
+                    fetch(watch.dataset.url + '?station_link=' + encodeURIComponent(watch.dataset.stationLink),
+                          {headers: {'X-Requested-With': 'XMLHttpRequest'}})
+                        .then((response) => response.json())
+                        .then((data) => data.running ? window.setTimeout(again, 2000) : window.location.reload())
+                        .catch(() => window.setTimeout(again, 5000));
+                };
+                window.setTimeout(again, 2000);
+            }
+
+            // --- source check and recovery: one status panel at the top of the day view
+            const panel = document.getElementById('availability-panel');
+            if (panel) {
+                const status = document.getElementById('availability-panel-status');
+                const buttons = panel.querySelectorAll('button');
+                const setBusy = (busy) => buttons.forEach((b) => { b.disabled = busy; });
+                const fail = (message) => { status.textContent = message; setBusy(false); };
+                const lost = () => fail('{% trans "Lost contact with the server." %}');
+
+                // POST, then poll the task until it ends; ``done`` gets the final answer
+                function run(url, statusUrl, params, working, done) {
+                    setBusy(true);
+                    status.textContent = working;
+                    // a run can take minutes; one failed poll (a restart, a dropped
+                    // connection) must not strand the panel, so only give up after
+                    // several in a row
+                    let failures = 0;
+                    const poll = (taskId) => {
+                        const target = statusUrl.replace('TASK', encodeURIComponent(taskId))
+                            + '?station_link=' + encodeURIComponent(panel.dataset.stationLink);
+                        fetch(target, {headers: {'X-Requested-With': 'XMLHttpRequest'}})
+                            .then((response) => response.json())
+                            .then((data) => {
+                                failures = 0;
+                                if (data.state === 'PENDING') return window.setTimeout(() => poll(taskId), 2000);
+                                done(data);
+                            })
+                            .catch(() => {
+                                failures += 1;
+                                if (failures >= 5) return lost();
+                                window.setTimeout(() => poll(taskId), 3000);
+                            });
+                    };
+                    params.set('station_link', panel.dataset.stationLink);
+                    fetch(url, {
+                        method: 'POST',
+                        headers: {'X-CSRFToken': panel.dataset.csrf, 'X-Requested-With': 'XMLHttpRequest'},
+                        body: params,
+                    })
+                        .then((response) => response.json())
+                        .then((data) => {
+                            if (data.error) return fail(data.error);
+                            if (data.state === 'SUCCESS') return window.location.reload();
+                            poll(data.task_id);
+                        })
+                        .catch(lost);
+                }
+
+                // loaded while a run was in flight: wait for it to end, then show its result
+                if (panel.dataset.running) {
+                    const watch = () => {
+                        fetch(panel.dataset.runningUrl + '?station_link=' + encodeURIComponent(panel.dataset.stationLink),
+                              {headers: {'X-Requested-With': 'XMLHttpRequest'}})
+                            .then((response) => response.json())
+                            .then((data) => data.running ? window.setTimeout(watch, 2000) : window.location.reload())
+                            .catch(() => window.setTimeout(watch, 5000));
+                    };
+                    window.setTimeout(watch, 2000);
+                }
+
+                panel.querySelectorAll('[data-action="check"]').forEach((button) => {
+                    button.addEventListener('click', function () {
+                        const params = new URLSearchParams({day: panel.dataset.day});
+                        if (button.dataset.fetch) params.set('fetch', '1');
+                        run(panel.dataset.checkUrl, panel.dataset.statusUrl, params, '{% trans "Checking…" %}',
+                            (data) => data.state === 'SUCCESS' ? window.location.reload() : fail(data.message || data.error));
+                    });
+                });
+
+                panel.querySelectorAll('[data-action="send-window"]').forEach((button) => {
+                    button.addEventListener('click', function () {
+                        run(panel.dataset.sendUrl, panel.dataset.sendStatusUrl,
+                            new URLSearchParams({check: button.dataset.check, channel: button.dataset.channel}),
+                            '{% trans "Sending…" %}',
+                            (data) => {
+                                setBusy(false);
+                                status.textContent = data.state === 'SUCCESS'
+                                    ? '{% trans "Sent records:" %} ' + data.sent
+                                    : (data.message || data.error);
+                            });
+                    });
+                });
+
+                panel.querySelectorAll('[data-action="recover"]').forEach((button) => {
+                    button.addEventListener('click', function () {
+                        run(panel.dataset.recoverUrl, panel.dataset.recoverStatusUrl,
+                            new URLSearchParams({check: button.dataset.check}), '{% trans "Recovering…" %}',
+                            (data) => data.state === 'SUCCESS' ? window.location.reload() : fail(data.message || data.error));
+                    });
+                });
+            }
+        });
+    </script>
+{% endblock %}

@@ -922,6 +922,45 @@ class StationLink(PolymorphicModel, ClusterableModel):
         from adl.core.source_checks import station_link_implements_check_station_source
         return station_link_implements_check_station_source(self)
     
+    def check_availability(self, start, end):
+        """
+        Optional. Ask the source, cheaply, whether it has data for the window
+        ``[start, end)`` of **this** station link (the availability check's
+        listing tier — e.g. an FTP file listing instead of downloading files).
+        ``start`` and ``end`` are aware datetimes in the station link's
+        timezone. Strictly **read-only**: it must save nothing.
+
+        Return an :class:`~adl.core.availability_checks.AvailabilityCheckResult`
+        whose ``ranges`` are the time ranges the source covers at its natural
+        granularity (a daily file is one 24 h range); core intersects them with
+        the window's missing hours, so no hourly bucketing is needed here.
+
+        Support is decided per station link: return ``UNSUPPORTED`` for the
+        links this cannot answer (the default), and core falls back to
+        fetching and parsing the window. The return is normalised by core and
+        never trusted as-is.
+        """
+        from adl.core.availability_checks import AvailabilityCheckResult
+        from adl.core.source_checks import SourceCheckStatus
+        return AvailabilityCheckResult(
+            status=SourceCheckStatus.UNSUPPORTED,
+            message=_("This plugin does not implement the availability check."),
+        )
+
+    @property
+    def availability_check_supported(self):
+        """True when this station link answers the availability check cheaply
+        itself — what decides whether the button reads "instant" or "runs in
+        the background", without performing any I/O.
+
+        Gated on the connection's ``has_external_source`` first, like
+        ``station_source_check_supported``: with no source there is nothing to
+        ask."""
+        if not self.network_connection.has_external_source:
+            return False
+        from adl.core.availability_checks import station_link_implements_check_availability
+        return station_link_implements_check_availability(self)
+
     def fetch_latest_data(self):
         """
         Fetches latest data for the station link using the network connection's plugin.
