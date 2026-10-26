@@ -192,14 +192,20 @@ PANEL_RECOVER = "recover"
 PANEL_RECOVERED = "recovered"
 PANEL_NOTHING = "nothing"
 PANEL_FAILED = "failed"
+PANEL_RUNNING = "running"
 
 
-def _day_panel(whole_day, check_items):
+def _day_panel(whole_day, check_items, running=None):
     """What the day view's status panel offers, from the day's newest stored check:
     check the source, recover what a check found, or the outcome of the last step.
-    ``None`` when no mapped parameter is missing."""
+    While a check or recovery is in flight for the station link (``running``) it
+    shows that instead, whoever started it. ``None`` when no mapped parameter is
+    missing."""
     if whole_day is None:
         return None
+    if running is not None:
+        return {"state": PANEL_RUNNING, "running": running, "latest": None,
+                "whole_day": whole_day}
     latest = check_items[0] if check_items else None
     if latest is None:
         state = PANEL_CHECK
@@ -301,7 +307,10 @@ def data_availability(request):
             context["check_items"] = _check_items(
                 overlay, ZoneInfo(str(station_link.timezone)), can_check)
             if can_check:
-                context["panel"] = _day_panel(context["whole_day"], context["check_items"])
+                context["panel"] = _day_panel(
+                    context["whole_day"], context["check_items"],
+                    running=gap_service.in_flight(station_link.id))
+                context["running_url"] = reverse("availability_running")
 
     elif connection_id:
         connection = connections.get(id=connection_id)
@@ -460,3 +469,21 @@ def availability_recover_status(request, task_id):
         return JsonResponse({"state": "FAILURE", "message": str(
             _("The recovery could not run to completion. See the application logs."))})
     return JsonResponse({"state": "PENDING"})
+
+
+@require_GET
+def availability_running(request):
+    """Whether a check or recovery is running for a station link, for a page that
+    loaded in the running state to poll: ``{"running": bool, "kind": ...,
+    "since": ...}``. Gated like the actions it reports on."""
+    station_link = _managed_station_link(request, _positive_int(request.GET.get("station_link")))
+    if station_link is None:
+        return _json_error(_("Unknown station link."), 404)
+
+    running = gap_service.in_flight(station_link.id)
+    if running is None:
+        return JsonResponse({"running": False})
+    return JsonResponse({
+        "running": True, "kind": running.kind,
+        "since": running.since.isoformat() if running.since else None,
+    })

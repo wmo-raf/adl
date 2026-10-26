@@ -93,6 +93,41 @@ def inflight_key(station_link_id):
     return f"availability-inflight-{station_link_id}"
 
 
+CLAIM_CHECK = "check"
+CLAIM_RECOVER = "recover"
+
+
+@dataclass(frozen=True)
+class InFlight:
+    """What holds a station link's in-flight claim: a ``kind`` and, when the
+    cached value is readable, the time it was taken."""
+
+    kind: str
+    since: Optional[datetime]
+
+
+def claim(station_link_id, kind) -> bool:
+    """Take the station link's in-flight claim for ``kind``; ``False`` when
+    something else holds it. The value carries the start time for display."""
+    return cache.add(
+        inflight_key(station_link_id), f"{kind}|{dj_timezone.now().isoformat()}",
+        timeout=INFLIGHT_SECONDS)
+
+
+def in_flight(station_link_id) -> Optional[InFlight]:
+    """The check or recovery running for the station link, or ``None``. A claim
+    is a cache value with a TTL, so a caller must never depend on its content."""
+    value = cache.get(inflight_key(station_link_id))
+    if value is None:
+        return None
+    kind, _, since = str(value).partition("|")
+    try:
+        started = datetime.fromisoformat(since)
+    except ValueError:
+        started = None
+    return InFlight(kind if kind in (CLAIM_CHECK, CLAIM_RECOVER) else CLAIM_CHECK, started)
+
+
 @dataclass(frozen=True)
 class GapWindow:
     start: datetime  # UTC, hour aligned
@@ -328,7 +363,7 @@ def check(station_link, start, end, parameter_id=None, force_fetch=False, now=No
     if not station_link.network_connection.has_external_source:
         raise CheckUnavailable(_("This connection has no external source to check."))
 
-    if not cache.add(inflight_key(station_link.id), "check", timeout=INFLIGHT_SECONDS):
+    if not claim(station_link.id, CLAIM_CHECK):
         raise CheckInFlight(
             _("A check or recovery is already running for this station link."))
 
@@ -415,7 +450,7 @@ def recover(station_link, check_id, now=None) -> str:
     if not station_link.network_connection.has_external_source:
         raise CheckUnavailable(_("This connection has no external source to recover from."))
 
-    if not cache.add(inflight_key(station_link.id), "recover", timeout=INFLIGHT_SECONDS):
+    if not claim(station_link.id, CLAIM_RECOVER):
         raise CheckInFlight(
             _("A check or recovery is already running for this station link."))
     try:

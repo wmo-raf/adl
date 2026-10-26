@@ -331,6 +331,24 @@ class DayViewRenderingTests(CheckViewTestCase):
 
         self.assertNotContains(response, 'data-check="')
 
+    def test_a_run_in_flight_shows_the_panel_running_and_disables_the_action(self):
+        self.with_mapping()
+        cache.set(gap_service.inflight_key(self.link.id),
+                  "recover|2026-03-10T10:42:00+00:00", timeout=60)
+
+        response = self.day()
+
+        self.assertContains(response, "Recovering")
+        self.assertContains(response, "since 10:42")
+        self.assertContains(response, 'data-running="1"')
+        self.assertNotContains(response, 'data-check="')
+        self.assertNotContains(response, "Check source again")
+
+    def test_an_idle_panel_does_not_watch_for_a_run(self):
+        self.with_mapping()
+
+        self.assertNotContains(self.day(), 'data-running="1"')
+
     def test_read_only_users_get_no_panel_and_no_recovery(self):
         self.plain_user()
         self.store(ranges=[{"start": utc(2026, 3, 5, 6).isoformat(),
@@ -590,3 +608,41 @@ class RecoverViewTests(CheckViewTestCase):
                                 "fetched": 5, "saved": 4})
 
         self.assertEqual(response.status_code, 404)
+
+
+class RunningStatusTests(CheckViewTestCase):
+    def setUp(self):
+        super().setUp()
+        cache.clear()
+        self.addCleanup(cache.clear)
+        self.url = reverse("availability_running")
+
+    def get(self, **params):
+        return self.client.get(self.url, {"station_link": self.link.id, **params},
+                               HTTP_X_REQUESTED_WITH="XMLHttpRequest")
+
+    def test_idle(self):
+        self.assertEqual(self.get().json(), {"running": False})
+
+    def test_reports_the_kind_and_start_of_the_claim(self):
+        gap_service.claim(self.link.id, gap_service.CLAIM_CHECK)
+
+        body = self.get().json()
+
+        self.assertEqual((body["running"], body["kind"]), (True, "check"))
+        self.assertIsNotNone(body["since"])
+
+    def test_a_claim_in_the_old_bare_format_still_reads_as_running(self):
+        cache.set(gap_service.inflight_key(self.link.id), "check", timeout=60)
+
+        body = self.get().json()
+
+        self.assertEqual((body["running"], body["kind"], body["since"]), (True, "check", None))
+
+    def test_a_read_only_user_gets_403(self):
+        self.plain_user()
+
+        self.assertEqual(self.get().status_code, 403)
+
+    def test_an_unknown_station_link_is_a_404(self):
+        self.assertEqual(self.get(station_link="999999").status_code, 404)

@@ -766,3 +766,22 @@ class RecoveryTests(GapServiceTestCase):
 
         with self.assertRaises(InvalidWindow):
             recover(self.link, stored.id, now=NOW)
+
+
+class InFlightClaimTests(GapServiceTestCase):
+    def test_a_check_and_a_recovery_claim_with_their_kind_and_start(self):
+        self.assertIsNone(gap_service.in_flight(self.link.id))
+
+        self.assertTrue(gap_service.claim(self.link.id, gap_service.CLAIM_RECOVER))
+
+        held = gap_service.in_flight(self.link.id)
+        self.assertEqual(held.kind, gap_service.CLAIM_RECOVER)
+        self.assertIsNotNone(held.since)
+        self.assertFalse(gap_service.claim(self.link.id, gap_service.CLAIM_CHECK))
+
+    def test_release_clears_it(self):
+        gap_service.claim(self.link.id, gap_service.CLAIM_CHECK)
+
+        gap_service.release(self.link.id)
+
+        self.assertIsNone(gap_service.in_flight(self.link.id))

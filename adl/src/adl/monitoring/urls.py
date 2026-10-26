@@ -13,6 +13,7 @@ from .views.availability import (
     availability_check_status,
     availability_recover,
     availability_recover_status,
+    availability_running,
     data_availability,
 )
 from .views.activity import NetworkConnectionActivityView, DispatchChannelMonitoringView
@@ -28,6 +29,7 @@ urlpatterns = [
     path('availability/check/', availability_check, name='availability_check'),
     path('availability/check/<str:task_id>/', availability_check_status,
          name='availability_check_status'),
+    path('availability/running/', availability_running, name='availability_running'),
     path('availability/recover/', availability_recover, name='availability_recover'),
     path('availability/recover/<str:task_id>/', availability_recover_status,
          name='availability_recover_status'),

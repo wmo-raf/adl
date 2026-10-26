@@ -103,5 +103,7 @@ meanings.
 : The status panel at the top of the day view, the one place a day is checked
   and recovered. It shows a single state from the day's newest stored check:
   check the source, recover what a check found, or the outcome of the last
-  step (nothing found, did not answer, recovered with counts). The stored
+  step (nothing found, did not answer, recovered with counts). While a check or
+  recovery is running for the station link, whoever started it, the panel shows
+  that, read from the in-flight claim, so it survives a refresh. The stored
   checks listed below the matrix are history only.

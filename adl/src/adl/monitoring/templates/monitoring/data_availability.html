@@ -518,12 +518,20 @@
         {% if can_check %}
             <div class="availability-wholeday" id="availability-panel" data-station-link="{{ station_link.id }}"
                  data-csrf="{{ csrf_token }}" data-day="{{ day_detail.date.isoformat }}"
+                 data-running-url="{{ running_url }}" data-running="{% if panel.state == 'running' %}1{% endif %}"
                  data-check-url="{{ check_url }}" data-status-url="{% url 'availability_check_status' task_id='TASK' %}"
                  data-recover-url="{% url 'availability_recover' %}" data-recover-status-url="{% url 'availability_recover_status' task_id='TASK' %}">
                 {% if not panel %}
                     <span class="availability-meta">{% trans "No mapped parameter is missing, so there is nothing to check." %}</span>
                 {% else %}
-                    {% if panel.state == 'recover' %}
+                    {% if panel.state == 'running' %}
+                        <span><strong>
+                            {% if panel.running.kind == 'recover' %}{% trans "Recovering" %}{% else %}{% trans "Checking" %}{% endif %}&hellip;
+                        </strong>
+                            {% if panel.running.since %}<span class="availability-meta">{% blocktrans with since=panel.running.since|date:"H:i" %}since {{ since }}{% endblocktrans %}</span>{% endif %}
+                        </span>
+                        <button type="button" class="button button-small" disabled>{% trans "Check source" %}</button>
+                    {% elif panel.state == 'recover' %}
                         <span><strong>{% trans "The source has data for this gap." %}</strong>
                             {{ panel.latest.local_start|date:"H:i" }}&ndash;{{ panel.latest.local_end|date:"H:i" }}</span>
                         <button type="button" class="button button-small" data-action="recover"
@@ -721,6 +729,18 @@
                             poll(data.task_id);
                         })
                         .catch(lost);
+                }
+
+                // loaded while a run was in flight: wait for it to end, then show its result
+                if (panel.dataset.running) {
+                    const watch = () => {
+                        fetch(panel.dataset.runningUrl + '?station_link=' + encodeURIComponent(panel.dataset.stationLink),
+                              {headers: {'X-Requested-With': 'XMLHttpRequest'}})
+                            .then((response) => response.json())
+                            .then((data) => data.running ? window.setTimeout(watch, 2000) : window.location.reload())
+                            .catch(() => window.setTimeout(watch, 5000));
+                    };
+                    window.setTimeout(watch, 2000);
                 }
 
                 panel.querySelectorAll('[data-action="check"]').forEach((button) => {
