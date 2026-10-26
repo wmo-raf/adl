@@ -588,7 +588,8 @@
      data-csrf="{{ csrf_token }}" data-day="{{ day_detail.date.isoformat }}"
      data-running-url="{{ running_url }}" data-running="{% if panel.state == 'running' %}1{% endif %}"
      data-check-url="{{ check_url }}" data-status-url="{% url 'availability_check_status' task_id='TASK' %}"
-     data-recover-url="{% url 'availability_recover' %}" data-recover-status-url="{% url 'availability_recover_status' task_id='TASK' %}"{% endif %}>
+     data-recover-url="{% url 'availability_recover' %}" data-recover-status-url="{% url 'availability_recover_status' task_id='TASK' %}"
+     data-send-url="{% url 'availability_send_window' %}" data-send-status-url="{% url 'availability_send_window_status' task_id='TASK' %}"{% endif %}>
     {% if can_check %}
         <div class="availability-wholeday">
             {% if not panel %}
@@ -647,6 +648,15 @@
                                     {% elif item.ok and item.summary.verdict == 'has_data' %}
                                         {% trans "Not recovered" %}
                                     {% else %}&mdash;{% endif %}
+                                    {% if forloop.first and late_dispatch %}
+                                        <div class="availability-late-dispatch">
+                                            <span class="availability-meta">{% trans "Send this window to:" %}</span>
+                                            {% for channel in late_dispatch.channels %}
+                                                <button type="button" class="button button-small button-secondary" data-action="send-window"
+                                                        data-check="{{ late_dispatch.check.id }}" data-channel="{{ channel.id }}">{{ channel.name }}</button>
+                                            {% endfor %}
+                                        </div>
+                                    {% endif %}
                                     {% if forloop.first and panel %}
                                         {% if panel.state == 'recover' %}
                                             <button type="button" class="button button-small" data-action="recover"
@@ -881,6 +891,20 @@
                         if (button.dataset.fetch) params.set('fetch', '1');
                         run(panel.dataset.checkUrl, panel.dataset.statusUrl, params, '{% trans "Checking…" %}',
                             (data) => data.state === 'SUCCESS' ? window.location.reload() : fail(data.message || data.error));
+                    });
+                });
+
+                panel.querySelectorAll('[data-action="send-window"]').forEach((button) => {
+                    button.addEventListener('click', function () {
+                        run(panel.dataset.sendUrl, panel.dataset.sendStatusUrl,
+                            new URLSearchParams({check: button.dataset.check, channel: button.dataset.channel}),
+                            '{% trans "Sending…" %}',
+                            (data) => {
+                                setBusy(false);
+                                status.textContent = data.state === 'SUCCESS'
+                                    ? '{% trans "Sent records:" %} ' + data.sent
+                                    : (data.message || data.error);
+                            });
                     });
                 });
 

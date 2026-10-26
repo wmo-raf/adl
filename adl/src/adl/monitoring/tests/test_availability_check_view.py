@@ -693,6 +693,65 @@ class RecoverViewTests(CheckViewTestCase):
         self.assertEqual(response.status_code, 404)
 
 
+class SendWindowViewTests(CheckViewTestCase):
+    def setUp(self):
+        super().setUp()
+        from adl.core.models import DispatchChannel
+        self.channel = DispatchChannel.objects.create(name="Late channel")
+        self.channel.network_connections.add(self.connection)
+        self.url = reverse("availability_send_window")
+        self.payload = {"station_link": self.link.id, "check": "7", "channel": self.channel.id}
+
+    def test_a_user_who_cannot_manage_the_channel_gets_403_and_nothing_runs(self):
+        self.plain_user("change_networkconnection")
+
+        with patch(f"{GAP}.send_window") as send:
+            response = self.post()
+
+        self.assertEqual(response.status_code, 403)
+        send.assert_not_called()
+
+    def test_a_user_who_cannot_manage_the_connection_gets_403(self):
+        self.plain_user("change_dispatchchannel")
+
+        with patch(f"{GAP}.send_window") as send:
+            response = self.post()
+
+        self.assertEqual(response.status_code, 403)
+        send.assert_not_called()
+
+    def test_enqueues_the_late_dispatch_and_returns_the_task_id(self):
+        with patch(f"{GAP}.send_window", return_value="t1") as send:
+            response = self.post()
+
+        self.assertEqual(response.json(), {"state": "PENDING", "task_id": "t1"})
+        self.assertEqual(send.call_args.args, (self.link, 7, self.channel.id))
+
+    def test_refusals_and_malformed_input_are_400s(self):
+        with patch(f"{GAP}.send_window", side_effect=gap_service.InvalidWindow("x")):
+            self.assertEqual(self.post().status_code, 400)
+        self.assertEqual(self.post(check="nope").status_code, 400)
+        self.assertEqual(self.post(channel="9999").status_code, 400)
+
+    def status(self, result):
+        with patch("adl.monitoring.views.availability.AsyncResult") as async_result:
+            async_result.return_value.state = "SUCCESS"
+            async_result.return_value.result = result
+            return self.client.get(
+                reverse("availability_send_window_status", args=["t1"]),
+                {"station_link": self.link.id}, HTTP_X_REQUESTED_WITH="XMLHttpRequest")
+
+    def test_status_reports_the_sent_count_and_busy(self):
+        report = {"station_link": self.link.id, "busy": False, "sent": 3}
+        self.assertEqual(self.status(report).json(), {"state": "SUCCESS", "sent": 3})
+        self.assertEqual(self.status({**report, "busy": True}).json()["state"], "BUSY")
+
+    def test_status_of_another_station_links_task_is_unknown(self):
+        response = self.status({"station_link": self.link.id + 1, "busy": False, "sent": 3})
+
+        self.assertEqual(response.status_code, 404)
+
+
 class RunningStatusTests(CheckViewTestCase):
     def setUp(self):
         super().setUp()

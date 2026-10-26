@@ -15,7 +15,8 @@ from django.utils.translation import gettext as _
 
 from adl.core.availability_checks import TIER_FETCH, TIER_LISTING
 from adl.core.models import NetworkConnection, StationLink
-from adl.core.permissions import can_manage_connection
+from adl.core.models import DispatchChannel
+from adl.core.permissions import can_manage_channel, can_manage_connection
 from adl.core.source_checks import SourceCheckStatus
 from .. import gap_service
 from ..availability import (
@@ -236,6 +237,17 @@ def _day_panel(whole_day, check_items, running=None):
     return {"state": state, "latest": latest, "whole_day": whole_day}
 
 
+def _late_dispatch(user, station_link, check_items):
+    """The channels the newest check's recovered window may be sent to, for a user
+    who may manage them; ``None`` when that check was not recovered."""
+    latest = check_items[0]["check"] if check_items else None
+    if latest is None or not latest.recovered:
+        return None
+    channels = [channel for channel in gap_service.late_dispatch_channels(station_link)
+                if can_manage_channel(user, channel)]
+    return {"check": latest, "channels": channels} if channels else None
+
+
 def data_availability(request):
     """Month calendar of a station link's data availability, or the connection
     grid of all its links when only a connection is chosen.
@@ -326,6 +338,8 @@ def data_availability(request):
             context["check_items"] = _check_items(
                 overlay, ZoneInfo(str(station_link.timezone)), can_check)
             if can_check:
+                context["late_dispatch"] = _late_dispatch(
+                    request.user, station_link, context["check_items"])
                 context["panel"] = _day_panel(
                     context["whole_day"], context["check_items"],
                     running=gap_service.in_flight(station_link.id))
@@ -488,6 +502,61 @@ def availability_recover_status(request, task_id):
     if result.state in ("FAILURE", "REVOKED"):
         return JsonResponse({"state": "FAILURE", "message": str(
             _("The recovery could not run to completion. See the application logs."))})
+    return JsonResponse({"state": "PENDING"})
+
+
+@require_POST
+def availability_send_window(request):
+    """Send a recovered check's window to a dispatch channel (late dispatch).
+
+    ``station_link``, ``check`` (the recovered check's id) and ``channel``. Never
+    automatic. Answers ``{"state": "PENDING", "task_id": ...}``; poll
+    :func:`availability_send_window_status`. Needs both ``can_manage_connection``
+    and ``can_manage_channel``.
+    """
+    station_link = _managed_station_link(request, _positive_int(request.POST.get("station_link")))
+    if station_link is None:
+        return _json_error(_("Unknown station link."), 404)
+
+    channel_id = _positive_int(request.POST.get("channel"))
+    channel = DispatchChannel.objects.filter(id=channel_id).first() if channel_id else None
+    if channel is None:
+        return _json_error(_("Unknown dispatch channel."), 400)
+    if not can_manage_channel(request.user, channel):
+        raise PermissionDenied
+
+    check_id = _positive_int(request.POST.get("check"))
+    if check_id is None:
+        return _json_error(_("Unknown check."), 400)
+
+    try:
+        task_id = gap_service.send_window(station_link, check_id, channel.id)
+    except gap_service.GapServiceError as exc:
+        return _json_error(exc, 400)
+    return JsonResponse({"state": "PENDING", "task_id": task_id})
+
+
+@require_GET
+def availability_send_window_status(request, task_id):
+    """The state of a background late dispatch, for the page to poll: ``SUCCESS``
+    with the ``sent`` count, ``BUSY`` when a normal dispatch held the station's
+    lock, ``FAILURE`` or ``PENDING``. Scoped like :func:`availability_recover_status`."""
+    station_link = _managed_station_link(request, _positive_int(request.GET.get("station_link")))
+    if station_link is None:
+        return _json_error(_("Unknown station link."), 404)
+
+    result = AsyncResult(task_id)
+    if result.state == "SUCCESS":
+        report = result.result
+        if not isinstance(report, dict) or report.get("station_link") != station_link.id:
+            return _json_error(_("Unknown task."), 404)
+        if report["busy"]:
+            return JsonResponse({"state": "BUSY", "message": str(
+                _("The channel is busy dispatching this station. Try again in a moment."))})
+        return JsonResponse({"state": "SUCCESS", "sent": report["sent"]})
+    if result.state in ("FAILURE", "REVOKED"):
+        return JsonResponse({"state": "FAILURE", "message": str(
+            _("The dispatch could not run to completion. See the activity log."))})
     return JsonResponse({"state": "PENDING"})
 
 

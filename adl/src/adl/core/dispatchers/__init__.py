@@ -9,7 +9,13 @@ from django.utils import timezone as dj_timezone
 logger = logging.getLogger(__name__)
 
 
-def get_station_channel_records(dispatch_channel, station_id, connection_id):
+def get_station_channel_records(dispatch_channel, station_id, connection_id, window=None):
+    """The channel's records for a station, oldest first.
+
+    ``window`` is a ``(start, end)`` pair of observation times, end exclusive:
+    it selects exactly that span, ignoring the station's dispatch cursor and the
+    per-run cap, so a late dispatch neither depends on nor moves normal dispatch.
+    """
     from adl.core.models import (
         StationChannelDispatchStatus,
         ObservationRecord,
@@ -46,6 +52,13 @@ def get_station_channel_records(dispatch_channel, station_id, connection_id):
     if start_date:
         obs_records = obs_records.filter(**{f"{time_field}__gte": start_date})
     
+    if window:
+        window_start, window_end = window
+        return obs_records.filter(**{
+            f"{time_field}__gte": window_start,
+            f"{time_field}__lt": window_end,
+        }).order_by(time_field)
+
     # filter by last upload time
     station_dispatch_status = get_object_or_none(StationChannelDispatchStatus, station_id=station_id,
                                                  channel_id=dispatch_channel.id)
@@ -115,8 +128,9 @@ def convert_to_channel_unit(mapping, data_value):
     return adl_parameter.convert_value_to_units(data_value, channel_unit, unit_context=mapping["unit_context"])
 
 
-def get_station_dispatch_records(dispatch_channel, station_link):
-    """Fetch and format dispatch records for a single station link."""
+def get_station_dispatch_records(dispatch_channel, station_link, window=None):
+    """Fetch and format dispatch records for a single station link, or for the
+    ``(start, end)`` ``window`` of it (see :func:`get_station_channel_records`)."""
     parameter_mappings = dispatch_channel.get_parameter_mappings()
     if not parameter_mappings:
         return []
@@ -128,6 +142,7 @@ def get_station_dispatch_records(dispatch_channel, station_link):
         dispatch_channel,
         station_link.station_id,
         station_link.network_connection_id,
+        window=window,
     )
 
     by_time = {}

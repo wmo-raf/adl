@@ -100,6 +100,20 @@ meanings.
   recovered when something was saved; if gaps remain, the day view offers a new
   check rather than the same recovery again.
 
+**late dispatch**
+: Sending the window of a recovered **availability check** to one of the station
+  link's dispatch channels, by hand, as a background task. After a **gap
+  recovery** the source checks panel lists the channels that include the station
+  link (one that explicitly disabled it is left out), each with a "Send this
+  window" action; it is never automatic and needs the right to manage both the
+  connection and the channel. The window's records are shaped as normal dispatch
+  shapes them (parameter mappings and channel units applied) and handed to the
+  channel's `send_station_data`. It never reads or writes the channel's
+  per-station dispatch cursor, so normal dispatch neither re-sends nor skips
+  data. It holds the channel's per-station dispatch lock (answering "busy" if
+  held) and writes a push activity row marked as a late dispatch, naming the
+  window.
+
 **source checks panel**
 : The one panel at the top of the day view where a day is checked and
   recovered. Its action bar offers the whole-day check (or shows the run in

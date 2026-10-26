@@ -43,7 +43,7 @@ from adl.core.availability_checks import (
     AvailabilityRange,
     normalise_availability_check_result,
 )
-from adl.core.classification import classify_failure
+from adl.core.classification import classify_failure, mark_failed
 from adl.core.probes import (
     PROBE_WALL_CLOCK_SECONDS,
     ProbeTimeout,
@@ -53,7 +53,7 @@ from adl.core.probes import (
 from adl.core.redaction import redact_secrets
 from adl.core.source_checks import SourceCheckStatus
 from .availability import HOUR, MISSING, _mapped_parameters, missing_hours, whole_day_window
-from .models import TRIGGER_GAP_RECOVERY, AvailabilityCheck
+from .models import TRIGGER_GAP_RECOVERY, TRIGGER_LATE_DISPATCH, AvailabilityCheck, StationLinkActivityLog
 
 logger = logging.getLogger(__name__)
 
@@ -518,6 +518,86 @@ def run_recovery_task(station_link_id, check_id) -> dict:
                 "fetched": report["fetched"], "saved": saved}
     finally:
         release(station_link_id)
+
+
+# ---- late dispatch ---------------------------------------------------------
+
+def late_dispatch_channels(station_link):
+    """The dispatch channels a recovered window may be sent to: those that include
+    the station link (a channel that disabled it explicitly is left out)."""
+    return station_link.get_dispatch_channels()
+
+
+def send_window(station_link, check_id, channel_id) -> str:
+    """Enqueue the late dispatch of a recovered check's window to a channel;
+    returns the task id.
+
+    The check must belong to the station link and have been recovered, and the
+    channel must be one of :func:`late_dispatch_channels`. Raises
+    :class:`InvalidWindow` otherwise. It is never automatic and takes no
+    in-flight claim: the task holds the channel's own per-station dispatch lock.
+    """
+    from .tasks import run_late_dispatch
+
+    stored = AvailabilityCheck.objects.filter(id=check_id, station_link=station_link).first()
+    if stored is None:
+        raise InvalidWindow(_("Unknown check."))
+    if not stored.recovered:
+        raise InvalidWindow(_("Only a recovered window can be sent."))
+    if not late_dispatch_channels(station_link).filter(id=channel_id).exists():
+        raise InvalidWindow(_("Unknown dispatch channel."))
+    return run_late_dispatch.delay(station_link.id, check_id, channel_id).id
+
+
+def run_late_dispatch_task(station_link_id, check_id, channel_id) -> dict:
+    """The body of the late dispatch Celery task. Returns a JSON-able report:
+    ``busy`` when a normal dispatch of the station to the channel holds its lock
+    (nothing was sent), otherwise the number of records ``sent``.
+
+    Records are selected by the window alone and shaped as normal dispatch shapes
+    them. The channel's ``StationChannelDispatchStatus`` is neither read nor
+    written, so normal dispatch neither re-sends nor skips data. Writes its own
+    push activity row naming the window.
+    """
+    import time
+
+    from adl.core.dispatchers import get_station_dispatch_records
+    from adl.core.models import DispatchChannel, StationLink
+    from adl.core.tasks import dispatch_station_lock_key, dispatch_timeout_budget_seconds
+
+    station_link = StationLink.objects.get(id=station_link_id)
+    stored = AvailabilityCheck.objects.get(id=check_id, station_link=station_link)
+    channel = DispatchChannel.objects.get(id=channel_id)
+
+    lock_key = dispatch_station_lock_key(channel.id, station_link.id)
+    if not cache.add(lock_key, "locked", timeout=dispatch_timeout_budget_seconds(channel)):
+        return {"station_link": station_link_id, "busy": True, "sent": 0}
+
+    window = f"{stored.window_start:%Y-%m-%d %H:%M} to {stored.window_end:%Y-%m-%d %H:%M} UTC"
+    started = time.monotonic()
+    log = StationLinkActivityLog.objects.create(
+        time=dj_timezone.now(), station_link=station_link, direction="push",
+        dispatch_channel=channel, trigger=TRIGGER_LATE_DISPATCH,
+        obs_start_time=stored.window_start, obs_end_time=stored.window_end,
+        message=f"Late dispatch of {window}")
+    try:
+        records = get_station_dispatch_records(
+            channel, station_link, window=(stored.window_start, stored.window_end))
+        sent = 0
+        if records:
+            sent, _last = channel.send_station_data(station_link, records)
+        log.success = True
+        log.status = StationLinkActivityLog.ActivityStatus.COMPLETED
+        log.records_count = sent
+        log.message = f"Late dispatch of {window}: sent {sent} records."
+        return {"station_link": station_link_id, "busy": False, "sent": sent}
+    except Exception as exc:
+        log.message = f"Late dispatch of {window} failed: {mark_failed(log, exc)}"
+        raise
+    finally:
+        cache.delete(lock_key)
+        log.duration_ms = (time.monotonic() - started) * 1000
+        log.save()
 
 
 # ---- rendering overlay -----------------------------------------------------
