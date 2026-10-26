@@ -263,6 +263,23 @@
             background-position: center;
         }
 
+        .availability-checked {
+            position: absolute;
+            bottom: 0.15rem;
+            right: 0.3rem;
+            font-weight: 700;
+            pointer-events: none;
+        }
+
+        .availability-day-check {
+            position: relative;
+            z-index: 1;
+            margin-top: 0.25rem;
+            padding: 0 0.4rem;
+            font-size: 0.75rem;
+            cursor: pointer;
+        }
+
         .availability-check-bar {
             display: flex;
             flex-wrap: wrap;
@@ -432,6 +449,7 @@
                         <td class="availability-cell availability-cell--{{ day.state }}{% if day.state == 'partial' %} availability-cell--partial-{{ day.level }}{% endif %}{% if day.has_parameter_gap %} availability-cell--gap{% endif %}"{% if day.has_parameter_gap %} title="{% trans 'A mapped parameter is missing for some expected hours' %}"{% endif %}>
                             <a href="{{ cell.1 }}" class="availability-cell-link" aria-label="{{ row.summary.name }}, {{ day.date|date:'j F Y' }}"></a>
                             {% if day.label %}<span class="availability-count">{{ day.label }}</span>{% endif %}
+                            {% if day.checked %}<span class="availability-checked" title="{% trans 'The source was asked about every gap on this day' %}"><span aria-hidden="true">&#10003;</span><span class="w-sr-only">{% trans "Checked" %}</span></span>{% endif %}
                         </td>
                         {% endwith %}
                     {% endfor %}
@@ -464,6 +482,7 @@
                         <td class="availability-cell availability-cell--{{ day.state }}{% if day.state == 'partial' %} availability-cell--partial-{{ day.level }}{% endif %}{% if day.has_parameter_gap %} availability-cell--gap{% endif %}"{% if day.has_parameter_gap %} title="{% trans 'A mapped parameter is missing for some expected hours' %}"{% endif %}>
                             <a href="{{ cell.1 }}" class="availability-cell-link" aria-label="{{ row.summary.name }}, {{ day.date|date:'j F Y' }}"></a>
                             {% if day.label %}<span class="availability-count">{{ day.label }}</span>{% endif %}
+                            {% if day.checked %}<span class="availability-checked" title="{% trans 'The source was asked about every gap on this day' %}"><span aria-hidden="true">&#10003;</span><span class="w-sr-only">{% trans "Checked" %}</span></span>{% endif %}
                         </td>
                         {% endwith %}
                     {% endfor %}
@@ -485,6 +504,7 @@
             <span class="legend-empty">{% trans "No data" %}</span>
             <span class="legend-gap">{% trans "A mapped parameter is missing for some expected hours" %}</span>
             <span class="legend-not-expected">{% trans "Not expected" %}</span>
+            <span class="legend-checked">&#10003; {% trans "Source asked about every gap" %}</span>
             <span class="legend-note">{% trans "Counts show hours with data / hours expected" %}</span>
         </div>
     {% else %}
@@ -605,6 +625,19 @@
             <span class="legend-note">{% trans "Hours are local; hover a cell for its record count" %}</span>
         </div>
     {% else %}
+        {% if can_check %}
+            <div class="availability-check-bar" id="availability-check-bar" hidden
+                 data-url="{{ check_url }}" data-station-link="{{ station_link.id }}"
+                 data-csrf="{{ csrf_token }}" data-status-url="{% url 'availability_check_status' task_id='TASK' %}">
+                <span id="availability-check-selection"></span>
+                <button type="button" class="button button-small" id="availability-check-button" hidden>{% trans "Check source" %}</button>
+                <span class="availability-meta" id="availability-check-note">
+                    {% if check_instant %}{% trans "The answer is instant (the source is asked for a listing)." %}
+                    {% else %}{% trans "Runs in the background: the source's data is fetched and parsed, and nothing is saved." %}{% endif %}
+                </span>
+                <span id="availability-check-status" role="status"></span>
+            </div>
+        {% endif %}
         <table class="availability-calendar">
             <thead>
             <tr>
@@ -623,6 +656,8 @@
                                 <a href="{{ cell.1 }}" class="availability-cell-link" aria-label="{{ day.date|date:'j F Y' }}"></a>
                                 <span class="availability-day">{{ day.date.day }}</span>
                                 {% if day.label %}<span class="availability-count">{{ day.label }}</span>{% endif %}
+                                {% if day.checked %}<span class="availability-checked" title="{% trans 'The source was asked about every gap on this day' %}"><span aria-hidden="true">&#10003;</span><span class="w-sr-only">{% trans "Checked" %}</span></span>{% endif %}
+                                {% if can_check and day.has_gaps %}<button type="button" class="availability-day-check" data-day="{{ day.date.isoformat }}" title="{% trans 'Check this whole day against the source' %}">{% trans "Check day" %}</button>{% endif %}
                             </td>
                             {% endwith %}
                         {% else %}
@@ -757,6 +792,17 @@
                         station_link: bar.dataset.stationLink, start: start, end: end,
                         parameter: selection.row.dataset.parameter || '',
                     }));
+                });
+
+                // a whole day from the month calendar
+                document.querySelectorAll('.availability-day-check').forEach((dayButton) => {
+                    dayButton.addEventListener('click', function () {
+                        bar.hidden = false;
+                        selectionText.textContent = dayButton.dataset.day;
+                        submit(new URLSearchParams({
+                            station_link: bar.dataset.stationLink, day: dayButton.dataset.day,
+                        }));
+                    });
                 });
 
                 // a listing that did not answer: explicitly ask for tier 2 on the same window

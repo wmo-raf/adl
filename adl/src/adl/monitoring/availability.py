@@ -26,6 +26,8 @@ from django.db.models import Min
 from django.utils import timezone as dj_timezone
 
 from adl.core.models import DataParameter, HourlyObsAgg
+from adl.core.source_checks import SourceCheckStatus
+from .models import AvailabilityCheck
 
 COMPLETE = "complete"
 PARTIAL = "partial"
@@ -50,6 +52,9 @@ class DayAvailability:
     # a currently mapped parameter lacks data in one or more expected hours,
     # even if the day is complete at the any-parameter level
     has_parameter_gap: bool = False
+    # the day has gaps and every one lies in the window of a stored, answered
+    # availability check
+    checked: bool = False
 
     @property
     def missing_hours(self):
@@ -64,6 +69,11 @@ class DayAvailability:
         if self.present_hours == 0:
             return EMPTY
         return PARTIAL
+
+    @property
+    def has_gaps(self):
+        """Hours are missing, or a mapped parameter is, on an expected day."""
+        return bool(self.expected_hours) and (self.missing_hours > 0 or self.has_parameter_gap)
 
     @property
     def intensity(self):
@@ -169,11 +179,51 @@ def _month_boundaries(year, month, tz):
     return boundaries
 
 
-def _month_days(year, month, boundaries, floor, now, buckets, parameter_buckets):
+def _ok_check_windows(link_ids, start, end):
+    """``{station link id: [(window start, window end)]}`` of the answered
+    availability checks overlapping ``[start, end)``."""
+    windows = {}
+    for link_id, window_start, window_end in AvailabilityCheck.objects.filter(
+        station_link_id__in=link_ids,
+        status=SourceCheckStatus.OK,
+        window_start__lt=end,
+        window_end__gt=start,
+    ).values_list("station_link_id", "window_start", "window_end"):
+        windows.setdefault(link_id, []).append(
+            (window_start.astimezone(py_tz.utc), window_end.astimezone(py_tz.utc))
+        )
+    return windows
+
+
+def _gaps_covered(lo, hi, buckets, parameter_buckets, check_windows):
+    """Whether ``[lo, hi)`` has gap hours, all inside a check window.
+
+    A gap hour has no record for any parameter, or lacks a currently mapped
+    parameter. Hours that have since filled are no longer gaps, which is what
+    makes a result stop counting once its hours are present.
+    """
+    present = set(buckets[bisect_left(buckets, lo):bisect_left(buckets, hi)])
+    per_parameter = [
+        set(values[bisect_left(values, lo):bisect_left(values, hi)])
+        for values in parameter_buckets.values()
+    ]
+    gaps = [
+        hour
+        for hour in (lo + HOUR * offset for offset in range(int((hi - lo) / HOUR)))
+        if hour not in present or any(hour not in values for values in per_parameter)
+    ]
+    return bool(gaps) and all(
+        any(start <= hour < end for start, end in check_windows) for hour in gaps
+    )
+
+
+def _month_days(year, month, boundaries, floor, now, buckets, parameter_buckets,
+                check_windows=()):
     """Per-day availability from sorted UTC bucket lists.
 
     ``buckets`` holds the hours with any record, ``parameter_buckets`` maps each
-    mapped parameter id to its own sorted hours.
+    mapped parameter id to its own sorted hours, ``check_windows`` the
+    ``(start, end)`` windows of the link's answered availability checks.
     """
     elapsed_until = _floor_hour(now)
     days = []
@@ -197,6 +247,8 @@ def _month_days(year, month, boundaries, floor, now, buckets, parameter_buckets)
             expected_hours=expected,
             present_hours=present,
             has_parameter_gap=has_gap,
+            checked=bool(expected) and bool(check_windows)
+            and _gaps_covered(lo, hi, buckets, parameter_buckets, check_windows),
         ))
     return days
 
@@ -240,7 +292,10 @@ def month_availability(station_link, year, month, now=None):
         year=year,
         month=month,
         timezone_name=str(station_link.timezone),
-        days=_month_days(year, month, boundaries, floor, now, buckets, parameter_buckets),
+        days=_month_days(
+            year, month, boundaries, floor, now, buckets, parameter_buckets,
+            _ok_check_windows([station_link.id], first_bucket, last_bucket_end).get(station_link.id, ()),
+        ),
         floor=floor,
     )
 
@@ -351,6 +406,8 @@ def connection_availability(connection, station_links, year, month, sort=SORT_MI
             ).values("station_id").annotate(first=Min("bucket"))
         }
 
+    check_windows = _ok_check_windows([link.id for link in station_links], window_start, window_end)
+
     summaries = []
     for link in station_links:
         start = start_dates[link.id]
@@ -371,7 +428,8 @@ def connection_availability(connection, station_links, year, month, sort=SORT_MI
             enabled=link.enabled,
             timezone_name=str(zones[link.id]),
             days=_month_days(
-                year, month, boundaries[link.id], floor, now, buckets, parameter_buckets
+                year, month, boundaries[link.id], floor, now, buckets, parameter_buckets,
+                check_windows.get(link.id, ()),
             ),
         ))
 
@@ -488,3 +546,24 @@ def missing_hours(station_link, start, end, parameter_id=None, now=None):
         records = records.filter(parameter_id=parameter_id)
     present = {bucket.astimezone(py_tz.utc) for bucket in records.values_list("bucket", flat=True)}
     return [hour for hour in hours if hour not in present]
+
+
+def whole_day_window(station_link, day, now=None):
+    """The UTC ``(start, end)`` of a whole-day availability check, or ``None``.
+
+    The span runs from the first to the last hour in which a currently mapped
+    parameter is missing. Hours where every mapped parameter is present never
+    extend it at the edges, and unmapped parameters never count. ``None``
+    means the day has no such hour, so no check is offered.
+    """
+    detail = day_availability(station_link, day, now=now)
+    gap_hours = sorted({
+        cell.start
+        for row in detail.rows
+        if row.mapped
+        for cell in row.cells
+        if cell.state == MISSING
+    })
+    if not gap_hours:
+        return None
+    return gap_hours[0], gap_hours[-1] + HOUR

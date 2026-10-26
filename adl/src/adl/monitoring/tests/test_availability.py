@@ -28,8 +28,11 @@ from adl.monitoring.availability import (
     connection_availability,
     day_availability,
     month_availability,
+    whole_day_window,
 )
+from adl.core.source_checks import SourceCheckStatus
 from adl.core.tests.helpers import make_mapping
+from adl.monitoring.models import AvailabilityCheck
 
 UTC = py_tz.utc
 
@@ -553,3 +556,178 @@ class ConnectionGridTests(MonthAvailabilityTestCase):
             return len(queries)
 
         self.assertEqual(count(2), count(12))
+
+
+class WholeDayWindowTests(MonthAvailabilityTestCase):
+    NOW = utc(2026, 3, 20, 12, 15)
+    DAY = date(2026, 3, 5)
+
+    def setUp(self):
+        self.temp, self.wind = DataParameterFactory(), DataParameterFactory()
+        self.link = self.make_link(start_date=utc(2026, 3, 1))
+        self.link.get_variable_mappings = lambda: [
+            make_mapping(p, p.unit, source_name=p.name) for p in (self.temp, self.wind)
+        ]
+
+    def fill(self, parameter, hours):
+        for hour in hours:
+            self.record(self.link, utc(2026, 3, 5, hour, 30), parameter)
+
+    def window(self):
+        return whole_day_window(self.link, self.DAY, now=self.NOW)
+
+    def test_spans_first_to_last_hour_with_a_missing_mapped_parameter(self):
+        self.fill(self.temp, [h for h in range(24) if h != 3])
+        self.fill(self.wind, [h for h in range(24) if h != 17])
+
+        self.assertEqual(self.window(), (utc(2026, 3, 5, 3), utc(2026, 3, 5, 18)))
+
+    def test_a_parameter_only_gap_creates_the_window(self):
+        self.fill(self.temp, range(24))
+        self.fill(self.wind, [h for h in range(24) if h not in (9, 10)])
+
+        self.assertEqual(self.window(), (utc(2026, 3, 5, 9), utc(2026, 3, 5, 11)))
+
+    def test_fully_present_edge_hours_do_not_extend_it(self):
+        self.fill(self.temp, range(24))
+        self.fill(self.wind, [h for h in range(24) if h != 12])
+
+        self.assertEqual(self.window(), (utc(2026, 3, 5, 12), utc(2026, 3, 5, 13)))
+
+    def test_unmapped_parameters_never_extend_it(self):
+        unmapped = DataParameterFactory()
+        self.fill(self.temp, range(24))
+        self.fill(self.wind, range(24))
+        self.fill(unmapped, [4])
+
+        self.assertIsNone(self.window())
+
+    def test_a_day_with_no_mapped_parameter_gap_offers_no_check(self):
+        self.fill(self.temp, range(24))
+        self.fill(self.wind, range(24))
+
+        self.assertIsNone(self.window())
+
+    def test_a_link_without_mappings_offers_no_check(self):
+        self.link.get_variable_mappings = lambda: []
+
+        self.assertIsNone(self.window())
+
+    def test_a_day_with_nothing_expected_offers_no_check(self):
+        self.assertIsNone(whole_day_window(self.link, date(2026, 2, 20), now=self.NOW))
+        self.assertIsNone(whole_day_window(self.link, date(2026, 3, 25), now=self.NOW))
+
+    def test_follows_the_station_link_timezone(self):
+        link = self.make_link(tz="Africa/Nairobi", start_date=utc(2026, 3, 1))
+        link.get_variable_mappings = lambda: [make_mapping(self.temp, self.temp.unit, source_name="t")]
+        # local 5 March is 04 March 21:00 UTC to 5 March 21:00 UTC; leave local 08:00-10:00 empty
+        for hour in range(24):
+            if hour not in (8, 9):
+                self.record(link, utc(2026, 3, 4, 21, 30) + timedelta(hours=hour), self.temp)
+
+        self.assertEqual(
+            whole_day_window(link, self.DAY, now=self.NOW),
+            (utc(2026, 3, 5, 5), utc(2026, 3, 5, 7)),
+        )
+
+
+class CheckedMarkerTests(MonthAvailabilityTestCase):
+    NOW = utc(2026, 3, 20, 12, 15)
+
+    def setUp(self):
+        self.temp = DataParameterFactory()
+        self.link = self.make_link(start_date=utc(2026, 3, 1))
+        self.link.get_variable_mappings = lambda: [
+            make_mapping(self.temp, self.temp.unit, source_name="t")
+        ]
+        # 5 March has gaps at 06:00-09:00 and 15:00
+        for hour in range(24):
+            if hour not in (6, 7, 8, 15):
+                self.record(self.link, utc(2026, 3, 5, hour, 30), self.temp)
+
+    def store(self, start_hour, end_hour, status=SourceCheckStatus.OK, day=5):
+        return AvailabilityCheck.objects.create(
+            station_link=self.link,
+            window_start=utc(2026, 3, day) + timedelta(hours=start_hour),
+            window_end=utc(2026, 3, day) + timedelta(hours=end_hour),
+            created_at=self.NOW, tier="fetch", status=status,
+        )
+
+    def march_5(self):
+        return month_availability(self.link, 2026, 3, now=self.NOW).days[4]
+
+    def test_a_day_with_a_gap_and_no_check_is_not_checked(self):
+        self.assertFalse(self.march_5().checked)
+
+    def test_a_check_over_only_some_gaps_is_not_enough(self):
+        self.store(6, 9)
+
+        self.assertFalse(self.march_5().checked)
+
+    def test_every_gap_covered_by_stored_results_marks_the_day(self):
+        self.store(6, 9)
+        self.store(15, 16)
+
+        self.assertTrue(self.march_5().checked)
+
+    def test_a_whole_day_check_marks_the_day(self):
+        self.store(6, 16)
+
+        self.assertTrue(self.march_5().checked)
+
+    def test_a_check_that_did_not_answer_does_not_count(self):
+        self.store(0, 24, status=SourceCheckStatus.FAILED)
+
+        self.assertFalse(self.march_5().checked)
+
+    def test_hours_that_fill_drop_out_of_the_gaps_that_must_be_covered(self):
+        self.store(6, 9)
+        self.assertFalse(self.march_5().checked)  # 15:00 is uncovered
+
+        self.record(self.link, utc(2026, 3, 5, 15, 30), self.temp)
+
+        self.assertTrue(self.march_5().checked)
+
+    def test_a_filled_day_is_not_checked(self):
+        self.store(6, 9)
+        self.store(15, 16)
+        for hour in (6, 7, 8, 15):
+            self.record(self.link, utc(2026, 3, 5, hour, 30), self.temp)
+
+        day = self.march_5()
+
+        self.assertEqual(day.state, COMPLETE)
+        self.assertFalse(day.checked)
+
+    def test_a_parameter_only_gap_can_be_checked(self):
+        wind = DataParameterFactory()
+        self.link.get_variable_mappings = lambda: [
+            make_mapping(p, p.unit, source_name=p.name) for p in (self.temp, wind)
+        ]
+        for hour in range(24):
+            self.record(self.link, utc(2026, 3, 6, hour, 30), self.temp)
+        self.store(0, 24, day=6)
+
+        day = month_availability(self.link, 2026, 3, now=self.NOW).days[5]
+
+        self.assertTrue(day.has_parameter_gap)
+        self.assertTrue(day.checked)
+
+    def test_other_station_links_checks_are_ignored(self):
+        other = StationLinkFactory(network_connection=self.link.network_connection)
+        AvailabilityCheck.objects.create(
+            station_link=other, window_start=utc(2026, 3, 5, 0), window_end=utc(2026, 3, 6, 0),
+            created_at=self.NOW, tier="fetch", status=SourceCheckStatus.OK,
+        )
+
+        self.assertFalse(self.march_5().checked)
+
+    def test_the_connection_grid_carries_the_marker_too(self):
+        self.store(6, 9)
+        self.store(15, 16)
+
+        grid = connection_availability(
+            self.link.network_connection, [self.link], 2026, 3, now=self.NOW)
+
+        self.assertTrue(grid.rows[0].days[4].checked)
+        self.assertFalse(grid.rows[0].days[5].checked)

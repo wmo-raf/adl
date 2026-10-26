@@ -231,20 +231,22 @@ def data_availability(request):
             "month_url": _availability_url(station_link.id, year, month),
             "monitoring_url": reverse("station_link_monitoring", args=[station_link.id]),
         })
+        can_check = (
+            station_link.network_connection.has_external_source
+            and can_manage_connection(request.user, station_link.network_connection)
+        )
+        context.update({
+            "can_check": can_check,
+            "check_instant": station_link.availability_check_supported,
+            "check_url": reverse("availability_check"),
+        })
         if day:
             day_detail = day_availability(station_link, day)
             overlay = gap_service.day_check_overlay(station_link, day_detail)
             context["day_detail"] = day_detail
             context["matrix_rows"] = _matrix_rows(day_detail, overlay)
-            can_check = (
-                station_link.network_connection.has_external_source
-                and can_manage_connection(request.user, station_link.network_connection)
-            )
             context["check_items"] = _check_items(
                 overlay, ZoneInfo(str(station_link.timezone)), can_check)
-            context["can_check"] = can_check
-            context["check_instant"] = station_link.availability_check_supported
-            context["check_url"] = reverse("availability_check")
 
     elif connection_id:
         connection = connections.get(id=connection_id)
@@ -299,7 +301,9 @@ def _managed_station_link(request, link_id):
 def availability_check(request):
     """Ask the source whether it has data for a window of a station link.
 
-    ``station_link``, ``start`` and ``end`` (ISO-8601, any offset), optionally
+    ``station_link`` and either ``day`` (``YYYY-MM-DD``, the station link's local
+    day, checked whole and trimmed to its missing mapped hours) or ``start`` and
+    ``end`` (ISO-8601, any offset), the latter optionally
     ``parameter`` (the selected row) and ``fetch=1`` (skip the cheap check and
     fetch the data). Answers ``{"state": "SUCCESS", "check_id": ...}`` when the
     listing tier answered at once, or ``{"state": "PENDING", "task_id": ...}``
@@ -309,21 +313,30 @@ def availability_check(request):
     if station_link is None:
         return _json_error(_("Unknown station link."), 404)
 
-    start = _parse_instant(request.POST.get("start"))
-    end = _parse_instant(request.POST.get("end"))
-    if start is None or end is None:
-        return _json_error(_("The window needs aware start and end times."), 400)
+    force_fetch = request.POST.get("fetch") == "1"
+    whole_day = request.POST.get("day")
+    if whole_day:
+        day = _parse_day(whole_day)
+        if day is None:
+            return _json_error(_("Unknown day."), 400)
+    else:
+        start = _parse_instant(request.POST.get("start"))
+        end = _parse_instant(request.POST.get("end"))
+        if start is None or end is None:
+            return _json_error(_("The window needs aware start and end times."), 400)
 
-    raw_parameter = request.POST.get("parameter")
-    parameter_id = _positive_int(raw_parameter)
-    if raw_parameter and parameter_id is None:
-        return _json_error(_("Unknown parameter."), 400)
+        raw_parameter = request.POST.get("parameter")
+        parameter_id = _positive_int(raw_parameter)
+        if raw_parameter and parameter_id is None:
+            return _json_error(_("Unknown parameter."), 400)
 
     try:
-        outcome = gap_service.check(
-            station_link, start, end, parameter_id=parameter_id,
-            force_fetch=request.POST.get("fetch") == "1",
-        )
+        if whole_day:
+            outcome = gap_service.check_whole_day(station_link, day, force_fetch=force_fetch)
+        else:
+            outcome = gap_service.check(
+                station_link, start, end, parameter_id=parameter_id, force_fetch=force_fetch,
+            )
     except gap_service.CheckInFlight as exc:
         return _json_error(exc, 409)
     except gap_service.CheckCoolingDown as exc:

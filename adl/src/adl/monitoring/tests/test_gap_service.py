@@ -27,13 +27,14 @@ from adl.core.tests.factories import (
 )
 from adl.core.tests.helpers import make_mapping, make_test_plugin
 from adl.monitoring import gap_service
-from adl.monitoring.availability import day_availability
+from adl.monitoring.availability import day_availability, whole_day_window
 from adl.monitoring.gap_service import (
     CheckCoolingDown,
     CheckInFlight,
     CheckUnavailable,
     InvalidWindow,
     check,
+    check_whole_day,
     covered_missing_hours,
     day_check_overlay,
     validate_window,
@@ -147,6 +148,85 @@ class ValidateWindowTests(GapServiceTestCase):
         ):
             with self.subTest(start=start, end=end), self.assertRaises(InvalidWindow):
                 validate_window(self.link, start, end, now=NOW)
+
+
+class WholeDayWindowValidationTests(GapServiceTestCase):
+    DAY = datetime(2026, 3, 5).date()
+
+    def record(self, hour, day=5):
+        ObservationRecordFactory(
+            station=self.link.station, connection=self.link.network_connection,
+            parameter=self.parameter, time=utc(2026, 3, day, hour, 30),
+        )
+
+    def test_the_trimmed_span_is_valid_even_with_present_hours_inside(self):
+        for hour in range(24):
+            if hour not in (3, 4, 9):
+                self.record(hour)
+
+        start, end = whole_day_window(self.link, self.DAY, now=NOW)
+        validated = validate_window(self.link, start, end, now=NOW)
+
+        self.assertEqual((validated.start, validated.end), (utc(2026, 3, 5, 3), utc(2026, 3, 5, 10)))
+        self.assertIsNone(validated.parameter_id)
+
+    def test_a_day_without_mapped_parameter_gaps_offers_none(self):
+        for hour in range(24):
+            self.record(hour)
+
+        self.assertIsNone(whole_day_window(self.link, self.DAY, now=NOW))
+
+    def test_a_span_that_is_not_the_trim_still_needs_to_be_missing_hours(self):
+        for hour in range(24):
+            if hour not in (3, 9):
+                self.record(hour)
+
+        with self.assertRaises(InvalidWindow):
+            validate_window(self.link, utc(2026, 3, 5, 2), utc(2026, 3, 5, 10), now=NOW)
+
+    def test_a_trimmed_span_is_not_valid_for_a_parameter_row(self):
+        for hour in range(24):
+            if hour not in (3, 9):
+                self.record(hour)
+        start, end = whole_day_window(self.link, self.DAY, now=NOW)
+
+        with self.assertRaises(InvalidWindow):
+            validate_window(self.link, start, end, parameter_id=self.parameter.id, now=NOW)
+
+    def test_a_check_of_the_trimmed_span_is_enqueued_like_any_other(self):
+        for hour in range(24):
+            if hour not in (3, 9):
+                self.record(hour)
+        start, end = whole_day_window(self.link, self.DAY, now=NOW)
+
+        with patch.object(run_availability_check, "delay") as delay:
+            delay.return_value.id = "t1"
+            outcome = check(self.link, start, end, now=NOW)
+
+        self.assertEqual(outcome.tier, TIER_FETCH)
+
+
+    def test_asks_about_the_trimmed_span_of_the_day(self):
+        for hour in range(24):
+            if hour not in (3, 9):
+                self.record(hour)
+
+        with patch.object(run_availability_check, "delay") as delay:
+            delay.return_value.id = "t1"
+            outcome = check_whole_day(self.link, self.DAY, now=NOW)
+
+        self.assertEqual(outcome.task_id, "t1")
+        self.assertEqual(delay.call_args.args[1:3],
+                         (utc(2026, 3, 5, 3).isoformat(), utc(2026, 3, 5, 10).isoformat()))
+
+    def test_a_day_with_no_mapped_parameter_gap_is_refused_and_takes_no_claim(self):
+        for hour in range(24):
+            self.record(hour)
+
+        with self.assertRaises(InvalidWindow):
+            check_whole_day(self.link, self.DAY, now=NOW)
+
+        self.assertTrue(cache.add(gap_service.inflight_key(self.link.id), "x"))
 
 
 class CoverageTests(TestCase):
