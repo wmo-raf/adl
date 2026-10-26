@@ -31,4 +31,4 @@ def register_monitoring_menu_item():
     submenu = Menu(items=[
         MenuItem(_('Data availability'), reverse_lazy('data_availability'), icon_name='table'),
     ])
-    return SubmenuMenuItem(_('Monitoring'), submenu, icon_name='desktop', order=450)
+    return SubmenuMenuItem(_('Monitoring'), submenu, icon_name='desktop', order=800)

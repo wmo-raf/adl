@@ -66,4 +66,4 @@ def register_viewer_menu_item():
         SubmenuMenuItem(_('Settings'), settings_submenu, icon_name='cog'),
     ])
     
-    return SubmenuMenuItem(_("Data"), submenu, icon_name='site')
+    return SubmenuMenuItem(_("Data"), submenu, icon_name='site', order=700)
