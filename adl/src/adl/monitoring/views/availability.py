@@ -396,3 +396,60 @@ def availability_check_status(request, task_id):
         return JsonResponse({"state": "FAILURE", "message": str(
             _("The availability check could not run to completion. See the application logs."))})
     return JsonResponse({"state": "PENDING"})
+
+
+@require_POST
+def availability_recover(request):
+    """Ingest a gap window of a station link through the normal pipeline.
+
+    ``station_link``, ``start`` and ``end`` (ISO-8601, any offset) and optionally
+    ``parameter`` (the selected row). Answers ``{"state": "PENDING", "task_id":
+    ...}``; poll :func:`availability_recover_status`. Needs
+    ``can_manage_connection``.
+    """
+    station_link = _managed_station_link(request, _positive_int(request.POST.get("station_link")))
+    if station_link is None:
+        return _json_error(_("Unknown station link."), 404)
+
+    start = _parse_instant(request.POST.get("start"))
+    end = _parse_instant(request.POST.get("end"))
+    if start is None or end is None:
+        return _json_error(_("The window needs aware start and end times."), 400)
+    raw_parameter = request.POST.get("parameter")
+    parameter_id = _positive_int(raw_parameter)
+    if raw_parameter and parameter_id is None:
+        return _json_error(_("Unknown parameter."), 400)
+
+    try:
+        task_id = gap_service.recover(station_link, start, end, parameter_id=parameter_id)
+    except gap_service.CheckInFlight as exc:
+        return _json_error(exc, 409)
+    except gap_service.GapServiceError as exc:
+        return _json_error(exc, 400)
+    return JsonResponse({"state": "PENDING", "task_id": task_id})
+
+
+@require_GET
+def availability_recover_status(request, task_id):
+    """The state of a background recovery, for the page to poll: ``SUCCESS`` with
+    the ``fetched`` and ``saved`` counts, ``BUSY`` when a scheduled pull held the
+    station's lock, ``FAILURE`` or ``PENDING``. Scoped to a manageable station
+    link like :func:`availability_check_status`."""
+    station_link = _managed_station_link(request, _positive_int(request.GET.get("station_link")))
+    if station_link is None:
+        return _json_error(_("Unknown station link."), 404)
+
+    result = AsyncResult(task_id)
+    if result.state == "SUCCESS":
+        report = result.result
+        if not isinstance(report, dict) or report.get("station_link") != station_link.id:
+            return _json_error(_("Unknown task."), 404)
+        if report["busy"]:
+            return JsonResponse({"state": "BUSY", "message": str(
+                _("The station is busy with a scheduled pull. Try again in a moment."))})
+        return JsonResponse({"state": "SUCCESS", "fetched": report["fetched"],
+                             "saved": report["saved"]})
+    if result.state in ("FAILURE", "REVOKED"):
+        return JsonResponse({"state": "FAILURE", "message": str(
+            _("The recovery could not run to completion. See the application logs."))})
+    return JsonResponse({"state": "PENDING"})

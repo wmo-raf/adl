@@ -9,6 +9,9 @@ from adl.core.classification import FAILURE_CATEGORIES
 from .constants import CheckState
 
 
+TRIGGER_GAP_RECOVERY = "gap_recovery"
+
+
 @register_snippet
 class StationLinkActivityLog(TimescaleModel):
     # Written on every ingestion and dispatch run and never referenced by
@@ -40,6 +43,8 @@ class StationLinkActivityLog(TimescaleModel):
     # items it resolved; 0 = it looked and found nothing; n = it found n.
     sources_count = models.PositiveIntegerField(default=None, null=True, blank=True)
     messages_count = models.PositiveIntegerField(default=0)
+    # What started the run, when it was not a routine pull; "" for a routine one
+    trigger = models.CharField(max_length=50, blank=True, default="")
     obs_start_time = models.DateTimeField(blank=True, null=True, verbose_name="Observation Start Time")
     obs_end_time = models.DateTimeField(blank=True, null=True, verbose_name="Observation End Time")
     dispatch_channel = models.ForeignKey('core.DispatchChannel', on_delete=models.CASCADE, related_name='activity_logs',

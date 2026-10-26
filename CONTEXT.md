@@ -85,3 +85,15 @@ meanings.
   and the cheap check is held to one dial per station link per minute. The answer is stored, shown on the hours it
   covers, and says which tier answered. One check or recovery runs per station
   link at a time.
+
+**gap recovery**
+: Ingesting a **gap** window through the normal pipeline (validation, unit
+  conversion, QC, upsert) by running the plugin's `process_station` with the
+  window as explicit start and end, as a background task. It is offered after
+  an **availability check** found data and is also available directly for a
+  selected window; it needs the right to manage the connection. It never
+  bypasses the ingestion lock: if a scheduled pull holds it, recovery answers
+  "busy" and fetches nothing. It shares the one-run-per-station-link claim
+  with checks, writes a pull activity row marked as a gap recovery, and
+  reports how many records were fetched and saved. When it saves something,
+  the answered checks overlapping the window are marked recovered.

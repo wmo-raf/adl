@@ -512,3 +512,72 @@ class CheckThroughTheRealServiceTests(CheckViewTestCase):
         stored = AvailabilityCheck.objects.get(id=body["check_id"])
         self.assertEqual(stored.status, SourceCheckStatus.MALFORMED)
         self.assertEqual(stored.tier, TIER_LISTING)
+
+
+class RecoverViewTests(CheckViewTestCase):
+    def setUp(self):
+        super().setUp()
+        self.url = reverse("availability_recover")
+
+    def test_a_read_only_user_gets_403_and_nothing_runs(self):
+        self.plain_user()
+
+        with patch(f"{GAP}.recover") as recover:
+            response = self.post()
+
+        self.assertEqual(response.status_code, 403)
+        recover.assert_not_called()
+
+    def test_the_status_endpoint_is_gated_the_same_way(self):
+        self.plain_user()
+
+        response = self.client.get(
+            reverse("availability_recover_status", args=["abc"]), {"station_link": self.link.id},
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest")
+
+        self.assertEqual(response.status_code, 403)
+
+    def test_enqueues_and_returns_the_task_id(self):
+        with patch(f"{GAP}.recover", return_value="t1") as recover:
+            response = self.post(parameter="7")
+
+        self.assertEqual(response.json(), {"state": "PENDING", "task_id": "t1"})
+        args, kwargs = recover.call_args
+        self.assertEqual((args[0], kwargs["parameter_id"]), (self.link, 7))
+
+    def test_refusals_map_to_status_codes(self):
+        for error, status in ((gap_service.CheckInFlight("x"), 409),
+                              (gap_service.InvalidWindow("x"), 400),
+                              (gap_service.CheckUnavailable("x"), 400)):
+            with self.subTest(error=type(error).__name__), \
+                    patch(f"{GAP}.recover", side_effect=error):
+                self.assertEqual(self.post().status_code, status)
+
+    def test_malformed_times_are_a_400(self):
+        self.assertEqual(self.post(start="nope").status_code, 400)
+
+    def status(self, result):
+        with patch("adl.monitoring.views.availability.AsyncResult") as async_result:
+            async_result.return_value.state = "SUCCESS"
+            async_result.return_value.result = result
+            return self.client.get(
+                reverse("availability_recover_status", args=["t1"]),
+                {"station_link": self.link.id}, HTTP_X_REQUESTED_WITH="XMLHttpRequest")
+
+    def test_status_reports_the_counts(self):
+        response = self.status({"station_link": self.link.id, "busy": False,
+                                "fetched": 5, "saved": 4})
+
+        self.assertEqual(response.json(), {"state": "SUCCESS", "fetched": 5, "saved": 4})
+
+    def test_status_reports_busy(self):
+        response = self.status({"station_link": self.link.id, "busy": True,
+                                "fetched": 0, "saved": 0})
+
+        self.assertEqual(response.json()["state"], "BUSY")
+
+    def test_status_of_another_station_links_task_is_unknown(self):
+        response = self.status({"station_link": self.link.id + 1, "busy": False,
+                                "fetched": 5, "saved": 4})
+
+        self.assertEqual(response.status_code, 404)

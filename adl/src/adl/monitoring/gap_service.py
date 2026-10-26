@@ -1,5 +1,6 @@
 """
-The gap service: ask the source whether it has data for a gap window.
+The gap service: ask the source whether it has data for a gap window, and
+recover it.
 
 ``check`` validates the window an operator selected in the day view, then
 answers it in one of two tiers (see :mod:`adl.core.availability_checks`):
@@ -14,6 +15,11 @@ Every answer is stored as an :class:`~adl.monitoring.models.AvailabilityCheck`.
 Only one check can be in flight per station link; the claim is taken in the
 cache before anything is dialled or enqueued, because the point is to never
 flood a partner host with sessions.
+
+``recover`` ingests a gap window through the normal pipeline
+(``process_station`` with an explicit window and no lock bypass) as a Celery
+task. It shares the in-flight claim with checks and, when a scheduled pull holds
+the station's ingestion lock, answers "busy" without fetching.
 
 Core, not the plugin, intersects the covered ranges with the window's missing
 hours (:func:`covered_missing_hours`).
@@ -47,7 +53,7 @@ from adl.core.probes import (
 from adl.core.redaction import redact_secrets
 from adl.core.source_checks import SourceCheckStatus
 from .availability import HOUR, MISSING, _mapped_parameters, missing_hours, whole_day_window
-from .models import AvailabilityCheck
+from .models import TRIGGER_GAP_RECOVERY, AvailabilityCheck
 
 logger = logging.getLogger(__name__)
 
@@ -372,6 +378,68 @@ def run_fetch_task(station_link_id, start_iso, end_iso, parameter_id) -> int:
                            parameter_id)
         result = run_fetch_check(station_link, window)
         return store_result(station_link, window, result).id
+    finally:
+        release(station_link_id)
+
+
+def recover(station_link, start, end, parameter_id=None, now=None) -> str:
+    """Enqueue a recovery of the window and return the task id.
+
+    Raises :class:`InvalidWindow`, :class:`CheckUnavailable` or
+    :class:`CheckInFlight`, as :func:`check` does; the claim is the same one, so
+    a check and a recovery of a station link never run together.
+    """
+    from .tasks import run_gap_recovery
+
+    window = validate_window(station_link, start, end, parameter_id, now=now)
+    if not station_link.network_connection.has_external_source:
+        raise CheckUnavailable(_("This connection has no external source to recover from."))
+
+    if not cache.add(inflight_key(station_link.id), "recover", timeout=INFLIGHT_SECONDS):
+        raise CheckInFlight(
+            _("A check or recovery is already running for this station link."))
+    try:
+        task = run_gap_recovery.delay(
+            station_link.id, window.start.isoformat(), window.end.isoformat(), parameter_id)
+    except BaseException:
+        release(station_link.id)
+        raise
+    return task.id
+
+
+def run_recovery_task(station_link_id, start_iso, end_iso, parameter_id) -> dict:
+    """The body of the recovery Celery task. Returns a JSON-able report:
+    ``busy`` when a scheduled pull held the ingestion lock (nothing was fetched),
+    otherwise the ``fetched`` and ``saved`` counts. Releases the in-flight claim
+    however it ends.
+
+    Answered checks overlapping the window are marked ``recovered`` once
+    something was saved.
+    """
+    from adl.core.models import StationLink
+
+    try:
+        station_link = StationLink.objects.select_related("network_connection").get(
+            id=station_link_id)
+        window = GapWindow(datetime.fromisoformat(start_iso), datetime.fromisoformat(end_iso),
+                           parameter_id)
+        saved = station_link.plugin.process_station(
+            station_link,
+            initial_start_date=_local(station_link, window.start),
+            initial_end_date=_local(station_link, window.end),
+            bypass_lock=False,
+            trigger=TRIGGER_GAP_RECOVERY,
+        )
+        report = station_link.adl_run_report
+        if report["skipped"]:
+            return {"station_link": station_link_id, "busy": True, "fetched": 0, "saved": 0}
+        if saved:
+            AvailabilityCheck.objects.filter(
+                station_link=station_link, status=SourceCheckStatus.OK,
+                window_start__lt=window.end, window_end__gt=window.start,
+            ).update(recovered=True)
+        return {"station_link": station_link_id, "busy": False,
+                "fetched": report["fetched"], "saved": saved}
     finally:
         release(station_link_id)
 

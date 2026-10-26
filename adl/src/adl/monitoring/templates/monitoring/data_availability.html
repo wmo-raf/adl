@@ -581,9 +581,11 @@
         {% if can_check %}
             <div class="availability-check-bar" id="availability-check-bar" hidden
                  data-url="{{ check_url }}" data-station-link="{{ station_link.id }}"
-                 data-csrf="{{ csrf_token }}" data-status-url="{% url 'availability_check_status' task_id='TASK' %}">
+                 data-csrf="{{ csrf_token }}" data-status-url="{% url 'availability_check_status' task_id='TASK' %}"
+                 data-recover-url="{% url 'availability_recover' %}" data-recover-status-url="{% url 'availability_recover_status' task_id='TASK' %}">
                 <span id="availability-check-selection"></span>
                 <button type="button" class="button button-small" id="availability-check-button">{% trans "Check source" %}</button>
+                <button type="button" class="button button-small button-secondary" id="availability-recover-button">{% trans "Recover data" %}</button>
                 <span class="availability-meta" id="availability-check-note">
                     {% if check_instant %}{% trans "The answer is instant (the source is asked for a listing)." %}
                     {% else %}{% trans "Runs in the background: the source's data is fetched and parsed, and nothing is saved." %}{% endif %}
@@ -625,6 +627,10 @@
                             {% endif %}
                         {% endif %}
                         {% if item.check.message %}<p class="availability-meta">{{ item.check.message }}{% if item.check.category %} ({{ item.check.category }}){% endif %}</p>{% endif %}
+                        {% if can_check and item.ok and item.summary.verdict == 'has_data' and not item.check.recovered %}
+                            <p><button type="button" class="button button-small availability-recover"
+                                       data-start="{{ item.check.window_start.isoformat }}" data-end="{{ item.check.window_end.isoformat }}" data-parameter="{{ item.check.parameter_id|default_if_none:'' }}">{% trans "Recover this data" %}</button></p>
+                        {% endif %}
                         {% if item.can_fetch_instead %}
                             <p><button type="button" class="button button-small button-secondary availability-fetch-instead"
                                        data-start="{{ item.check.window_start.isoformat }}" data-end="{{ item.check.window_end.isoformat }}" data-parameter="{{ item.check.parameter_id|default_if_none:'' }}">{% trans "Try by fetching data" %}</button></p>
@@ -707,8 +713,10 @@
                 const selectionText = document.getElementById('availability-check-selection');
                 const button = document.getElementById('availability-check-button');
                 const wholeDayButton = document.getElementById('availability-wholeday-button');
+                const recoverButton = document.getElementById('availability-recover-button');
                 const setBusy = (busy) => {
                     button.disabled = busy;
+                    recoverButton.disabled = busy;
                     if (wholeDayButton) wholeDayButton.disabled = busy;
                 };
                 const HOUR_MS = 3600 * 1000;
@@ -803,6 +811,71 @@
                         station_link: bar.dataset.stationLink, start: start, end: end,
                         parameter: selection.row.dataset.parameter || '',
                     }));
+                });
+
+                // gap recovery: ingest the window through the normal pipeline
+                function pollRecovery(taskId) {
+                    const url = bar.dataset.recoverStatusUrl.replace('TASK', encodeURIComponent(taskId))
+                        + '?station_link=' + encodeURIComponent(bar.dataset.stationLink);
+                    fetch(url, {headers: {'X-Requested-With': 'XMLHttpRequest'}})
+                        .then((response) => response.json())
+                        .then((data) => {
+                            if (data.state === 'SUCCESS') {
+                                status.textContent = '{% trans "Fetched" %} ' + data.fetched + ', {% trans "saved" %} ' + data.saved + '.';
+                                window.setTimeout(() => window.location.reload(), 1500);
+                                return;
+                            }
+                            if (data.state === 'PENDING') {
+                                window.setTimeout(() => pollRecovery(taskId), 2000);
+                                return;
+                            }
+                            status.textContent = data.message || data.error;
+                            setBusy(false);
+                        })
+                        .catch(() => { status.textContent = '{% trans "Lost contact with the server." %}'; setBusy(false); });
+                }
+
+                function recover(body) {
+                    setBusy(true);
+                    status.textContent = '{% trans "Recovering…" %}';
+                    fetch(bar.dataset.recoverUrl, {
+                        method: 'POST',
+                        headers: {'X-CSRFToken': bar.dataset.csrf, 'X-Requested-With': 'XMLHttpRequest'},
+                        body: body,
+                    })
+                        .then((response) => response.json())
+                        .then((data) => {
+                            if (data.error) {
+                                status.textContent = data.error;
+                                setBusy(false);
+                            } else {
+                                pollRecovery(data.task_id);
+                            }
+                        })
+                        .catch(() => { status.textContent = '{% trans "Lost contact with the server." %}'; setBusy(false); });
+                }
+
+                recoverButton.addEventListener('click', function () {
+                    if (!selection) return;
+                    status = barStatus;
+                    const cells = rowCells(selection.row).slice(selection.from, selection.to + 1);
+                    const end = new Date(new Date(cells[cells.length - 1].dataset.start).getTime() + HOUR_MS).toISOString();
+                    recover(new URLSearchParams({
+                        station_link: bar.dataset.stationLink, start: cells[0].dataset.start, end: end,
+                        parameter: selection.row.dataset.parameter || '',
+                    }));
+                });
+
+                document.querySelectorAll('.availability-recover').forEach((recoverCheck) => {
+                    recoverCheck.addEventListener('click', function () {
+                        status = barStatus;
+                        bar.hidden = false;
+                        selectionText.textContent = '';
+                        recover(new URLSearchParams({
+                            station_link: bar.dataset.stationLink, start: recoverCheck.dataset.start,
+                            end: recoverCheck.dataset.end, parameter: recoverCheck.dataset.parameter || '',
+                        }));
+                    });
                 });
 
                 // a whole day, trimmed to its missing mapped-parameter hours

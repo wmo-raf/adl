@@ -20,6 +20,8 @@ from adl.core.models import ObservationRecord, StationLink
 from adl.core.registries import plugin_registry
 from adl.core.source_checks import SourceCheckStatus
 from adl.core.tests.factories import (
+    CelsiusUnitFactory,
+    KelvinUnitFactory,
     DataParameterFactory,
     NetworkConnectionFactory,
     ObservationRecordFactory,
@@ -37,10 +39,12 @@ from adl.monitoring.gap_service import (
     check_whole_day,
     covered_missing_hours,
     day_check_overlay,
+    recover,
     validate_window,
 )
-from adl.monitoring.models import AvailabilityCheck
-from adl.monitoring.tasks import run_availability_check
+from adl.monitoring.models import TRIGGER_GAP_RECOVERY, AvailabilityCheck, StationLinkActivityLog
+from adl.monitoring.tasks import run_availability_check, run_gap_recovery
+from adl.core.tasks import ingest_station_lock_key
 
 UTC = py_tz.utc
 NOW = datetime(2026, 3, 10, 0, 0, tzinfo=UTC)
@@ -623,3 +627,119 @@ class OverlayTests(GapServiceTestCase):
 
         self.assertEqual(overlay.summaries, [])
         self.assertEqual(overlay.cells, {})
+
+
+class RecoveryTests(GapServiceTestCase):
+    def setUp(self):
+        super().setUp()
+        # records only validate with units on both sides
+        self.parameter.unit = CelsiusUnitFactory()
+        self.parameter.save()
+        self.mapping.source_parameter_unit = KelvinUnitFactory()
+
+        # the aggregate refresh cannot run inside a TestCase transaction; it has
+        # its own tests, and the old-window test below runs it for real
+        patcher = patch("adl.core.registries.aggregates.refresh_hourly_aggregate")
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+        self.reports = {}
+
+        def delay(*args):
+            eager = run_gap_recovery.apply(args=args)
+            self.reports[eager.id] = eager.result
+            return eager
+
+        patcher = patch.object(run_gap_recovery, "delay", side_effect=delay)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def records(self, *times):
+        self.plugin.records = [{"observation_time": time, "te": 293.15} for time in times]
+
+    def report(self, task_id):
+        return self.reports[task_id]
+
+    def test_saves_the_windows_records_and_reports_fetched_and_saved(self):
+        self.records(utc(2026, 3, 5, 6, 10), utc(2026, 3, 5, 7, 10), utc(2026, 3, 5, 8, 10))
+
+        report = run_gap_recovery.apply(
+            args=(self.link.id, *(t.isoformat() for t in self.window()), None)).result
+
+        self.assertEqual((report["busy"], report["fetched"], report["saved"]), (False, 3, 3))
+        self.assertEqual(ObservationRecord.objects.filter(station=self.link.station).count(), 3)
+
+    def test_recover_enqueues_and_releases_the_shared_claim(self):
+        self.records(utc(2026, 3, 5, 6, 10))
+
+        task_id = recover(self.link, *self.window(), now=NOW)
+
+        self.assertEqual(self.report(task_id)["saved"], 1)
+        self.assertIsNone(cache.get(gap_service.inflight_key(self.link.id)))
+
+    def test_a_held_ingestion_lock_means_busy_and_nothing_is_fetched(self):
+        self.records(utc(2026, 3, 5, 6, 10))
+        cache.set(ingest_station_lock_key(self.link.id), "locked", timeout=60)
+
+        with patch.object(type(self.plugin), "get_station_data") as fetch:
+            report = run_gap_recovery.apply(
+                args=(self.link.id, *(t.isoformat() for t in self.window()), None)).result
+
+        fetch.assert_not_called()
+        self.assertTrue(report["busy"])
+        self.assertEqual(ObservationRecord.objects.count(), 0)
+        # the scheduled pull's lock is not ours to release
+        self.assertIsNotNone(cache.get(ingest_station_lock_key(self.link.id)))
+
+    def test_writes_an_activity_row_identifiable_as_a_gap_recovery(self):
+        self.records(utc(2026, 3, 5, 6, 10))
+
+        recover(self.link, *self.window(), now=NOW)
+
+        row = StationLinkActivityLog.objects.get(station_link=self.link)
+        self.assertEqual(row.trigger, TRIGGER_GAP_RECOVERY)
+        self.assertEqual(row.records_count, 1)
+
+    def test_marks_the_answered_checks_of_the_window_recovered(self):
+        self.records(utc(2026, 3, 5, 6, 10))
+        window = validate_window(self.link, *self.window(), now=NOW)
+        answered = gap_service.store_result(self.link, window, AvailabilityCheckResult(
+            status=SourceCheckStatus.OK, tier=TIER_FETCH))
+        other_day = validate_window(self.link, *self.window(day=6), now=NOW)
+        elsewhere = gap_service.store_result(self.link, other_day, AvailabilityCheckResult(
+            status=SourceCheckStatus.OK, tier=TIER_FETCH))
+
+        recover(self.link, *self.window(), now=NOW)
+
+        answered.refresh_from_db()
+        elsewhere.refresh_from_db()
+        self.assertTrue(answered.recovered)
+        self.assertFalse(elsewhere.recovered)
+
+    def test_nothing_saved_leaves_the_check_unrecovered(self):
+        self.records()
+        window = validate_window(self.link, *self.window(), now=NOW)
+        stored = gap_service.store_result(self.link, window, AvailabilityCheckResult(
+            status=SourceCheckStatus.OK, tier=TIER_FETCH))
+
+        recover(self.link, *self.window(), now=NOW)
+
+        stored.refresh_from_db()
+        self.assertFalse(stored.recovered)
+
+    def test_shares_the_one_in_flight_claim_with_checks(self):
+        cache.set(gap_service.inflight_key(self.link.id), "check", timeout=60)
+
+        with self.assertRaises(CheckInFlight):
+            recover(self.link, *self.window(), now=NOW)
+
+    def test_the_claim_is_released_when_enqueueing_fails(self):
+        with patch.object(run_gap_recovery, "delay", side_effect=RuntimeError("broker down")):
+            with self.assertRaises(RuntimeError):
+                recover(self.link, *self.window(), now=NOW)
+
+        self.assertIsNone(cache.get(gap_service.inflight_key(self.link.id)))
+
+    def test_refuses_a_window_that_is_not_missing_hours(self):
+        with self.assertRaises(InvalidWindow):
+            recover(self.link, utc(2026, 3, 5, 6, 30), utc(2026, 3, 5, 9), now=NOW)
