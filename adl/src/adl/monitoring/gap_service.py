@@ -413,8 +413,8 @@ def run_recovery_task(station_link_id, start_iso, end_iso, parameter_id) -> dict
     otherwise the ``fetched`` and ``saved`` counts. Releases the in-flight claim
     however it ends.
 
-    Answered checks overlapping the window are marked ``recovered`` once
-    something was saved.
+    Answered checks the window fully covers (for the same parameter row, or
+    any-parameter ones) are marked ``recovered`` once something was saved.
     """
     from adl.core.models import StationLink
 
@@ -434,10 +434,15 @@ def run_recovery_task(station_link_id, start_iso, end_iso, parameter_id) -> dict
         if report["skipped"]:
             return {"station_link": station_link_id, "busy": True, "fetched": 0, "saved": 0}
         if saved:
-            AvailabilityCheck.objects.filter(
+            # only checks the recovery fully covers, and asked about this row
+            # (or about any parameter): a partial overlap is not recovered
+            answered = AvailabilityCheck.objects.filter(
                 station_link=station_link, status=SourceCheckStatus.OK,
-                window_start__lt=window.end, window_end__gt=window.start,
-            ).update(recovered=True)
+                window_start__gte=window.start, window_end__lte=window.end,
+            )
+            if parameter_id is not None:
+                answered = answered.filter(parameter_id__in=[parameter_id, None])
+            answered.update(recovered=True)
         return {"station_link": station_link_id, "busy": False,
                 "fetched": report["fetched"], "saved": saved}
     finally:

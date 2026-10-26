@@ -716,6 +716,24 @@ class RecoveryTests(GapServiceTestCase):
         self.assertTrue(answered.recovered)
         self.assertFalse(elsewhere.recovered)
 
+    def test_a_check_only_partly_covered_or_of_another_row_stays_unrecovered(self):
+        self.records(utc(2026, 3, 5, 6, 10))
+        other = DataParameterFactory()
+        wide = gap_service.store_result(
+            self.link, validate_window(self.link, *self.window(6, 9), now=NOW),
+            AvailabilityCheckResult(status=SourceCheckStatus.OK, tier=TIER_FETCH))
+        other_row = gap_service.GapWindow(*self.window(6, 7), other.id)
+        elsewhere = gap_service.store_result(
+            self.link, other_row,
+            AvailabilityCheckResult(status=SourceCheckStatus.OK, tier=TIER_FETCH))
+
+        recover(self.link, *self.window(6, 7), parameter_id=self.parameter.id, now=NOW)
+
+        wide.refresh_from_db()
+        elsewhere.refresh_from_db()
+        self.assertFalse(wide.recovered)
+        self.assertFalse(elsewhere.recovered)
+
     def test_nothing_saved_leaves_the_check_unrecovered(self):
         self.records()
         window = validate_window(self.link, *self.window(), now=NOW)
