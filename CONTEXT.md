@@ -57,7 +57,7 @@ meanings.
   and never ranked.
 
 **whole-day check**
-: An availability check asked from the month calendar for one local day. Its
+: An availability check asked from the top of the day view for one local day. Its
   window is trimmed to the span from the first to the last hour in which a
   currently mapped parameter is missing, so it may contain present hours;
   fully present edge hours and unmapped parameters never extend it. A day with

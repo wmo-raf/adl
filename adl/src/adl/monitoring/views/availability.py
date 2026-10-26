@@ -1,6 +1,6 @@
 import calendar
 import re
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from urllib.parse import urlencode
 from zoneinfo import ZoneInfo
 
@@ -24,6 +24,7 @@ from ..availability import (
     connection_availability,
     day_availability,
     month_availability,
+    whole_day_window,
 )
 
 MONTH_PARAM = re.compile(r"^(\d{4})-(0[1-9]|1[0-2])$")
@@ -164,6 +165,27 @@ def _check_items(overlay, tz, can_check=False):
     return items
 
 
+def _whole_day(station_link, day, overlay):
+    """The whole-day check on offer for ``day``, or ``None`` when no mapped
+    parameter is missing. ``checked`` says an answered check already covers it."""
+    window = whole_day_window(station_link, day)
+    if window is None:
+        return None
+    start, end = window
+    tz = ZoneInfo(str(station_link.timezone))
+    return {
+        "local_start": start.astimezone(tz),
+        "local_end": end.astimezone(tz),
+        "hours": int((end - start) / timedelta(hours=1)),
+        "checked": any(
+            summary.check.status == SourceCheckStatus.OK
+            and summary.check.window_start <= start
+            and summary.check.window_end >= end
+            for summary in overlay.summaries
+        ),
+    }
+
+
 def data_availability(request):
     """Month calendar of a station link's data availability, or the connection
     grid of all its links when only a connection is chosen.
@@ -231,20 +253,21 @@ def data_availability(request):
             "month_url": _availability_url(station_link.id, year, month),
             "monitoring_url": reverse("station_link_monitoring", args=[station_link.id]),
         })
-        can_check = (
-            station_link.network_connection.has_external_source
-            and can_manage_connection(request.user, station_link.network_connection)
-        )
-        context.update({
-            "can_check": can_check,
-            "check_instant": station_link.availability_check_supported,
-            "check_url": reverse("availability_check"),
-        })
+
         if day:
             day_detail = day_availability(station_link, day)
             overlay = gap_service.day_check_overlay(station_link, day_detail)
             context["day_detail"] = day_detail
             context["matrix_rows"] = _matrix_rows(day_detail, overlay)
+            can_check = (
+                station_link.network_connection.has_external_source
+                and can_manage_connection(request.user, station_link.network_connection)
+            )
+            context["can_check"] = can_check
+            context["check_instant"] = station_link.availability_check_supported
+            context["check_url"] = reverse("availability_check")
+            if can_check:
+                context["whole_day"] = _whole_day(station_link, day, overlay)
             context["check_items"] = _check_items(
                 overlay, ZoneInfo(str(station_link.timezone)), can_check)
 

@@ -271,13 +271,12 @@
             pointer-events: none;
         }
 
-        .availability-day-check {
-            position: relative;
-            z-index: 1;
-            margin-top: 0.25rem;
-            padding: 0 0.4rem;
-            font-size: 0.75rem;
-            cursor: pointer;
+        .availability-wholeday {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 0.75rem;
+            margin-bottom: 1rem;
         }
 
         .availability-check-bar {
@@ -532,6 +531,25 @@
             </p>
         </nav>
 
+        {% if can_check %}
+            <div class="availability-wholeday">
+                {% if whole_day %}
+                    <button type="button" class="button button-small" id="availability-wholeday-button"
+                            data-day="{{ day_detail.date.isoformat }}">
+                        {% if whole_day.checked %}{% trans "Check whole day again" %}{% else %}{% trans "Check whole day" %}{% endif %}
+                        ({{ whole_day.local_start|date:"H:i" }}&ndash;{{ whole_day.local_end|date:"H:i" }}, {{ whole_day.hours }} h)
+                    </button>
+                    <span class="availability-meta">
+                        {% if check_instant %}{% trans "The answer is instant (the source is asked for a listing)." %}
+                        {% else %}{% trans "Runs in the background: the source's data is fetched and parsed, and nothing is saved." %}{% endif %}
+                    </span>
+                {% else %}
+                    <span class="availability-meta">{% trans "No mapped parameter is missing, so there is nothing to check." %}</span>
+                {% endif %}
+                <span id="availability-wholeday-status" role="status"></span>
+            </div>
+        {% endif %}
+
         <div class="availability-matrix-wrap">
             <table class="availability-matrix">
                 <thead>
@@ -625,19 +643,6 @@
             <span class="legend-note">{% trans "Hours are local; hover a cell for its record count" %}</span>
         </div>
     {% else %}
-        {% if can_check %}
-            <div class="availability-check-bar" id="availability-check-bar" hidden
-                 data-url="{{ check_url }}" data-station-link="{{ station_link.id }}"
-                 data-csrf="{{ csrf_token }}" data-status-url="{% url 'availability_check_status' task_id='TASK' %}">
-                <span id="availability-check-selection"></span>
-                <button type="button" class="button button-small" id="availability-check-button" hidden>{% trans "Check source" %}</button>
-                <span class="availability-meta" id="availability-check-note">
-                    {% if check_instant %}{% trans "The answer is instant (the source is asked for a listing)." %}
-                    {% else %}{% trans "Runs in the background: the source's data is fetched and parsed, and nothing is saved." %}{% endif %}
-                </span>
-                <span id="availability-check-status" role="status"></span>
-            </div>
-        {% endif %}
         <table class="availability-calendar">
             <thead>
             <tr>
@@ -657,7 +662,6 @@
                                 <span class="availability-day">{{ day.date.day }}</span>
                                 {% if day.label %}<span class="availability-count">{{ day.label }}</span>{% endif %}
                                 {% if day.checked %}<span class="availability-checked" title="{% trans 'The source was asked about every gap on this day' %}"><span aria-hidden="true">&#10003;</span><span class="w-sr-only">{% trans "Checked" %}</span></span>{% endif %}
-                                {% if can_check and day.has_gaps %}<button type="button" class="availability-day-check" data-day="{{ day.date.isoformat }}" title="{% trans 'Check this whole day against the source' %}">{% trans "Check day" %}</button>{% endif %}
                             </td>
                             {% endwith %}
                         {% else %}
@@ -698,9 +702,15 @@
             // --- availability check: select a run of missing hours, ask the source
             const bar = document.getElementById('availability-check-bar');
             if (bar) {
-                const status = document.getElementById('availability-check-status');
+                const barStatus = document.getElementById('availability-check-status');
+                let status = barStatus;
                 const selectionText = document.getElementById('availability-check-selection');
                 const button = document.getElementById('availability-check-button');
+                const wholeDayButton = document.getElementById('availability-wholeday-button');
+                const setBusy = (busy) => {
+                    button.disabled = busy;
+                    if (wholeDayButton) wholeDayButton.disabled = busy;
+                };
                 const HOUR_MS = 3600 * 1000;
                 let selection = null; // {row, from, to} as indices into the row's cells
 
@@ -717,7 +727,7 @@
                     selectionText.textContent = selection.row.querySelector('th').textContent.trim().split('\n')[0]
                         + ': ' + hours + ' h';
                     status.textContent = '';
-                    button.disabled = false;
+                    setBusy(false);
                 }
 
                 document.querySelectorAll('td.availability-hour--selectable').forEach((cell) => {
@@ -753,16 +763,16 @@
                             if (data.state === 'SUCCESS') return window.location.reload();
                             if (data.state === 'FAILURE' || data.error) {
                                 status.textContent = data.message || data.error;
-                                button.disabled = false;
+                                setBusy(false);
                                 return;
                             }
                             window.setTimeout(() => poll(taskId), 2000);
                         })
-                        .catch(() => { status.textContent = '{% trans "Lost contact with the server." %}'; button.disabled = false; });
+                        .catch(() => { status.textContent = '{% trans "Lost contact with the server." %}'; setBusy(false); });
                 }
 
                 function submit(body) {
-                    button.disabled = true;
+                    setBusy(true);
                     status.textContent = '{% trans "Checking…" %}';
                     fetch(bar.dataset.url, {
                         method: 'POST',
@@ -773,18 +783,19 @@
                         .then((data) => {
                             if (data.error) {
                                 status.textContent = data.error;
-                                button.disabled = false;
+                                setBusy(false);
                             } else if (data.state === 'SUCCESS') {
                                 window.location.reload();
                             } else {
                                 poll(data.task_id);
                             }
                         })
-                        .catch(() => { status.textContent = '{% trans "Lost contact with the server." %}'; button.disabled = false; });
+                        .catch(() => { status.textContent = '{% trans "Lost contact with the server." %}'; setBusy(false); });
                 }
 
                 button.addEventListener('click', function () {
                     if (!selection) return;
+                    status = barStatus;
                     const cells = rowCells(selection.row).slice(selection.from, selection.to + 1);
                     const start = cells[0].dataset.start;
                     const end = new Date(new Date(cells[cells.length - 1].dataset.start).getTime() + HOUR_MS).toISOString();
@@ -794,20 +805,21 @@
                     }));
                 });
 
-                // a whole day from the month calendar
-                document.querySelectorAll('.availability-day-check').forEach((dayButton) => {
-                    dayButton.addEventListener('click', function () {
-                        bar.hidden = false;
-                        selectionText.textContent = dayButton.dataset.day;
+                // a whole day, trimmed to its missing mapped-parameter hours
+                const wholeDay = wholeDayButton;
+                if (wholeDay) {
+                    wholeDay.addEventListener('click', function () {
+                        status = document.getElementById('availability-wholeday-status');
                         submit(new URLSearchParams({
-                            station_link: bar.dataset.stationLink, day: dayButton.dataset.day,
+                            station_link: bar.dataset.stationLink, day: wholeDay.dataset.day,
                         }));
                     });
-                });
+                }
 
                 // a listing that did not answer: explicitly ask for tier 2 on the same window
                 document.querySelectorAll('.availability-fetch-instead').forEach((fetchButton) => {
                     fetchButton.addEventListener('click', function () {
+                        status = barStatus;
                         bar.hidden = false;
                         selectionText.textContent = '';
                         submit(new URLSearchParams({

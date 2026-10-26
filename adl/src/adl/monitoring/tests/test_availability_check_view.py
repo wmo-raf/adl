@@ -19,6 +19,7 @@ from django.urls import reverse
 from adl.core.availability_checks import TIER_FETCH, TIER_LISTING, AvailabilityCheckResult
 from adl.core.models import StationLink
 from adl.core.source_checks import SourceCheckStatus
+from adl.core.tests.helpers import make_mapping
 from adl.core.tests.factories import (
     DataParameterFactory,
     NetworkConnectionFactory,
@@ -276,16 +277,44 @@ class DayViewRenderingTests(CheckViewTestCase):
         return self.client.get(reverse("data_availability"),
                                {"station_link": self.link.id, "month": "2026-03", **extra})
 
-    def test_managers_can_check_a_day_with_gaps_from_the_calendar(self):
+    def test_the_month_calendar_offers_no_actions(self):
         response = self.month()
 
-        self.assertContains(response, 'data-day="2026-03-05"')
-        self.assertContains(response, 'id="availability-check-bar"')
+        self.assertNotContains(response, 'id="availability-check-bar"')
+        self.assertNotContains(response, "data-day=")
+        self.assertNotContains(response, "Check whole day")
 
-    def test_read_only_users_get_no_day_check_in_the_calendar(self):
+    def test_the_day_view_offers_a_whole_day_check_labelled_with_its_span(self):
+        with patch.object(StationLink, "get_variable_mappings",
+                          lambda self: [make_mapping(DataParameterFactory(), None, source_name="t")]):
+            response = self.day()
+
+        self.assertContains(response, 'id="availability-wholeday-button"')
+        self.assertContains(response, 'data-day="2026-03-05"')
+        self.assertContains(response, "Check whole day")
+        self.assertContains(response, "00:00&ndash;00:00, 24 h")  # a fully empty day
+
+    def test_a_day_without_a_mapped_gap_explains_instead_of_offering(self):
+        with patch.object(StationLink, "get_variable_mappings", lambda self: []):
+            response = self.day()
+
+        self.assertNotContains(response, 'id="availability-wholeday-button"')
+        self.assertContains(response, "nothing to check")
+
+    def test_an_already_covered_span_is_offered_again(self):
+        self.store(window_start=utc(2026, 3, 5, 0), window_end=utc(2026, 3, 6, 0))
+        with patch.object(StationLink, "get_variable_mappings",
+                          lambda self: [make_mapping(DataParameterFactory(), None, source_name="t")]):
+            response = self.day()
+
+        self.assertContains(response, "Check whole day again")
+
+    def test_read_only_users_get_no_whole_day_check(self):
         self.plain_user()
 
-        self.assertNotContains(self.month(), "data-day=")
+        response = self.day()
+
+        self.assertNotContains(response, 'id="availability-wholeday-button"')
 
     def test_the_checked_glyph_appears_once_every_gap_of_the_day_has_a_result(self):
         self.assertNotContains(self.month(), 'class="availability-checked"')

@@ -71,11 +71,6 @@ class DayAvailability:
         return PARTIAL
 
     @property
-    def has_gaps(self):
-        """Hours are missing, or a mapped parameter is, on an expected day."""
-        return bool(self.expected_hours) and (self.missing_hours > 0 or self.has_parameter_gap)
-
-    @property
     def intensity(self):
         """Share of the expected hours that are gaps, 0 to 1."""
         if not self.expected_hours:
