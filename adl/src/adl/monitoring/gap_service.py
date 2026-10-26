@@ -602,6 +602,7 @@ def day_check_overlay(station_link, day_detail) -> DayCheckOverlay:
                 if parameter_id in parameters:
                     count = len({h for h in hours if check.window_start <= h < check.window_end})
                     parameter_counts.append((parameters[parameter_id], count))
+            parameter_counts.sort(key=lambda item: (-item[1], item[0].name))
         summaries.append(CheckSummary(
             check=check,
             missing_total=len(window_missing),

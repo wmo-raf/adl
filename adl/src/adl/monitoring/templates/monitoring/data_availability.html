@@ -95,6 +95,66 @@
             pointer-events: none;
         }
 
+        .availability-panel {
+            margin-bottom: 1.5rem;
+            background: var(--w-color-surface-field);
+            border: 1px solid var(--w-color-border-furniture);
+            border-radius: 4px;
+        }
+
+        .availability-panel__header {
+            padding: 0.6rem 1rem;
+            background: var(--w-color-grey-50);
+            border-bottom: 1px solid var(--w-color-border-furniture);
+            border-radius: 4px 4px 0 0;
+        }
+
+        .availability-panel__title {
+            margin: 0;
+            font-size: 1rem;
+            font-weight: 600;
+        }
+
+        .availability-panel__body {
+            padding: 1rem;
+        }
+
+        .availability-panel__body > .availability-legend:first-child {
+            margin-top: 0;
+            margin-bottom: 1rem;
+        }
+
+        .availability-panel__body > .availability-wholeday {
+            margin-bottom: 0;
+        }
+
+        .availability-checks-table .status-badge {
+            white-space: nowrap;
+        }
+
+        .availability-checks-detail summary {
+            cursor: pointer;
+        }
+
+        .availability-checks-detail summary::before {
+            content: "\25B8";
+            display: inline-block;
+            width: 1rem;
+        }
+
+        .availability-checks-detail details[open] > summary::before {
+            content: "\25BE";
+        }
+
+        table.listing.availability-params-table {
+            width: auto;
+            min-width: 18rem;
+        }
+
+        table.listing.availability-params-table .availability-zero {
+            color: var(--w-color-text-meta);
+        }
+
         .availability-matrix-wrap {
             overflow-x: auto;
         }
@@ -414,6 +474,9 @@
         {% if not grid_rows and not grid_disabled_rows %}
             <div class="help-block help-info"><p>{% trans "This connection has no station links." %}</p></div>
         {% else %}
+<section class="availability-panel">
+<header class="availability-panel__header"><h2 class="availability-panel__title">{% trans 'Station links' %}</h2></header>
+<div class="availability-panel__body">
         <div class="availability-grid-wrap">
             <table class="availability-grid">
                 <thead>
@@ -481,8 +544,6 @@
                 </div>
             </details>
         {% endif %}
-        {% endif %}
-
         <div class="availability-legend">
             <span class="legend-complete">{% trans "Complete" %}</span>
             <span class="legend-partial">{% trans "Partial — darker means more missing hours" %}</span>
@@ -492,6 +553,9 @@
             <span class="legend-checked">&#10003; {% trans "Source asked about every gap" %}</span>
             <span class="legend-note">{% trans "Counts show hours with data / hours expected" %}</span>
         </div>
+</div>
+</section>
+        {% endif %}
     {% else %}
         <div class="availability-header">
             <div>
@@ -518,6 +582,9 @@
         </nav>
 
         {% if can_check %}
+<section class="availability-panel">
+<header class="availability-panel__header"><h2 class="availability-panel__title">{% trans 'Source check' %}</h2></header>
+<div class="availability-panel__body">
             <div class="availability-wholeday" id="availability-panel" data-station-link="{{ station_link.id }}"
                  data-csrf="{{ csrf_token }}" data-day="{{ day_detail.date.isoformat }}"
                  data-running-url="{{ running_url }}" data-running="{% if panel.state == 'running' %}1{% endif %}"
@@ -561,12 +628,15 @@
                 {% endif %}
                 <span id="availability-panel-status" role="status"></span>
             </div>
+</div>
+</section>
         {% endif %}
 
         {% if check_items %}
-            <section class="availability-checks" aria-label="{% trans 'Source checks' %}">
-                <h3>{% trans "Source checks" %}</h3>
-                <table class="listing availability-checks-table">
+<section class="availability-panel">
+<header class="availability-panel__header"><h2 class="availability-panel__title">{% trans 'Source checks' %}</h2></header>
+<div class="availability-panel__body">
+<table class="listing availability-checks-table">
                     <thead>
                     <tr>
                         <th scope="col">{% trans "Checked" %}</th>
@@ -607,11 +677,22 @@
                                 <td colspan="6">
                                     <details>
                                         <summary class="availability-meta">{% trans "Per parameter" %}</summary>
-                                        <ul class="availability-meta">
+                                        <table class="listing availability-params-table">
+                                            <thead>
+                                            <tr>
+                                                <th scope="col">{% trans "Parameter" %}</th>
+                                                <th scope="col">{% trans "Hours with data" %}</th>
+                                            </tr>
+                                            </thead>
+                                            <tbody>
                                             {% for parameter, count in item.summary.parameter_counts %}
-                                                <li>{{ parameter.name }}: {% blocktrans count n=count %}{{ n }} hour with data{% plural %}{{ n }} hours with data{% endblocktrans %}</li>
+                                                <tr{% if not count %} class="availability-zero"{% endif %}>
+                                                    <td>{{ parameter.name }}</td>
+                                                    <td>{{ count }}</td>
+                                                </tr>
                                             {% endfor %}
-                                        </ul>
+                                            </tbody>
+                                        </table>
                                     </details>
                                 </td>
                             </tr>
@@ -619,9 +700,13 @@
                     {% endfor %}
                     </tbody>
                 </table>
-            </section>
+</div>
+</section>
         {% endif %}
 
+<section class="availability-panel">
+<header class="availability-panel__header"><h2 class="availability-panel__title">{% trans 'Hourly data' %}</h2></header>
+<div class="availability-panel__body">
         <div class="availability-legend">
             <span class="legend-complete">{% trans "Data present" %}</span>
             <span class="legend-empty">{% trans "Missing" %}</span>
@@ -657,9 +742,14 @@
                 </tbody>
             </table>
         </div>
+</div>
+</section>
 
     {% else %}
         {% if watch_running %}<span id="availability-running-watch" hidden data-url="{{ running_url }}" data-station-link="{{ station_link.id }}"></span>{% endif %}
+<section class="availability-panel">
+<header class="availability-panel__header"><h2 class="availability-panel__title">{% trans 'Availability by day' %}</h2></header>
+<div class="availability-panel__body">
         <table class="availability-calendar">
             <thead>
             <tr>
@@ -699,6 +789,8 @@
             <span class="legend-not-expected">{% trans "Not expected" %}</span>
             <span class="legend-note">{% trans "Counts show hours with data / hours expected" %}</span>
         </div>
+</div>
+</section>
     {% endif %}
     {% endif %}
 {% endblock %}

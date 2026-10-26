@@ -484,7 +484,7 @@ class DayViewRenderingTests(CheckViewTestCase):
         self.assertNotContains(response, "availability-recover")
         self.assertNotContains(response, "availability-fetch-instead")
 
-    def test_per_parameter_breakdown_is_listed(self):
+    def test_per_parameter_breakdown_is_a_table_without_repeated_units(self):
         parameter = DataParameterFactory(name="Air temperature")
         with patch.object(StationLink, "get_variable_mappings",
                           lambda self: [type("M", (), {"adl_parameter": parameter})()]):
@@ -493,22 +493,56 @@ class DayViewRenderingTests(CheckViewTestCase):
 
             response = self.day()
 
-        self.assertContains(response, "Air temperature: 1 hour with data")
+        self.assertContains(response, 'class="listing availability-params-table"')
+        self.assertContains(response, "<td>Air temperature</td>")
+        self.assertContains(response, "<td>1</td>")
+        self.assertNotContains(response, "hour with data")
+        self.assertNotContains(response, "hours with data")
         # the breakdown is tucked into a closed expander, not opened by default
         self.assertContains(response, "Per parameter")
         self.assertNotContains(response, "<details open")
 
-    def test_the_results_and_legend_sit_above_the_grid(self):
+    def test_parameters_with_data_come_first_and_the_rest_are_dimmed(self):
+        has, none, more = (DataParameterFactory(name=name) for name in ("Zeta", "Alpha", "Beta"))
+        mappings = [type("M", (), {"adl_parameter": p})() for p in (has, none, more)]
+        with patch.object(StationLink, "get_variable_mappings", lambda self: mappings):
+            self.store(ranges=[], parameter_coverage={
+                str(has.id): [utc(2026, 3, 5, 6).isoformat(), utc(2026, 3, 5, 7).isoformat()],
+                str(none.id): [],
+                str(more.id): [],
+            })
+
+            html = self.day().content.decode()
+
+        self.assertLess(html.index("<td>Zeta</td>"), html.index("<td>Alpha</td>"))
+        self.assertLess(html.index("<td>Alpha</td>"), html.index("<td>Beta</td>"))
+        self.assertEqual(html.count('class="availability-zero"'), 2)
+
+    def test_each_section_of_the_day_view_is_its_own_panel_above_the_grid(self):
+        self.with_mapping()
         self.store(ranges=[{"start": utc(2026, 3, 5, 6).isoformat(),
                             "end": utc(2026, 3, 5, 8).isoformat(), "count": 4, "label": ""}])
 
         html = self.day().content.decode()
 
+        self.assertEqual(html.count('class="availability-panel"'), 3)
+        for title in ("Source check", "Source checks", "Hourly data"):
+            self.assertIn(f'<h2 class="availability-panel__title">{title}</h2>', html)
+        self.assertLess(html.index(">Source check<"), html.index(">Source checks<"))
+        self.assertLess(html.index(">Source checks<"), html.index(">Hourly data<"))
         grid = html.index('class="availability-matrix"')
-        self.assertLess(html.index('class="availability-checks"'), grid)
+        self.assertLess(html.index(">Source checks<"), grid)
         self.assertLess(html.index('class="availability-legend"'), grid)
         self.assertEqual(html.count('class="availability-legend"'), 1)
-        self.assertNotIn("availability-legend", html[grid:].split("</table>", 1)[1].split("<script")[0])
+
+    def test_the_month_calendar_and_connection_grid_are_one_panel_each(self):
+        month = self.client.get(reverse("data_availability"),
+                                {"station_link": self.link.id, "month": "2026-03"})
+        grid = self.client.get(reverse("data_availability"),
+                               {"connection": self.connection.id, "month": "2026-03"})
+
+        self.assertContains(month, 'class="availability-panel"', count=1)
+        self.assertContains(grid, 'class="availability-panel"', count=1)
 
 
 class CheckThroughTheRealServiceTests(CheckViewTestCase):
