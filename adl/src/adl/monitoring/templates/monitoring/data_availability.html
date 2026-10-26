@@ -252,13 +252,6 @@
             background: repeating-linear-gradient(45deg, var(--w-color-critical-200) 0 4px, var(--w-color-surface-field) 4px 8px);
         }
 
-        .availability-hour--source-nothing {
-            background-image: linear-gradient(var(--w-color-grey-400), var(--w-color-grey-400));
-            background-size: 100% 2px;
-            background-repeat: no-repeat;
-            background-position: center;
-        }
-
         .availability-running {
             position: absolute;
             top: 0.2rem;
@@ -297,25 +290,15 @@
         }
 
         .availability-checks {
-            margin-top: 1rem;
+            margin: 1rem 0;
         }
 
-        .availability-check {
-            margin-bottom: 0.75rem;
-            padding: 0.5rem 0.75rem;
-            border-left: 4px solid var(--w-color-border-furniture);
+        .availability-checks-table {
+            margin-bottom: 0.5rem;
         }
 
-        .availability-check--has-data {
-            border-left-color: var(--w-color-warning-100, #c26a00);
-        }
-
-        .availability-check--failed {
-            border-left-color: var(--w-color-critical-200);
-        }
-
-        .availability-check p {
-            margin: 0;
+        .availability-checks-detail td {
+            padding-top: 0;
         }
 
         .availability-legend {
@@ -366,10 +349,6 @@
 
         .availability-legend .legend-source-has {
             --legend-colour: repeating-linear-gradient(45deg, var(--w-color-critical-200) 0 3px, var(--w-color-surface-field) 3px 6px);
-        }
-
-        .availability-legend .legend-source-none {
-            --legend-colour: var(--w-color-grey-50);
         }
 
         .availability-legend .legend-not-expected {
@@ -584,6 +563,73 @@
             </div>
         {% endif %}
 
+        {% if check_items %}
+            <section class="availability-checks" aria-label="{% trans 'Source checks' %}">
+                <h3>{% trans "Source checks" %}</h3>
+                <table class="listing availability-checks-table">
+                    <thead>
+                    <tr>
+                        <th scope="col">{% trans "Checked" %}</th>
+                        <th scope="col">{% trans "Window" %}</th>
+                        <th scope="col">{% trans "Method" %}</th>
+                        <th scope="col">{% trans "Result" %}</th>
+                        <th scope="col">{% trans "Covers" %}</th>
+                        <th scope="col">{% trans "Recovery" %}</th>
+                    </tr>
+                    </thead>
+                    <tbody>
+                    {% for item in check_items %}
+                        <tr>
+                            <td>{{ item.check.created_at|date:"j M H:i" }}</td>
+                            <td>{{ item.span }}</td>
+                            <td>{% if item.by_listing %}{% trans "File listing" %}{% else %}{% trans "Fetched and parsed" %}{% endif %}</td>
+                            <td>
+                                {% if not item.ok %}<span class="status-badge status-badge--failed">{% trans "Did not answer" %}</span>
+                                {% elif item.summary.verdict == 'has_data' %}<span class="status-badge status-badge--warning">{% trans "Source has data" %}</span>
+                                {% else %}<span class="status-badge status-badge--muted">{% trans "Source has nothing" %}</span>{% endif %}
+                            </td>
+                            <td>{% if item.ok %}{% blocktrans with covered=item.summary.covered total=item.summary.missing_total %}{{ covered }} of {{ total }} missing hours{% endblocktrans %}{% else %}&mdash;{% endif %}</td>
+                            <td>
+                                {% if item.check.recovery_saved is not None %}
+                                    {% blocktrans with fetched=item.check.recovery_fetched saved=item.check.recovery_saved %}Fetched {{ fetched }} source record(s), saved {{ saved }} observation(s){% endblocktrans %}
+                                {% elif item.ok and item.summary.verdict == 'has_data' %}
+                                    {% trans "Not recovered" %}
+                                {% else %}&mdash;{% endif %}
+                            </td>
+                        </tr>
+                        {% if item.check.message %}
+                            <tr class="availability-checks-detail">
+                                <td colspan="6" class="availability-meta">{{ item.check.message }}{% if item.check.category %} ({{ item.check.category }}){% endif %}</td>
+                            </tr>
+                        {% endif %}
+                        {% if item.ok and item.summary.parameter_counts %}
+                            <tr class="availability-checks-detail">
+                                <td colspan="6">
+                                    <details>
+                                        <summary class="availability-meta">{% trans "Per parameter" %}</summary>
+                                        <ul class="availability-meta">
+                                            {% for parameter, count in item.summary.parameter_counts %}
+                                                <li>{{ parameter.name }}: {% blocktrans count n=count %}{{ n }} hour with data{% plural %}{{ n }} hours with data{% endblocktrans %}</li>
+                                            {% endfor %}
+                                        </ul>
+                                    </details>
+                                </td>
+                            </tr>
+                        {% endif %}
+                    {% endfor %}
+                    </tbody>
+                </table>
+            </section>
+        {% endif %}
+
+        <div class="availability-legend">
+            <span class="legend-complete">{% trans "Data present" %}</span>
+            <span class="legend-empty">{% trans "Missing" %}</span>
+            <span class="legend-not-expected">{% trans "Not expected" %}</span>
+            <span class="legend-source-has">{% trans "Source has data, not recovered" %}</span>
+            <span class="legend-note">{% trans "Hours are local; hover a cell for its record count" %}</span>
+        </div>
+
         <div class="availability-matrix-wrap">
             <table class="availability-matrix">
                 <thead>
@@ -602,7 +648,7 @@
                             {% if not row.mapped %}<span class="availability-unmapped">{% trans "not currently mapped" %}</span>{% endif %}
                         </th>
                         {% for item in row.cells %}
-                            <td class="availability-hour availability-hour--{{ item.cell.state }}{% if item.mark %} availability-hour--source-{{ item.mark }}{% endif %}"
+                            <td class="availability-hour availability-hour--{{ item.cell.state }}{% if item.mark == 'has_data' %} availability-hour--source-has_data{% endif %}"
                                 data-start="{{ item.cell.iso }}"
                                 title="{{ item.cell.local_time|date:'H:i' }} — {% blocktrans count n=item.cell.records_count %}{{ n }} record{% plural %}{{ n }} records{% endblocktrans %}{% if item.mark == 'has_data' %} — {% trans 'Source has data, not recovered' %}{% elif item.mark == 'nothing' %} — {% trans 'Source has nothing' %}{% endif %}">{% if item.cell.records_count %}{{ item.cell.records_count }}{% endif %}</td>
                         {% endfor %}
@@ -612,52 +658,6 @@
             </table>
         </div>
 
-        {% if check_items %}
-            <section class="availability-checks" aria-label="{% trans 'Source checks' %}">
-                <h3>{% trans "Source checks" %}</h3>
-                {% for item in check_items %}
-                    <div class="availability-check availability-check--{% if not item.ok %}failed{% elif item.summary.verdict == 'has_data' %}has-data{% else %}nothing{% endif %}">
-                        <p>
-                            <strong>
-                                {% if not item.ok %}
-                                    {% trans "Check did not answer" %}
-                                {% elif item.summary.verdict == 'has_data' %}
-                                    {% if item.check.recovered %}{% trans "Source had data, recovered" %}{% else %}{% trans "Source has data, not recovered" %}{% endif %}
-                                {% else %}
-                                    {% trans "Source has nothing" %}
-                                {% endif %}
-                            </strong>
-                            &mdash; {{ item.span }},
-                            {% if item.by_listing %}{% trans "checked by file listing" %}{% else %}{% trans "checked by fetching and parsing data" %}{% endif %},
-                            {{ item.check.created_at|date:"j M H:i" }}
-                        </p>
-                        {% if item.ok %}
-                            <p class="availability-meta">
-                                {% blocktrans with covered=item.summary.covered total=item.summary.missing_total %}Covers {{ covered }} of {{ total }} missing hours.{% endblocktrans %}
-                            </p>
-                            {% if item.summary.parameter_counts %}
-                                <ul class="availability-meta">
-                                    {% for parameter, count in item.summary.parameter_counts %}
-                                        <li>{{ parameter.name }}: {% blocktrans count n=count %}{{ n }} hour with data{% plural %}{{ n }} hours with data{% endblocktrans %}</li>
-                                    {% endfor %}
-                                </ul>
-                            {% endif %}
-                        {% endif %}
-                        {% if item.check.recovery_saved is not None %}<p class="availability-meta">{% blocktrans with fetched=item.check.recovery_fetched saved=item.check.recovery_saved %}Recovery fetched {{ fetched }} source record(s), saved {{ saved }} observation(s).{% endblocktrans %}</p>{% endif %}
-                        {% if item.check.message %}<p class="availability-meta">{{ item.check.message }}{% if item.check.category %} ({{ item.check.category }}){% endif %}</p>{% endif %}
-                    </div>
-                {% endfor %}
-            </section>
-        {% endif %}
-
-        <div class="availability-legend">
-            <span class="legend-complete">{% trans "Data present" %}</span>
-            <span class="legend-empty">{% trans "Missing" %}</span>
-            <span class="legend-not-expected">{% trans "Not expected" %}</span>
-            <span class="legend-source-has">{% trans "Source has data, not recovered" %}</span>
-            <span class="legend-source-none">{% trans "Source has nothing" %}</span>
-            <span class="legend-note">{% trans "Hours are local; hover a cell for its record count" %}</span>
-        </div>
     {% else %}
         {% if watch_running %}<span id="availability-running-watch" hidden data-url="{{ running_url }}" data-station-link="{{ station_link.id }}"></span>{% endif %}
         <table class="availability-calendar">

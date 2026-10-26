@@ -407,11 +407,20 @@ class DayViewRenderingTests(CheckViewTestCase):
 
         response = self.day()
 
-        self.assertContains(response, "Source has data, not recovered")
-        self.assertContains(response, "Covers 2 of 3 missing hours.")
-        self.assertContains(response, "checked by fetching and parsing data")
+        self.assertContains(response, "Source has data")
+        self.assertContains(response, "2 of 3 missing hours")
+        self.assertContains(response, "Fetched and parsed")
+        self.assertContains(response, "Not recovered")
         self.assertContains(response, "availability-hour--source-has_data")
-        self.assertContains(response, "availability-hour--source-nothing")
+
+    def test_hours_the_source_does_not_have_carry_no_strike_mark(self):
+        self.store(ranges=[{"start": utc(2026, 3, 5, 6).isoformat(),
+                            "end": utc(2026, 3, 5, 8).isoformat(), "count": 4, "label": ""}])
+
+        response = self.day()
+
+        self.assertNotContains(response, "availability-hour--source-nothing")
+        self.assertNotContains(response, "legend-source-none")
 
     def test_a_check_with_nothing_is_worded_differently(self):
         self.store()
@@ -419,12 +428,12 @@ class DayViewRenderingTests(CheckViewTestCase):
         response = self.day()
 
         self.assertContains(response, "Source has nothing")
-        self.assertNotContains(response, "Source has data, not recovered</strong>")
+        self.assertNotContains(response, "Not recovered")
 
     def test_the_listing_tier_is_worded_as_a_file_listing(self):
         self.store(tier=TIER_LISTING)
 
-        self.assertContains(self.day(), "checked by file listing")
+        self.assertContains(self.day(), "File listing")
 
     def test_a_failed_check_shows_its_message_and_category(self):
         self.store(status=SourceCheckStatus.FAILED, message="no route to host",
@@ -432,7 +441,7 @@ class DayViewRenderingTests(CheckViewTestCase):
 
         response = self.day()
 
-        self.assertContains(response, "Check did not answer")
+        self.assertContains(response, "Did not answer")
         self.assertContains(response, "no route to host")
         self.assertContains(response, "TCP_TIMEOUT")
 
@@ -471,7 +480,7 @@ class DayViewRenderingTests(CheckViewTestCase):
 
         response = self.day()
 
-        self.assertContains(response, "Recovery fetched 5 source record(s), saved 4 observation(s).")
+        self.assertContains(response, "Fetched 5 source record(s), saved 4 observation(s)")
         self.assertNotContains(response, "availability-recover")
         self.assertNotContains(response, "availability-fetch-instead")
 
@@ -485,6 +494,21 @@ class DayViewRenderingTests(CheckViewTestCase):
             response = self.day()
 
         self.assertContains(response, "Air temperature: 1 hour with data")
+        # the breakdown is tucked into a closed expander, not opened by default
+        self.assertContains(response, "Per parameter")
+        self.assertNotContains(response, "<details open")
+
+    def test_the_results_and_legend_sit_above_the_grid(self):
+        self.store(ranges=[{"start": utc(2026, 3, 5, 6).isoformat(),
+                            "end": utc(2026, 3, 5, 8).isoformat(), "count": 4, "label": ""}])
+
+        html = self.day().content.decode()
+
+        grid = html.index('class="availability-matrix"')
+        self.assertLess(html.index('class="availability-checks"'), grid)
+        self.assertLess(html.index('class="availability-legend"'), grid)
+        self.assertEqual(html.count('class="availability-legend"'), 1)
+        self.assertNotIn("availability-legend", html[grid:].split("</table>", 1)[1].split("<script")[0])
 
 
 class CheckThroughTheRealServiceTests(CheckViewTestCase):
