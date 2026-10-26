@@ -1,6 +1,6 @@
 import calendar
 import re
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from urllib.parse import urlencode
 from zoneinfo import ZoneInfo
 
@@ -24,6 +24,7 @@ from ..availability import (
     connection_availability,
     day_availability,
     month_availability,
+    whole_day_window,
 )
 
 MONTH_PARAM = re.compile(r"^(\d{4})-(0[1-9]|1[0-2])$")
@@ -164,6 +165,27 @@ def _check_items(overlay, tz, can_check=False):
     return items
 
 
+def _whole_day(station_link, day, overlay):
+    """The whole-day check on offer for ``day``, or ``None`` when no mapped
+    parameter is missing. ``checked`` says an answered check already covers it."""
+    window = whole_day_window(station_link, day)
+    if window is None:
+        return None
+    start, end = window
+    tz = ZoneInfo(str(station_link.timezone))
+    return {
+        "local_start": start.astimezone(tz),
+        "local_end": end.astimezone(tz),
+        "hours": int((end - start) / timedelta(hours=1)),
+        "checked": any(
+            summary.check.status == SourceCheckStatus.OK
+            and summary.check.window_start <= start
+            and summary.check.window_end >= end
+            for summary in overlay.summaries
+        ),
+    }
+
+
 def data_availability(request):
     """Month calendar of a station link's data availability, or the connection
     grid of all its links when only a connection is chosen.
@@ -231,6 +253,7 @@ def data_availability(request):
             "month_url": _availability_url(station_link.id, year, month),
             "monitoring_url": reverse("station_link_monitoring", args=[station_link.id]),
         })
+
         if day:
             day_detail = day_availability(station_link, day)
             overlay = gap_service.day_check_overlay(station_link, day_detail)
@@ -240,11 +263,13 @@ def data_availability(request):
                 station_link.network_connection.has_external_source
                 and can_manage_connection(request.user, station_link.network_connection)
             )
-            context["check_items"] = _check_items(
-                overlay, ZoneInfo(str(station_link.timezone)), can_check)
             context["can_check"] = can_check
             context["check_instant"] = station_link.availability_check_supported
             context["check_url"] = reverse("availability_check")
+            if can_check:
+                context["whole_day"] = _whole_day(station_link, day, overlay)
+            context["check_items"] = _check_items(
+                overlay, ZoneInfo(str(station_link.timezone)), can_check)
 
     elif connection_id:
         connection = connections.get(id=connection_id)
@@ -299,7 +324,9 @@ def _managed_station_link(request, link_id):
 def availability_check(request):
     """Ask the source whether it has data for a window of a station link.
 
-    ``station_link``, ``start`` and ``end`` (ISO-8601, any offset), optionally
+    ``station_link`` and either ``day`` (``YYYY-MM-DD``, the station link's local
+    day, checked whole and trimmed to its missing mapped hours) or ``start`` and
+    ``end`` (ISO-8601, any offset), the latter optionally
     ``parameter`` (the selected row) and ``fetch=1`` (skip the cheap check and
     fetch the data). Answers ``{"state": "SUCCESS", "check_id": ...}`` when the
     listing tier answered at once, or ``{"state": "PENDING", "task_id": ...}``
@@ -309,21 +336,30 @@ def availability_check(request):
     if station_link is None:
         return _json_error(_("Unknown station link."), 404)
 
-    start = _parse_instant(request.POST.get("start"))
-    end = _parse_instant(request.POST.get("end"))
-    if start is None or end is None:
-        return _json_error(_("The window needs aware start and end times."), 400)
+    force_fetch = request.POST.get("fetch") == "1"
+    whole_day = request.POST.get("day")
+    if whole_day:
+        day = _parse_day(whole_day)
+        if day is None:
+            return _json_error(_("Unknown day."), 400)
+    else:
+        start = _parse_instant(request.POST.get("start"))
+        end = _parse_instant(request.POST.get("end"))
+        if start is None or end is None:
+            return _json_error(_("The window needs aware start and end times."), 400)
 
-    raw_parameter = request.POST.get("parameter")
-    parameter_id = _positive_int(raw_parameter)
-    if raw_parameter and parameter_id is None:
-        return _json_error(_("Unknown parameter."), 400)
+        raw_parameter = request.POST.get("parameter")
+        parameter_id = _positive_int(raw_parameter)
+        if raw_parameter and parameter_id is None:
+            return _json_error(_("Unknown parameter."), 400)
 
     try:
-        outcome = gap_service.check(
-            station_link, start, end, parameter_id=parameter_id,
-            force_fetch=request.POST.get("fetch") == "1",
-        )
+        if whole_day:
+            outcome = gap_service.check_whole_day(station_link, day, force_fetch=force_fetch)
+        else:
+            outcome = gap_service.check(
+                station_link, start, end, parameter_id=parameter_id, force_fetch=force_fetch,
+            )
     except gap_service.CheckInFlight as exc:
         return _json_error(exc, 409)
     except gap_service.CheckCoolingDown as exc:

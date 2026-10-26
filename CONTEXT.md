@@ -56,6 +56,20 @@ meanings.
   missing expected hours (or alphabetically); disabled links are listed apart
   and never ranked.
 
+**whole-day check**
+: An availability check asked from the top of the day view for one local day. Its
+  window is trimmed to the span from the first to the last hour in which a
+  currently mapped parameter is missing, so it may contain present hours;
+  fully present edge hours and unmapped parameters never extend it. A day with
+  no such hour offers no check. Still capped at one local day.
+
+**checked**
+: A day is checked when it has gaps and every gap hour lies in the window of a
+  stored availability check that answered. It is shown as a glyph on calendar
+  and grid cells. Within the day view only the latest result for an hour
+  applies, earlier ones stay as history; a result stops counting once its
+  hours are present, with no time-based expiry.
+
 **availability check**
 : A read-only question to the source about one **gap** window of a station
   link: does the source have data for it? Distinct from the **source check**,

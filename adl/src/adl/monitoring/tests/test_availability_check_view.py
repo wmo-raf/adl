@@ -19,6 +19,7 @@ from django.urls import reverse
 from adl.core.availability_checks import TIER_FETCH, TIER_LISTING, AvailabilityCheckResult
 from adl.core.models import StationLink
 from adl.core.source_checks import SourceCheckStatus
+from adl.core.tests.helpers import make_mapping
 from adl.core.tests.factories import (
     DataParameterFactory,
     NetworkConnectionFactory,
@@ -174,6 +175,37 @@ class CheckPostTests(CheckViewTestCase):
         check.assert_not_called()
 
 
+class WholeDayPostTests(CheckViewTestCase):
+    def test_a_day_is_checked_whole_through_the_gap_service(self):
+        with patch(f"{GAP}.check_whole_day", return_value=gap_service.CheckOutcome(
+                tier=TIER_FETCH, task_id="task-1")) as check_whole_day:
+            response = self.post(day="2026-03-05", start=None, end=None)
+
+        self.assertEqual(response.json()["task_id"], "task-1")
+        args, kwargs = check_whole_day.call_args
+        self.assertEqual(args[0].id, self.link.id)
+        self.assertEqual(args[1], datetime(2026, 3, 5).date())
+        self.assertFalse(kwargs["force_fetch"])
+
+    def test_a_day_with_no_mapped_parameter_gap_is_a_400(self):
+        with patch(f"{GAP}.check_whole_day", side_effect=gap_service.InvalidWindow("nothing")):
+            response = self.post(day="2026-03-05", start=None, end=None)
+
+        self.assertEqual(response.status_code, 400)
+
+    def test_a_malformed_day_is_a_400(self):
+        self.assertEqual(self.post(day="5 March", start=None, end=None).status_code, 400)
+
+    def test_a_read_only_user_cannot_check_a_day(self):
+        self.plain_user()
+
+        with patch(f"{GAP}.check_whole_day") as check_whole_day:
+            response = self.post(day="2026-03-05", start=None, end=None)
+
+        self.assertEqual(response.status_code, 403)
+        check_whole_day.assert_not_called()
+
+
 class CheckStatusTests(CheckViewTestCase):
     def status(self, state, result=None, link=None):
         url = reverse("availability_check_status", args=["task-1"])
@@ -240,6 +272,66 @@ class DayViewRenderingTests(CheckViewTestCase):
         self.assertContains(response, "availability-hour--missing availability-hour--selectable")
         self.assertContains(response, "Runs in the background")
         self.assertContains(response, 'data-start="2026-03-05T06:00:00+00:00"')
+
+    def month(self, **extra):
+        return self.client.get(reverse("data_availability"),
+                               {"station_link": self.link.id, "month": "2026-03", **extra})
+
+    def test_the_month_calendar_offers_no_actions(self):
+        response = self.month()
+
+        self.assertNotContains(response, 'id="availability-check-bar"')
+        self.assertNotContains(response, "data-day=")
+        self.assertNotContains(response, "Check whole day")
+
+    def test_the_day_view_offers_a_whole_day_check_labelled_with_its_span(self):
+        with patch.object(StationLink, "get_variable_mappings",
+                          lambda self: [make_mapping(DataParameterFactory(), None, source_name="t")]):
+            response = self.day()
+
+        self.assertContains(response, 'id="availability-wholeday-button"')
+        self.assertContains(response, 'data-day="2026-03-05"')
+        self.assertContains(response, "Check whole day")
+        self.assertContains(response, "00:00&ndash;00:00, 24 h")  # a fully empty day
+
+    def test_a_day_without_a_mapped_gap_explains_instead_of_offering(self):
+        with patch.object(StationLink, "get_variable_mappings", lambda self: []):
+            response = self.day()
+
+        self.assertNotContains(response, 'id="availability-wholeday-button"')
+        self.assertContains(response, "nothing to check")
+
+    def test_an_already_covered_span_is_offered_again(self):
+        self.store(window_start=utc(2026, 3, 5, 0), window_end=utc(2026, 3, 6, 0))
+        with patch.object(StationLink, "get_variable_mappings",
+                          lambda self: [make_mapping(DataParameterFactory(), None, source_name="t")]):
+            response = self.day()
+
+        self.assertContains(response, "Check whole day again")
+
+    def test_read_only_users_get_no_whole_day_check(self):
+        self.plain_user()
+
+        response = self.day()
+
+        self.assertNotContains(response, 'id="availability-wholeday-button"')
+
+    def test_the_checked_glyph_appears_once_every_gap_of_the_day_has_a_result(self):
+        self.assertNotContains(self.month(), 'class="availability-checked"')
+
+        self.store(window_start=utc(2026, 3, 5, 0), window_end=utc(2026, 3, 6, 0))
+        response = self.month()
+
+        self.assertContains(response, 'class="availability-checked"')
+        self.assertEqual(response.content.decode().count('class="availability-checked"'), 1)
+
+    def test_the_glyph_is_on_the_connection_grid_too(self):
+        self.store(window_start=utc(2026, 3, 5, 0), window_end=utc(2026, 3, 6, 0))
+
+        response = self.client.get(reverse("data_availability"),
+                                   {"connection": self.connection.id, "month": "2026-03"})
+
+        self.assertContains(response, 'class="availability-checked"', count=1)
 
     def test_listing_support_is_announced_before_the_click(self):
         with patch.object(StationLink, "availability_check_supported", True):

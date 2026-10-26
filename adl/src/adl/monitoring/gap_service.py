@@ -46,7 +46,7 @@ from adl.core.probes import (
 )
 from adl.core.redaction import redact_secrets
 from adl.core.source_checks import SourceCheckStatus
-from .availability import HOUR, MISSING, _mapped_parameters, missing_hours
+from .availability import HOUR, MISSING, _mapped_parameters, missing_hours, whole_day_window
 from .models import AvailabilityCheck
 
 logger = logging.getLogger(__name__)
@@ -114,7 +114,10 @@ def validate_window(station_link, start, end, parameter_id=None, now=None) -> Ga
 
     The window must be hour aligned, lie within one local day, belong to a
     currently mapped parameter row (unmapped rows cannot create a window), and
-    consist only of missing hours of that row.
+    consist only of missing hours of that row. The one exception is the
+    any-parameter *whole-day* window (:func:`whole_day_window`), the span from
+    the first to the last hour with a missing mapped parameter, which may
+    contain hours that are present.
     """
     for value in (start, end):
         if not isinstance(value, datetime) or value.tzinfo is None:
@@ -137,7 +140,10 @@ def validate_window(station_link, start, end, parameter_id=None, now=None) -> Ga
 
     window = GapWindow(start, end, parameter_id)
     missing = missing_hours(station_link, start, end, parameter_id, now=now)
-    if missing != window.hours:
+    if missing != window.hours and not (
+        parameter_id is None
+        and whole_day_window(station_link, start.astimezone(tz).date(), now=now) == (start, end)
+    ):
         raise InvalidWindow(_("The window must be a run of missing hours."))
     return window
 
@@ -340,6 +346,18 @@ def check(station_link, start, end, parameter_id=None, force_fetch=False, now=No
         release(station_link.id)
         raise
     return CheckOutcome(tier=TIER_FETCH, task_id=task.id)
+
+
+def check_whole_day(station_link, day, force_fetch=False, now=None) -> CheckOutcome:
+    """Check a whole local ``day``, trimmed by :func:`whole_day_window`.
+
+    Raises :class:`InvalidWindow` when the day has no missing mapped
+    parameter, so no check is offered.
+    """
+    window = whole_day_window(station_link, day, now=now)
+    if window is None:
+        raise InvalidWindow(_("This day has no missing mapped parameter to check."))
+    return check(station_link, *window, force_fetch=force_fetch, now=now)
 
 
 def run_fetch_task(station_link_id, start_iso, end_iso, parameter_id) -> int:
