@@ -58,10 +58,10 @@ def run_availability_check(self, station_link_id, start_iso, end_iso, parameter_
 
 
 @shared_task(bind=True, name="adl.monitoring.tasks.run_gap_recovery")
-def run_gap_recovery(self, station_link_id, start_iso, end_iso, parameter_id=None):
-    """Gap recovery (see ``gap_service``): ingests the window through the normal
-    pipeline and returns the fetched/saved report, or ``busy`` when a scheduled
-    pull holds the station's ingestion lock. Releases the station link's
-    in-flight claim however it ends."""
+def run_gap_recovery(self, station_link_id, check_id):
+    """Gap recovery (see ``gap_service``): ingests a stored check's window through
+    the normal pipeline and returns the fetched/saved report, or ``busy`` when a
+    scheduled pull holds the station's ingestion lock. Releases the station
+    link's in-flight claim however it ends."""
     from . import gap_service
-    return gap_service.run_recovery_task(station_link_id, start_iso, end_iso, parameter_id)
+    return gap_service.run_recovery_task(station_link_id, check_id)

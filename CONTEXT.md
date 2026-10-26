@@ -87,13 +87,21 @@ meanings.
   link at a time.
 
 **gap recovery**
-: Ingesting a **gap** window through the normal pipeline (validation, unit
-  conversion, QC, upsert) by running the plugin's `process_station` with the
-  window as explicit start and end, as a background task. It is offered after
-  an **availability check** found data and is also available directly for a
-  selected window; it needs the right to manage the connection. It never
+: Ingesting the window of a stored **availability check** that found data
+  through the normal pipeline (validation, unit conversion, QC, upsert), by
+  running the plugin's `process_station` with the check's whole window as
+  explicit start and end, as a background task. It is offered only after such a
+  check (never directly) and needs the right to manage the connection. It never
   bypasses the ingestion lock: if a scheduled pull holds it, recovery answers
-  "busy" and fetches nothing. It shares the one-run-per-station-link claim
-  with checks, writes a pull activity row marked as a gap recovery, and
-  reports how many records were fetched and saved. When it saves something,
-  the answered checks overlapping the window are marked recovered.
+  "busy" and fetches nothing. It shares the one-run-per-station-link claim with
+  checks, writes a pull activity row marked as a gap recovery, and stores how
+  many records were fetched and saved on the check. The check is marked
+  recovered when something was saved; if gaps remain, the day view offers a new
+  check rather than the same recovery again.
+
+**day panel**
+: The status panel at the top of the day view, the one place a day is checked
+  and recovered. It shows a single state from the day's newest stored check:
+  check the source, recover what a check found, or the outcome of the last
+  step (nothing found, did not answer, recovered with counts). The stored
+  checks listed below the matrix are history only.

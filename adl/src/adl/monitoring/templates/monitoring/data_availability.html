@@ -242,15 +242,6 @@
             font-weight: 600;
         }
 
-        .availability-hour--selectable {
-            cursor: pointer;
-        }
-
-        .availability-hour--selected {
-            outline: 3px solid var(--w-color-primary);
-            outline-offset: -3px;
-        }
-
         .availability-hour--source-has_data {
             box-shadow: inset 0 0 0 3px var(--w-color-positive-100);
             background: repeating-linear-gradient(45deg, var(--w-color-critical-200) 0 4px, var(--w-color-surface-field) 4px 8px);
@@ -277,18 +268,6 @@
             align-items: center;
             gap: 0.75rem;
             margin-bottom: 1rem;
-        }
-
-        .availability-check-bar {
-            display: flex;
-            flex-wrap: wrap;
-            align-items: center;
-            gap: 0.75rem;
-            margin: 1rem 0 0.5rem;
-        }
-
-        .availability-check-bar[hidden] {
-            display: none;
         }
 
         .availability-checks {
@@ -532,21 +511,40 @@
         </nav>
 
         {% if can_check %}
-            <div class="availability-wholeday">
-                {% if whole_day %}
-                    <button type="button" class="button button-small" id="availability-wholeday-button"
-                            data-day="{{ day_detail.date.isoformat }}">
-                        {% if whole_day.checked %}{% trans "Check whole day again" %}{% else %}{% trans "Check whole day" %}{% endif %}
-                        ({{ whole_day.local_start|date:"H:i" }}&ndash;{{ whole_day.local_end|date:"H:i" }}, {{ whole_day.hours }} h)
-                    </button>
-                    <span class="availability-meta">
-                        {% if check_instant %}{% trans "The answer is instant (the source is asked for a listing)." %}
-                        {% else %}{% trans "Runs in the background: the source's data is fetched and parsed, and nothing is saved." %}{% endif %}
-                    </span>
-                {% else %}
+            <div class="availability-wholeday" id="availability-panel" data-station-link="{{ station_link.id }}"
+                 data-csrf="{{ csrf_token }}" data-day="{{ day_detail.date.isoformat }}"
+                 data-check-url="{{ check_url }}" data-status-url="{% url 'availability_check_status' task_id='TASK' %}"
+                 data-recover-url="{% url 'availability_recover' %}" data-recover-status-url="{% url 'availability_recover_status' task_id='TASK' %}">
+                {% if not panel %}
                     <span class="availability-meta">{% trans "No mapped parameter is missing, so there is nothing to check." %}</span>
+                {% else %}
+                    {% if panel.state == 'recover' %}
+                        <span><strong>{% trans "The source has data for this gap." %}</strong>
+                            {{ panel.latest.local_start|date:"H:i" }}&ndash;{{ panel.latest.local_end|date:"H:i" }}</span>
+                        <button type="button" class="button button-small" data-action="recover"
+                                data-check="{{ panel.latest.check.id }}">{% trans "Recover missing data" %}</button>
+                    {% else %}
+                        {% if panel.state == 'recovered' %}
+                            <span><strong>{% blocktrans with fetched=panel.latest.check.recovery_fetched saved=panel.latest.check.recovery_saved %}Recovery fetched {{ fetched }} and saved {{ saved }} record(s).{% endblocktrans %}</strong></span>
+                        {% elif panel.state == 'nothing' %}
+                            <span><strong>{% trans "The source has nothing for this gap." %}</strong></span>
+                        {% elif panel.state == 'failed' %}
+                            <span><strong>{% trans "The check did not answer." %}</strong></span>
+                        {% endif %}
+                        <button type="button" class="button button-small" data-action="check">
+                            {% if panel.state == 'check' %}{% trans "Check source" %}{% else %}{% trans "Check source again" %}{% endif %}
+                            ({{ panel.whole_day.local_start|date:"H:i" }}&ndash;{{ panel.whole_day.local_end|date:"H:i" }}, {{ panel.whole_day.hours }} h)
+                        </button>
+                        {% if panel.latest.can_fetch_instead %}
+                            <button type="button" class="button button-small button-secondary" data-action="check" data-fetch="1">{% trans "Try by fetching data" %}</button>
+                        {% endif %}
+                    {% endif %}
+                    <span class="availability-meta">
+                        {% if check_instant %}{% trans "The check is instant (the source is asked for a listing)." %}
+                        {% else %}{% trans "The check runs in the background: the source's data is fetched and parsed, and nothing is saved." %}{% endif %}
+                    </span>
                 {% endif %}
-                <span id="availability-wholeday-status" role="status"></span>
+                <span id="availability-panel-status" role="status"></span>
             </div>
         {% endif %}
 
@@ -562,13 +560,13 @@
                 </thead>
                 <tbody>
                 {% for row in matrix_rows %}
-                    <tr{% if row.is_any %} class="availability-any-row"{% endif %} data-parameter="{{ row.parameter_id|default_if_none:'' }}">
+                    <tr{% if row.is_any %} class="availability-any-row"{% endif %}>
                         <th scope="row">
                             {% if row.is_any %}{% trans "Any parameter" %}{% else %}{{ row.parameter.name }}{% endif %}
                             {% if not row.mapped %}<span class="availability-unmapped">{% trans "not currently mapped" %}</span>{% endif %}
                         </th>
                         {% for item in row.cells %}
-                            <td class="availability-hour availability-hour--{{ item.cell.state }}{% if item.mark %} availability-hour--source-{{ item.mark }}{% endif %}{% if can_check and item.cell.state == 'missing' and row.mapped %} availability-hour--selectable{% endif %}"
+                            <td class="availability-hour availability-hour--{{ item.cell.state }}{% if item.mark %} availability-hour--source-{{ item.mark }}{% endif %}"
                                 data-start="{{ item.cell.iso }}"
                                 title="{{ item.cell.local_time|date:'H:i' }} — {% blocktrans count n=item.cell.records_count %}{{ n }} record{% plural %}{{ n }} records{% endblocktrans %}{% if item.mark == 'has_data' %} — {% trans 'Source has data, not recovered' %}{% elif item.mark == 'nothing' %} — {% trans 'Source has nothing' %}{% endif %}"></td>
                         {% endfor %}
@@ -577,23 +575,6 @@
                 </tbody>
             </table>
         </div>
-
-        {% if can_check %}
-            <div class="availability-check-bar" id="availability-check-bar" hidden
-                 data-url="{{ check_url }}" data-station-link="{{ station_link.id }}"
-                 data-csrf="{{ csrf_token }}" data-status-url="{% url 'availability_check_status' task_id='TASK' %}"
-                 data-recover-url="{% url 'availability_recover' %}" data-recover-status-url="{% url 'availability_recover_status' task_id='TASK' %}">
-                <span id="availability-check-selection"></span>
-                <button type="button" class="button button-small" id="availability-check-button">{% trans "Check source" %}</button>
-                <button type="button" class="button button-small button-secondary" id="availability-recover-button">{% trans "Recover data" %}</button>
-                <span class="availability-meta" id="availability-check-note">
-                    {% if check_instant %}{% trans "The answer is instant (the source is asked for a listing)." %}
-                    {% else %}{% trans "Runs in the background: the source's data is fetched and parsed, and nothing is saved." %}{% endif %}
-                </span>
-                <span id="availability-check-status" role="status"></span>
-            </div>
-            <p class="availability-meta">{% trans "Select a run of missing hours in a row to check whether the source has data for it." %}</p>
-        {% endif %}
 
         {% if check_items %}
             <section class="availability-checks" aria-label="{% trans 'Source checks' %}">
@@ -626,15 +607,8 @@
                                 </ul>
                             {% endif %}
                         {% endif %}
+                        {% if item.check.recovery_saved is not None %}<p class="availability-meta">{% blocktrans with fetched=item.check.recovery_fetched saved=item.check.recovery_saved %}Recovery fetched {{ fetched }}, saved {{ saved }}.{% endblocktrans %}</p>{% endif %}
                         {% if item.check.message %}<p class="availability-meta">{{ item.check.message }}{% if item.check.category %} ({{ item.check.category }}){% endif %}</p>{% endif %}
-                        {% if can_check and item.ok and item.summary.verdict == 'has_data' and not item.check.recovered %}
-                            <p><button type="button" class="button button-small availability-recover"
-                                       data-start="{{ item.check.window_start.isoformat }}" data-end="{{ item.check.window_end.isoformat }}" data-parameter="{{ item.check.parameter_id|default_if_none:'' }}">{% trans "Recover this data" %}</button></p>
-                        {% endif %}
-                        {% if item.can_fetch_instead %}
-                            <p><button type="button" class="button button-small button-secondary availability-fetch-instead"
-                                       data-start="{{ item.check.window_start.isoformat }}" data-end="{{ item.check.window_end.isoformat }}" data-parameter="{{ item.check.parameter_id|default_if_none:'' }}">{% trans "Try by fetching data" %}</button></p>
-                        {% endif %}
                     </div>
                 {% endfor %}
             </section>
@@ -705,201 +679,59 @@
                 form.submit();
             });
 
-            // --- availability check: select a run of missing hours, ask the source
-            const bar = document.getElementById('availability-check-bar');
-            if (bar) {
-                const barStatus = document.getElementById('availability-check-status');
-                let status = barStatus;
-                const selectionText = document.getElementById('availability-check-selection');
-                const button = document.getElementById('availability-check-button');
-                const wholeDayButton = document.getElementById('availability-wholeday-button');
-                const recoverButton = document.getElementById('availability-recover-button');
-                const setBusy = (busy) => {
-                    button.disabled = busy;
-                    recoverButton.disabled = busy;
-                    if (wholeDayButton) wholeDayButton.disabled = busy;
-                };
-                const HOUR_MS = 3600 * 1000;
-                let selection = null; // {row, from, to} as indices into the row's cells
+            // --- source check and recovery: one status panel at the top of the day view
+            const panel = document.getElementById('availability-panel');
+            if (panel) {
+                const status = document.getElementById('availability-panel-status');
+                const buttons = panel.querySelectorAll('button');
+                const setBusy = (busy) => buttons.forEach((b) => { b.disabled = busy; });
+                const fail = (message) => { status.textContent = message; setBusy(false); };
+                const lost = () => fail('{% trans "Lost contact with the server." %}');
 
-                const rowCells = (row) => Array.from(row.querySelectorAll('td.availability-hour'));
-
-                function render() {
-                    document.querySelectorAll('.availability-hour--selected')
-                        .forEach((cell) => cell.classList.remove('availability-hour--selected'));
-                    bar.hidden = !selection;
-                    if (!selection) return;
-                    const cells = rowCells(selection.row).slice(selection.from, selection.to + 1);
-                    cells.forEach((cell) => cell.classList.add('availability-hour--selected'));
-                    const hours = cells.length;
-                    selectionText.textContent = selection.row.querySelector('th').textContent.trim().split('\n')[0]
-                        + ': ' + hours + ' h';
-                    status.textContent = '';
-                    setBusy(false);
-                }
-
-                document.querySelectorAll('td.availability-hour--selectable').forEach((cell) => {
-                    cell.addEventListener('click', function () {
-                        const row = cell.parentElement;
-                        const cells = rowCells(row);
-                        const index = cells.indexOf(cell);
-                        if (selection && selection.row === row) {
-                            if (selection.from === index && selection.to === index) {
-                                selection = null;
-                                return render();
-                            }
-                            const lo = Math.min(selection.from, index);
-                            const hi = Math.max(selection.to, index);
-                            const contiguous = cells.slice(lo, hi + 1)
-                                .every((c) => c.classList.contains('availability-hour--selectable'));
-                            if (contiguous) {
-                                selection = {row: row, from: lo, to: hi};
-                                return render();
-                            }
-                        }
-                        selection = {row: row, from: index, to: index};
-                        render();
-                    });
-                });
-
-                function poll(taskId) {
-                    const url = bar.dataset.statusUrl.replace('TASK', encodeURIComponent(taskId))
-                        + '?station_link=' + encodeURIComponent(bar.dataset.stationLink);
-                    fetch(url, {headers: {'X-Requested-With': 'XMLHttpRequest'}})
+                // POST, then poll the task until it ends; ``done`` gets the final answer
+                function run(url, statusUrl, params, working, done) {
+                    setBusy(true);
+                    status.textContent = working;
+                    const poll = (taskId) => {
+                        const target = statusUrl.replace('TASK', encodeURIComponent(taskId))
+                            + '?station_link=' + encodeURIComponent(panel.dataset.stationLink);
+                        fetch(target, {headers: {'X-Requested-With': 'XMLHttpRequest'}})
+                            .then((response) => response.json())
+                            .then((data) => {
+                                if (data.state === 'PENDING') return window.setTimeout(() => poll(taskId), 2000);
+                                done(data);
+                            })
+                            .catch(lost);
+                    };
+                    params.set('station_link', panel.dataset.stationLink);
+                    fetch(url, {
+                        method: 'POST',
+                        headers: {'X-CSRFToken': panel.dataset.csrf, 'X-Requested-With': 'XMLHttpRequest'},
+                        body: params,
+                    })
                         .then((response) => response.json())
                         .then((data) => {
+                            if (data.error) return fail(data.error);
                             if (data.state === 'SUCCESS') return window.location.reload();
-                            if (data.state === 'FAILURE' || data.error) {
-                                status.textContent = data.message || data.error;
-                                setBusy(false);
-                                return;
-                            }
-                            window.setTimeout(() => poll(taskId), 2000);
+                            poll(data.task_id);
                         })
-                        .catch(() => { status.textContent = '{% trans "Lost contact with the server." %}'; setBusy(false); });
+                        .catch(lost);
                 }
 
-                function submit(body) {
-                    setBusy(true);
-                    status.textContent = '{% trans "Checking…" %}';
-                    fetch(bar.dataset.url, {
-                        method: 'POST',
-                        headers: {'X-CSRFToken': bar.dataset.csrf, 'X-Requested-With': 'XMLHttpRequest'},
-                        body: body,
-                    })
-                        .then((response) => response.json())
-                        .then((data) => {
-                            if (data.error) {
-                                status.textContent = data.error;
-                                setBusy(false);
-                            } else if (data.state === 'SUCCESS') {
-                                window.location.reload();
-                            } else {
-                                poll(data.task_id);
-                            }
-                        })
-                        .catch(() => { status.textContent = '{% trans "Lost contact with the server." %}'; setBusy(false); });
-                }
-
-                button.addEventListener('click', function () {
-                    if (!selection) return;
-                    status = barStatus;
-                    const cells = rowCells(selection.row).slice(selection.from, selection.to + 1);
-                    const start = cells[0].dataset.start;
-                    const end = new Date(new Date(cells[cells.length - 1].dataset.start).getTime() + HOUR_MS).toISOString();
-                    submit(new URLSearchParams({
-                        station_link: bar.dataset.stationLink, start: start, end: end,
-                        parameter: selection.row.dataset.parameter || '',
-                    }));
-                });
-
-                // gap recovery: ingest the window through the normal pipeline
-                function pollRecovery(taskId) {
-                    const url = bar.dataset.recoverStatusUrl.replace('TASK', encodeURIComponent(taskId))
-                        + '?station_link=' + encodeURIComponent(bar.dataset.stationLink);
-                    fetch(url, {headers: {'X-Requested-With': 'XMLHttpRequest'}})
-                        .then((response) => response.json())
-                        .then((data) => {
-                            if (data.state === 'SUCCESS') {
-                                status.textContent = '{% trans "Fetched" %} ' + data.fetched + ', {% trans "saved" %} ' + data.saved + '.';
-                                window.setTimeout(() => window.location.reload(), 1500);
-                                return;
-                            }
-                            if (data.state === 'PENDING') {
-                                window.setTimeout(() => pollRecovery(taskId), 2000);
-                                return;
-                            }
-                            status.textContent = data.message || data.error;
-                            setBusy(false);
-                        })
-                        .catch(() => { status.textContent = '{% trans "Lost contact with the server." %}'; setBusy(false); });
-                }
-
-                function recover(body) {
-                    setBusy(true);
-                    status.textContent = '{% trans "Recovering…" %}';
-                    fetch(bar.dataset.recoverUrl, {
-                        method: 'POST',
-                        headers: {'X-CSRFToken': bar.dataset.csrf, 'X-Requested-With': 'XMLHttpRequest'},
-                        body: body,
-                    })
-                        .then((response) => response.json())
-                        .then((data) => {
-                            if (data.error) {
-                                status.textContent = data.error;
-                                setBusy(false);
-                            } else {
-                                pollRecovery(data.task_id);
-                            }
-                        })
-                        .catch(() => { status.textContent = '{% trans "Lost contact with the server." %}'; setBusy(false); });
-                }
-
-                recoverButton.addEventListener('click', function () {
-                    if (!selection) return;
-                    status = barStatus;
-                    const cells = rowCells(selection.row).slice(selection.from, selection.to + 1);
-                    const end = new Date(new Date(cells[cells.length - 1].dataset.start).getTime() + HOUR_MS).toISOString();
-                    recover(new URLSearchParams({
-                        station_link: bar.dataset.stationLink, start: cells[0].dataset.start, end: end,
-                        parameter: selection.row.dataset.parameter || '',
-                    }));
-                });
-
-                document.querySelectorAll('.availability-recover').forEach((recoverCheck) => {
-                    recoverCheck.addEventListener('click', function () {
-                        status = barStatus;
-                        bar.hidden = false;
-                        selectionText.textContent = '';
-                        recover(new URLSearchParams({
-                            station_link: bar.dataset.stationLink, start: recoverCheck.dataset.start,
-                            end: recoverCheck.dataset.end, parameter: recoverCheck.dataset.parameter || '',
-                        }));
+                panel.querySelectorAll('[data-action="check"]').forEach((button) => {
+                    button.addEventListener('click', function () {
+                        const params = new URLSearchParams({day: panel.dataset.day});
+                        if (button.dataset.fetch) params.set('fetch', '1');
+                        run(panel.dataset.checkUrl, panel.dataset.statusUrl, params, '{% trans "Checking…" %}',
+                            (data) => data.state === 'SUCCESS' ? window.location.reload() : fail(data.message || data.error));
                     });
                 });
 
-                // a whole day, trimmed to its missing mapped-parameter hours
-                const wholeDay = wholeDayButton;
-                if (wholeDay) {
-                    wholeDay.addEventListener('click', function () {
-                        status = document.getElementById('availability-wholeday-status');
-                        submit(new URLSearchParams({
-                            station_link: bar.dataset.stationLink, day: wholeDay.dataset.day,
-                        }));
-                    });
-                }
-
-                // a listing that did not answer: explicitly ask for tier 2 on the same window
-                document.querySelectorAll('.availability-fetch-instead').forEach((fetchButton) => {
-                    fetchButton.addEventListener('click', function () {
-                        status = barStatus;
-                        bar.hidden = false;
-                        selectionText.textContent = '';
-                        submit(new URLSearchParams({
-                            station_link: bar.dataset.stationLink, start: fetchButton.dataset.start,
-                            end: fetchButton.dataset.end, fetch: '1',
-                            parameter: fetchButton.dataset.parameter || '',
-                        }));
+                panel.querySelectorAll('[data-action="recover"]').forEach((button) => {
+                    button.addEventListener('click', function () {
+                        run(panel.dataset.recoverUrl, panel.dataset.recoverStatusUrl,
+                            new URLSearchParams({check: button.dataset.check}), '{% trans "Recovering…" %}',
+                            (data) => data.state === 'SUCCESS' ? window.location.reload() : fail(data.message || data.error));
                     });
                 });
             }

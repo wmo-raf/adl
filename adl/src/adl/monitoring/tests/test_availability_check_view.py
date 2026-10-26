@@ -48,8 +48,7 @@ class CheckViewTestCase(TestCase):
         self.url = reverse("availability_check")
         self.payload = {
             "station_link": self.link.id,
-            "start": "2026-03-05T06:00:00Z",
-            "end": "2026-03-05T09:00:00Z",
+            "day": "2026-03-05",
         }
 
     def post(self, **overrides):
@@ -73,7 +72,7 @@ class CheckPermissionTests(CheckViewTestCase):
     def test_a_read_only_monitoring_user_gets_403_and_nothing_runs(self):
         self.plain_user()
 
-        with patch(f"{GAP}.check") as check:
+        with patch(f"{GAP}.check_whole_day") as check:
             response = self.post()
 
         self.assertEqual(response.status_code, 403)
@@ -91,7 +90,7 @@ class CheckPermissionTests(CheckViewTestCase):
     def test_change_permission_on_the_base_connection_passes(self):
         self.plain_user("change_networkconnection")
 
-        with patch(f"{GAP}.check", return_value=gap_service.CheckOutcome(
+        with patch(f"{GAP}.check_whole_day", return_value=gap_service.CheckOutcome(
                 tier=TIER_FETCH, task_id="t1")):
             response = self.post()
 
@@ -104,7 +103,7 @@ class CheckPermissionTests(CheckViewTestCase):
 
         for allowed, status in ((True, 200), (False, 403)):
             with self.subTest(allowed=allowed), \
-                    patch(f"{GAP}.check", return_value=gap_service.CheckOutcome(
+                    patch(f"{GAP}.check_whole_day", return_value=gap_service.CheckOutcome(
                         tier=TIER_FETCH, task_id="t1")), \
                     patch("adl.monitoring.views.availability.can_manage_connection",
                           return_value=allowed) as can_manage:
@@ -119,17 +118,16 @@ class CheckPermissionTests(CheckViewTestCase):
 
 
 class CheckPostTests(CheckViewTestCase):
-    def test_a_fetch_tier_answer_returns_a_task_to_poll(self):
-        with patch(f"{GAP}.check", return_value=gap_service.CheckOutcome(
-                tier=TIER_FETCH, task_id="task-1")) as check:
-            response = self.post(parameter=str(DataParameterFactory().id))
+    def test_a_day_is_checked_whole_through_the_gap_service(self):
+        with patch(f"{GAP}.check_whole_day", return_value=gap_service.CheckOutcome(
+                tier=TIER_FETCH, task_id="task-1")) as check_whole_day:
+            response = self.post()
 
         self.assertEqual(response.json(), {"state": "PENDING", "tier": TIER_FETCH,
                                            "task_id": "task-1"})
-        args, kwargs = check.call_args
+        args, kwargs = check_whole_day.call_args
         self.assertEqual(args[0].id, self.link.id)
-        self.assertEqual(args[1], utc(2026, 3, 5, 6))
-        self.assertEqual(args[2], utc(2026, 3, 5, 9))
+        self.assertEqual(args[1], datetime(2026, 3, 5).date())
         self.assertFalse(kwargs["force_fetch"])
 
     def test_a_listing_tier_answer_returns_the_stored_check(self):
@@ -138,15 +136,15 @@ class CheckPostTests(CheckViewTestCase):
             window_end=utc(2026, 3, 5, 9), created_at=NOW, tier=TIER_LISTING,
             status=SourceCheckStatus.OK)
 
-        with patch(f"{GAP}.check", return_value=gap_service.CheckOutcome(
+        with patch(f"{GAP}.check_whole_day", return_value=gap_service.CheckOutcome(
                 tier=TIER_LISTING, check=stored)):
-            response = self.post(fetch="1")
+            response = self.post()
 
         self.assertEqual(response.json()["state"], "SUCCESS")
         self.assertEqual(response.json()["check_id"], stored.id)
 
     def test_fetch_flag_asks_for_the_fetch_tier(self):
-        with patch(f"{GAP}.check", return_value=gap_service.CheckOutcome(
+        with patch(f"{GAP}.check_whole_day", return_value=gap_service.CheckOutcome(
                 tier=TIER_FETCH, task_id="t")) as check:
             self.post(fetch="1")
 
@@ -156,51 +154,28 @@ class CheckPostTests(CheckViewTestCase):
         for error, status in (
             (gap_service.CheckInFlight("busy"), 409),
             (gap_service.CheckCoolingDown("wait"), 429),
-            (gap_service.InvalidWindow("too long"), 400),
+            (gap_service.InvalidWindow("nothing"), 400),
             (gap_service.CheckUnavailable("no source"), 400),
         ):
             with self.subTest(error=type(error).__name__), \
-                    patch(f"{GAP}.check", side_effect=error):
+                    patch(f"{GAP}.check_whole_day", side_effect=error):
                 response = self.post()
                 self.assertEqual(response.status_code, status)
                 self.assertEqual(response.json()["error"], str(error))
 
     def test_bad_input_is_a_400_or_404(self):
-        with patch(f"{GAP}.check") as check:
-            self.assertEqual(self.post(start="garbage").status_code, 400)
-            self.assertEqual(self.post(start="2026-03-05T06:00:00").status_code, 400)  # naive
-            self.assertEqual(self.post(parameter="x").status_code, 400)
+        with patch(f"{GAP}.check_whole_day") as check:
+            self.assertEqual(self.post(day="5 March").status_code, 400)
+            self.assertEqual(self.post(day=None).status_code, 400)
             self.assertEqual(self.post(station_link="999999").status_code, 404)
             self.assertEqual(self.post(station_link=None).status_code, 404)
         check.assert_not_called()
-
-
-class WholeDayPostTests(CheckViewTestCase):
-    def test_a_day_is_checked_whole_through_the_gap_service(self):
-        with patch(f"{GAP}.check_whole_day", return_value=gap_service.CheckOutcome(
-                tier=TIER_FETCH, task_id="task-1")) as check_whole_day:
-            response = self.post(day="2026-03-05", start=None, end=None)
-
-        self.assertEqual(response.json()["task_id"], "task-1")
-        args, kwargs = check_whole_day.call_args
-        self.assertEqual(args[0].id, self.link.id)
-        self.assertEqual(args[1], datetime(2026, 3, 5).date())
-        self.assertFalse(kwargs["force_fetch"])
-
-    def test_a_day_with_no_mapped_parameter_gap_is_a_400(self):
-        with patch(f"{GAP}.check_whole_day", side_effect=gap_service.InvalidWindow("nothing")):
-            response = self.post(day="2026-03-05", start=None, end=None)
-
-        self.assertEqual(response.status_code, 400)
-
-    def test_a_malformed_day_is_a_400(self):
-        self.assertEqual(self.post(day="5 March", start=None, end=None).status_code, 400)
 
     def test_a_read_only_user_cannot_check_a_day(self):
         self.plain_user()
 
         with patch(f"{GAP}.check_whole_day") as check_whole_day:
-            response = self.post(day="2026-03-05", start=None, end=None)
+            response = self.post()
 
         self.assertEqual(response.status_code, 403)
         check_whole_day.assert_not_called()
@@ -265,13 +240,21 @@ class DayViewRenderingTests(CheckViewTestCase):
             status=SourceCheckStatus.OK, ranges=[])
         return AvailabilityCheck.objects.create(**{**defaults, **kwargs})
 
-    def test_managers_get_the_check_bar_and_selectable_missing_hours(self):
+    def with_mapping(self):
+        patcher = patch.object(
+            StationLink, "get_variable_mappings",
+            lambda self: [make_mapping(DataParameterFactory(), None, source_name="t")])
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def test_managers_get_the_status_panel_and_no_row_selection(self):
+        self.with_mapping()
+
         response = self.day()
 
-        self.assertContains(response, 'id="availability-check-bar"')
-        self.assertContains(response, "availability-hour--missing availability-hour--selectable")
-        self.assertContains(response, "Runs in the background")
-        self.assertContains(response, 'data-start="2026-03-05T06:00:00+00:00"')
+        self.assertContains(response, 'id="availability-panel"')
+        self.assertNotContains(response, "availability-hour--selectable")
+        self.assertNotContains(response, "availability-check-bar")
 
     def month(self, **extra):
         return self.client.get(reverse("data_availability"),
@@ -284,37 +267,79 @@ class DayViewRenderingTests(CheckViewTestCase):
         self.assertNotContains(response, "data-day=")
         self.assertNotContains(response, "Check whole day")
 
-    def test_the_day_view_offers_a_whole_day_check_labelled_with_its_span(self):
-        with patch.object(StationLink, "get_variable_mappings",
-                          lambda self: [make_mapping(DataParameterFactory(), None, source_name="t")]):
-            response = self.day()
+    def test_an_unchecked_gap_offers_the_whole_day_check_labelled_with_its_span(self):
+        self.with_mapping()
 
-        self.assertContains(response, 'id="availability-wholeday-button"')
+        response = self.day()
+
         self.assertContains(response, 'data-day="2026-03-05"')
-        self.assertContains(response, "Check whole day")
+        self.assertContains(response, "Check source")
         self.assertContains(response, "00:00&ndash;00:00, 24 h")  # a fully empty day
+        self.assertNotContains(response, 'data-check="')
 
     def test_a_day_without_a_mapped_gap_explains_instead_of_offering(self):
         with patch.object(StationLink, "get_variable_mappings", lambda self: []):
             response = self.day()
 
-        self.assertNotContains(response, 'id="availability-wholeday-button"')
+        self.assertNotContains(response, "Check source")
         self.assertContains(response, "nothing to check")
 
-    def test_an_already_covered_span_is_offered_again(self):
-        self.store(window_start=utc(2026, 3, 5, 0), window_end=utc(2026, 3, 6, 0))
-        with patch.object(StationLink, "get_variable_mappings",
-                          lambda self: [make_mapping(DataParameterFactory(), None, source_name="t")]):
-            response = self.day()
-
-        self.assertContains(response, "Check whole day again")
-
-    def test_read_only_users_get_no_whole_day_check(self):
-        self.plain_user()
+    def test_a_check_that_found_data_offers_recovery_of_its_window(self):
+        self.with_mapping()
+        stored = self.store(window_start=utc(2026, 3, 5, 0), window_end=utc(2026, 3, 6, 0),
+                            ranges=[{"start": utc(2026, 3, 5, 6).isoformat(),
+                                     "end": utc(2026, 3, 5, 8).isoformat(), "count": 4,
+                                     "label": ""}])
 
         response = self.day()
 
-        self.assertNotContains(response, 'id="availability-wholeday-button"')
+        self.assertContains(response, 'data-check="')
+        self.assertContains(response, f'data-check="{stored.id}"')
+        self.assertContains(response, "Recover missing data")
+
+    def test_a_check_that_found_nothing_offers_only_a_new_check(self):
+        self.with_mapping()
+        self.store(window_start=utc(2026, 3, 5, 0), window_end=utc(2026, 3, 6, 0))
+
+        response = self.day()
+
+        self.assertContains(response, "The source has nothing for this gap.")
+        self.assertContains(response, "Check source again")
+        self.assertNotContains(response, 'data-check="')
+
+    def test_a_recovery_reports_its_counts_and_offers_a_new_check(self):
+        self.with_mapping()
+        self.store(window_start=utc(2026, 3, 5, 0), window_end=utc(2026, 3, 6, 0),
+                   ranges=[{"start": utc(2026, 3, 5, 6).isoformat(),
+                            "end": utc(2026, 3, 5, 8).isoformat(), "count": 4, "label": ""}],
+                   recovered=True, recovery_fetched=12, recovery_saved=6)
+
+        response = self.day()
+
+        self.assertContains(response, "Recovery fetched 12 and saved 6 record(s).")
+        self.assertContains(response, "Check source again")
+        self.assertNotContains(response, 'data-check="')
+
+    def test_a_recovery_that_saved_nothing_is_not_offered_again(self):
+        self.with_mapping()
+        self.store(window_start=utc(2026, 3, 5, 0), window_end=utc(2026, 3, 6, 0),
+                   ranges=[{"start": utc(2026, 3, 5, 6).isoformat(),
+                            "end": utc(2026, 3, 5, 8).isoformat(), "count": 4, "label": ""}],
+                   recovery_fetched=3, recovery_saved=0)
+
+        response = self.day()
+
+        self.assertNotContains(response, 'data-check="')
+
+    def test_read_only_users_get_no_panel_and_no_recovery(self):
+        self.plain_user()
+        self.store(ranges=[{"start": utc(2026, 3, 5, 6).isoformat(),
+                            "end": utc(2026, 3, 5, 8).isoformat(), "count": 4, "label": ""}])
+
+        response = self.day()
+
+        self.assertNotContains(response, 'id="availability-panel"')
+        self.assertNotContains(response, 'data-check="')
 
     def test_the_checked_glyph_appears_once_every_gap_of_the_day_has_a_result(self):
         self.assertNotContains(self.month(), 'class="availability-checked"')
@@ -334,19 +359,11 @@ class DayViewRenderingTests(CheckViewTestCase):
         self.assertContains(response, 'class="availability-checked"', count=1)
 
     def test_listing_support_is_announced_before_the_click(self):
+        self.with_mapping()
         with patch.object(StationLink, "availability_check_supported", True):
             response = self.day()
 
-        self.assertContains(response, "The answer is instant")
-
-    def test_read_only_users_see_the_day_but_no_check_bar(self):
-        self.plain_user()
-
-        response = self.day()
-
-        self.assertEqual(response.status_code, 200)
-        self.assertNotContains(response, 'id="availability-check-bar"')
-        self.assertNotContains(response, "availability-hour--missing availability-hour--selectable")
+        self.assertContains(response, "The check is instant")
 
     def test_a_check_with_data_is_rendered_on_the_hours_it_covers(self):
         self.store(ranges=[{"start": utc(2026, 3, 5, 6).isoformat(),
@@ -384,20 +401,25 @@ class DayViewRenderingTests(CheckViewTestCase):
         self.assertContains(response, "TCP_TIMEOUT")
 
     def test_a_failed_listing_offers_the_explicit_fetch_action(self):
-        self.store(tier=TIER_LISTING, status=SourceCheckStatus.FAILED, message="no route")
+        self.with_mapping()
+        self.store(window_start=utc(2026, 3, 5, 0), window_end=utc(2026, 3, 6, 0),
+                   tier=TIER_LISTING, status=SourceCheckStatus.FAILED, message="no route")
 
         response = self.day()
 
+        self.assertContains(response, "The check did not answer.")
         self.assertContains(response, "Try by fetching data")
-        self.assertContains(response, 'data-start="2026-03-05T06:00:00+00:00"')
+        self.assertContains(response, 'data-fetch="1"')
 
     def test_a_failed_fetch_or_an_answered_listing_offers_no_fetch_action(self):
+        self.with_mapping()
         self.store(tier=TIER_FETCH, status=SourceCheckStatus.FAILED)
         self.store(tier=TIER_LISTING, status=SourceCheckStatus.OK)
 
         self.assertNotContains(self.day(), "Try by fetching data")
 
     def test_a_later_check_of_the_same_window_retires_the_fetch_action(self):
+        self.with_mapping()
         self.store(tier=TIER_LISTING, status=SourceCheckStatus.FAILED,
                    created_at=utc(2026, 3, 9, 10))
         self.store(tier=TIER_FETCH, status=SourceCheckStatus.OK,
@@ -405,33 +427,17 @@ class DayViewRenderingTests(CheckViewTestCase):
 
         self.assertNotContains(self.day(), "Try by fetching data")
 
-    def test_a_later_check_of_another_window_leaves_the_fetch_action(self):
-        self.store(tier=TIER_LISTING, status=SourceCheckStatus.FAILED,
-                   created_at=utc(2026, 3, 9, 10))
-        self.store(tier=TIER_FETCH, status=SourceCheckStatus.OK, created_at=utc(2026, 3, 9, 11),
-                   window_start=utc(2026, 3, 5, 12), window_end=utc(2026, 3, 5, 14))
-
-        self.assertContains(self.day(), "Try by fetching data")
-
-    def test_the_fetch_action_carries_the_checks_parameter(self):
-        parameter = DataParameterFactory()
-        self.store(tier=TIER_LISTING, status=SourceCheckStatus.FAILED, parameter=parameter)
-
-        self.assertContains(self.day(), f'data-parameter="{parameter.id}"')
-
-    def test_an_any_parameter_check_carries_no_parameter(self):
-        self.store(tier=TIER_LISTING, status=SourceCheckStatus.FAILED)
-
-        self.assertContains(self.day(), 'data-parameter=""')
-
-    def test_a_malformed_listing_stored_message_is_shown_with_the_action(self):
-        self.store(tier=TIER_LISTING, status=SourceCheckStatus.MALFORMED,
-                   message="The plugin returned str instead of an AvailabilityCheckResult.")
+    def test_the_history_carries_no_actions_and_shows_recovery_counts(self):
+        self.with_mapping()
+        self.store(recovered=True, recovery_fetched=5, recovery_saved=4,
+                   ranges=[{"start": utc(2026, 3, 5, 6).isoformat(),
+                            "end": utc(2026, 3, 5, 8).isoformat(), "count": 4, "label": ""}])
 
         response = self.day()
 
-        self.assertContains(response, "returned str instead")
-        self.assertContains(response, "Try by fetching data")
+        self.assertContains(response, "Recovery fetched 5, saved 4.")
+        self.assertNotContains(response, "availability-recover")
+        self.assertNotContains(response, "availability-fetch-instead")
 
     def test_per_parameter_breakdown_is_listed(self):
         parameter = DataParameterFactory(name="Air temperature")
@@ -455,7 +461,8 @@ class CheckThroughTheRealServiceTests(CheckViewTestCase):
         self.listing = [AvailabilityCheckResult(status=SourceCheckStatus.OK)]
         patchers = (
             patch.object(StationLink, "get_first_collection_date", lambda self: utc(2026, 3, 1)),
-            patch.object(StationLink, "get_variable_mappings", lambda self: []),
+            patch.object(StationLink, "get_variable_mappings",
+                         lambda self: [make_mapping(DataParameterFactory(), None, source_name="t")]),
             patch.object(StationLink, "availability_check_supported", True),
             patch.object(StationLink, "check_availability",
                          lambda link, start, end: self.listing[0]),
@@ -518,6 +525,7 @@ class RecoverViewTests(CheckViewTestCase):
     def setUp(self):
         super().setUp()
         self.url = reverse("availability_recover")
+        self.payload = {"station_link": self.link.id, "check": "7"}
 
     def test_a_read_only_user_gets_403_and_nothing_runs(self):
         self.plain_user()
@@ -537,13 +545,13 @@ class RecoverViewTests(CheckViewTestCase):
 
         self.assertEqual(response.status_code, 403)
 
-    def test_enqueues_and_returns_the_task_id(self):
+    def test_enqueues_the_checks_recovery_and_returns_the_task_id(self):
         with patch(f"{GAP}.recover", return_value="t1") as recover:
-            response = self.post(parameter="7")
+            response = self.post()
 
         self.assertEqual(response.json(), {"state": "PENDING", "task_id": "t1"})
-        args, kwargs = recover.call_args
-        self.assertEqual((args[0], kwargs["parameter_id"]), (self.link, 7))
+        args, _ = recover.call_args
+        self.assertEqual((args[0], args[1]), (self.link, 7))
 
     def test_refusals_map_to_status_codes(self):
         for error, status in ((gap_service.CheckInFlight("x"), 409),
@@ -553,8 +561,9 @@ class RecoverViewTests(CheckViewTestCase):
                     patch(f"{GAP}.recover", side_effect=error):
                 self.assertEqual(self.post().status_code, status)
 
-    def test_malformed_times_are_a_400(self):
-        self.assertEqual(self.post(start="nope").status_code, 400)
+    def test_a_missing_or_malformed_check_is_a_400(self):
+        self.assertEqual(self.post(check="nope").status_code, 400)
+        self.assertEqual(self.post(check=None).status_code, 400)
 
     def status(self, result):
         with patch("adl.monitoring.views.availability.AsyncResult") as async_result:

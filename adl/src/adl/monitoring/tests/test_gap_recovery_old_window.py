@@ -75,6 +75,14 @@ class OldWindowRecoveryTests(TransactionTestCase):
     def test_recovered_hours_of_an_old_window_are_present_in_the_read_model(self):
         self.assertEqual(len(missing_hours(self.link, START, END, None, now=NOW)), 3)
 
-        gap_service.recover(self.link, START, END, now=NOW)
+        from adl.core.availability_checks import TIER_FETCH
+        from adl.core.source_checks import SourceCheckStatus
+        from adl.monitoring.models import AvailabilityCheck
+        stored = AvailabilityCheck.objects.create(
+            station_link=self.link, window_start=START, window_end=END, created_at=NOW,
+            tier=TIER_FETCH, status=SourceCheckStatus.OK,
+            ranges=[{"start": START.isoformat(), "end": END.isoformat(), "count": 3, "label": ""}])
+
+        gap_service.recover(self.link, stored.id, now=NOW)
 
         self.assertEqual(missing_hours(self.link, START, END, None, now=NOW), [])

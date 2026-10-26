@@ -638,7 +638,7 @@ class RecoveryTests(GapServiceTestCase):
         self.mapping.source_parameter_unit = KelvinUnitFactory()
 
         # the aggregate refresh cannot run inside a TestCase transaction; it has
-        # its own tests, and the old-window test below runs it for real
+        # its own tests, and the old-window test runs it for real
         patcher = patch("adl.core.registries.aggregates.refresh_hourly_aggregate")
         patcher.start()
         self.addCleanup(patcher.stop)
@@ -657,107 +657,112 @@ class RecoveryTests(GapServiceTestCase):
     def records(self, *times):
         self.plugin.records = [{"observation_time": time, "te": 293.15} for time in times]
 
-    def report(self, task_id):
-        return self.reports[task_id]
+    def found_data(self, **kwargs):
+        """A stored, answered check whose ranges cover the first hour of its window."""
+        start, end = self.window()
+        defaults = dict(
+            station_link=self.link, window_start=start, window_end=end, created_at=NOW,
+            tier=TIER_FETCH, status=SourceCheckStatus.OK,
+            ranges=[{"start": start.isoformat(), "end": (start + timedelta(hours=1)).isoformat(),
+                     "count": 1, "label": ""}])
+        return AvailabilityCheck.objects.create(**{**defaults, **kwargs})
 
-    def test_saves_the_windows_records_and_reports_fetched_and_saved(self):
+    def run_task(self, stored):
+        return run_gap_recovery.apply(args=(self.link.id, stored.id)).result
+
+    def test_saves_the_checks_window_and_reports_fetched_and_saved(self):
         self.records(utc(2026, 3, 5, 6, 10), utc(2026, 3, 5, 7, 10), utc(2026, 3, 5, 8, 10))
+        stored = self.found_data()
 
-        report = run_gap_recovery.apply(
-            args=(self.link.id, *(t.isoformat() for t in self.window()), None)).result
+        report = self.run_task(stored)
 
         self.assertEqual((report["busy"], report["fetched"], report["saved"]), (False, 3, 3))
         self.assertEqual(ObservationRecord.objects.filter(station=self.link.station).count(), 3)
 
-    def test_recover_enqueues_and_releases_the_shared_claim(self):
-        self.records(utc(2026, 3, 5, 6, 10))
+    def test_stores_the_counts_on_the_check_and_marks_it_recovered(self):
+        self.records(utc(2026, 3, 5, 6, 10), utc(2026, 3, 5, 7, 10))
+        stored = self.found_data()
 
-        task_id = recover(self.link, *self.window(), now=NOW)
+        recover(self.link, stored.id, now=NOW)
 
-        self.assertEqual(self.report(task_id)["saved"], 1)
+        stored.refresh_from_db()
+        self.assertEqual((stored.recovered, stored.recovery_fetched, stored.recovery_saved),
+                         (True, 2, 2))
         self.assertIsNone(cache.get(gap_service.inflight_key(self.link.id)))
 
-    def test_a_held_ingestion_lock_means_busy_and_nothing_is_fetched(self):
+    def test_nothing_saved_stores_the_counts_but_leaves_the_check_unrecovered(self):
+        self.records()
+        stored = self.found_data()
+
+        recover(self.link, stored.id, now=NOW)
+
+        stored.refresh_from_db()
+        self.assertEqual((stored.recovered, stored.recovery_fetched, stored.recovery_saved),
+                         (False, 0, 0))
+
+    def test_a_held_ingestion_lock_means_busy_and_nothing_is_fetched_or_stored(self):
         self.records(utc(2026, 3, 5, 6, 10))
+        stored = self.found_data()
         cache.set(ingest_station_lock_key(self.link.id), "locked", timeout=60)
 
         with patch.object(type(self.plugin), "get_station_data") as fetch:
-            report = run_gap_recovery.apply(
-                args=(self.link.id, *(t.isoformat() for t in self.window()), None)).result
+            report = self.run_task(stored)
 
         fetch.assert_not_called()
         self.assertTrue(report["busy"])
         self.assertEqual(ObservationRecord.objects.count(), 0)
+        stored.refresh_from_db()
+        self.assertIsNone(stored.recovery_saved)
         # the scheduled pull's lock is not ours to release
         self.assertIsNotNone(cache.get(ingest_station_lock_key(self.link.id)))
 
     def test_writes_an_activity_row_identifiable_as_a_gap_recovery(self):
         self.records(utc(2026, 3, 5, 6, 10))
 
-        recover(self.link, *self.window(), now=NOW)
+        recover(self.link, self.found_data().id, now=NOW)
 
         row = StationLinkActivityLog.objects.get(station_link=self.link)
         self.assertEqual(row.trigger, TRIGGER_GAP_RECOVERY)
         self.assertEqual(row.records_count, 1)
 
-    def test_marks_the_answered_checks_of_the_window_recovered(self):
-        self.records(utc(2026, 3, 5, 6, 10))
-        window = validate_window(self.link, *self.window(), now=NOW)
-        answered = gap_service.store_result(self.link, window, AvailabilityCheckResult(
-            status=SourceCheckStatus.OK, tier=TIER_FETCH))
-        other_day = validate_window(self.link, *self.window(day=6), now=NOW)
-        elsewhere = gap_service.store_result(self.link, other_day, AvailabilityCheckResult(
-            status=SourceCheckStatus.OK, tier=TIER_FETCH))
-
-        recover(self.link, *self.window(), now=NOW)
-
-        answered.refresh_from_db()
-        elsewhere.refresh_from_db()
-        self.assertTrue(answered.recovered)
-        self.assertFalse(elsewhere.recovered)
-
-    def test_a_check_only_partly_covered_or_of_another_row_stays_unrecovered(self):
-        self.records(utc(2026, 3, 5, 6, 10))
-        other = DataParameterFactory()
-        wide = gap_service.store_result(
-            self.link, validate_window(self.link, *self.window(6, 9), now=NOW),
-            AvailabilityCheckResult(status=SourceCheckStatus.OK, tier=TIER_FETCH))
-        other_row = gap_service.GapWindow(*self.window(6, 7), other.id)
-        elsewhere = gap_service.store_result(
-            self.link, other_row,
-            AvailabilityCheckResult(status=SourceCheckStatus.OK, tier=TIER_FETCH))
-
-        recover(self.link, *self.window(6, 7), parameter_id=self.parameter.id, now=NOW)
-
-        wide.refresh_from_db()
-        elsewhere.refresh_from_db()
-        self.assertFalse(wide.recovered)
-        self.assertFalse(elsewhere.recovered)
-
-    def test_nothing_saved_leaves_the_check_unrecovered(self):
-        self.records()
-        window = validate_window(self.link, *self.window(), now=NOW)
-        stored = gap_service.store_result(self.link, window, AvailabilityCheckResult(
-            status=SourceCheckStatus.OK, tier=TIER_FETCH))
-
-        recover(self.link, *self.window(), now=NOW)
-
-        stored.refresh_from_db()
-        self.assertFalse(stored.recovered)
-
     def test_shares_the_one_in_flight_claim_with_checks(self):
+        stored = self.found_data()
         cache.set(gap_service.inflight_key(self.link.id), "check", timeout=60)
 
         with self.assertRaises(CheckInFlight):
-            recover(self.link, *self.window(), now=NOW)
+            recover(self.link, stored.id, now=NOW)
 
     def test_the_claim_is_released_when_enqueueing_fails(self):
+        stored = self.found_data()
+
         with patch.object(run_gap_recovery, "delay", side_effect=RuntimeError("broker down")):
             with self.assertRaises(RuntimeError):
-                recover(self.link, *self.window(), now=NOW)
+                recover(self.link, stored.id, now=NOW)
 
         self.assertIsNone(cache.get(gap_service.inflight_key(self.link.id)))
 
-    def test_refuses_a_window_that_is_not_missing_hours(self):
+    def test_only_a_check_that_found_data_can_be_recovered(self):
+        for label, stored in (
+            ("nothing", self.found_data(ranges=[])),
+            ("failed", self.found_data(status=SourceCheckStatus.FAILED)),
+            ("recovered", self.found_data(recovered=True)),
+        ):
+            with self.subTest(label), self.assertRaises(InvalidWindow):
+                recover(self.link, stored.id, now=NOW)
+
+    def test_another_station_links_check_is_unknown(self):
+        other = StationLinkFactory(network_connection=self.link.network_connection)
+        stored = self.found_data(station_link=other)
+
         with self.assertRaises(InvalidWindow):
-            recover(self.link, utc(2026, 3, 5, 6, 30), utc(2026, 3, 5, 9), now=NOW)
+            recover(self.link, stored.id, now=NOW)
+
+    def test_a_window_whose_hours_have_filled_is_refused(self):
+        stored = self.found_data()
+        for hour in (6, 7, 8):
+            ObservationRecordFactory(
+                station=self.link.station, connection=self.link.network_connection,
+                parameter=self.parameter, time=utc(2026, 3, 5, hour, 30))
+
+        with self.assertRaises(InvalidWindow):
+            recover(self.link, stored.id, now=NOW)

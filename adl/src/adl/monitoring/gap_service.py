@@ -382,16 +382,36 @@ def run_fetch_task(station_link_id, start_iso, end_iso, parameter_id) -> int:
         release(station_link_id)
 
 
-def recover(station_link, start, end, parameter_id=None, now=None) -> str:
-    """Enqueue a recovery of the window and return the task id.
+def check_has_data(check: AvailabilityCheck) -> bool:
+    """Whether the stored check answered and the source has data for at least
+    one hour of its window."""
+    if check.status != SourceCheckStatus.OK:
+        return False
+    hours = [check.window_start + HOUR * offset
+             for offset in range(int((check.window_end - check.window_start) / HOUR))]
+    return bool(covered_missing_hours(check_ranges(check), hours))
 
-    Raises :class:`InvalidWindow`, :class:`CheckUnavailable` or
-    :class:`CheckInFlight`, as :func:`check` does; the claim is the same one, so
-    a check and a recovery of a station link never run together.
+
+def recover(station_link, check_id, now=None) -> str:
+    """Enqueue the recovery of a stored check's whole window; returns the task id.
+
+    The check must belong to the station link, have answered with data, and not
+    be recovered already; its window must still hold a missing hour. Raises
+    :class:`InvalidWindow` otherwise, :class:`CheckUnavailable` or
+    :class:`CheckInFlight` as :func:`check` does; the claim is the same one, so a
+    check and a recovery of a station link never run together.
     """
     from .tasks import run_gap_recovery
 
-    window = validate_window(station_link, start, end, parameter_id, now=now)
+    stored = AvailabilityCheck.objects.filter(id=check_id, station_link=station_link).first()
+    if stored is None:
+        raise InvalidWindow(_("Unknown check."))
+    if not check_has_data(stored):
+        raise InvalidWindow(_("Only a check that found data can be recovered."))
+    if stored.recovered:
+        raise InvalidWindow(_("This check has already been recovered."))
+    if not missing_hours(station_link, stored.window_start, stored.window_end, None, now=now):
+        raise InvalidWindow(_("Nothing is missing in this window any more."))
     if not station_link.network_connection.has_external_source:
         raise CheckUnavailable(_("This connection has no external source to recover from."))
 
@@ -399,50 +419,42 @@ def recover(station_link, start, end, parameter_id=None, now=None) -> str:
         raise CheckInFlight(
             _("A check or recovery is already running for this station link."))
     try:
-        task = run_gap_recovery.delay(
-            station_link.id, window.start.isoformat(), window.end.isoformat(), parameter_id)
+        task = run_gap_recovery.delay(station_link.id, stored.id)
     except BaseException:
         release(station_link.id)
         raise
     return task.id
 
 
-def run_recovery_task(station_link_id, start_iso, end_iso, parameter_id) -> dict:
+def run_recovery_task(station_link_id, check_id) -> dict:
     """The body of the recovery Celery task. Returns a JSON-able report:
     ``busy`` when a scheduled pull held the ingestion lock (nothing was fetched),
     otherwise the ``fetched`` and ``saved`` counts. Releases the in-flight claim
     however it ends.
 
-    Answered checks the window fully covers (for the same parameter row, or
-    any-parameter ones) are marked ``recovered`` once something was saved.
+    The counts are stored on the check; it is marked ``recovered`` when
+    something was saved.
     """
     from adl.core.models import StationLink
 
     try:
         station_link = StationLink.objects.select_related("network_connection").get(
             id=station_link_id)
-        window = GapWindow(datetime.fromisoformat(start_iso), datetime.fromisoformat(end_iso),
-                           parameter_id)
+        stored = AvailabilityCheck.objects.get(id=check_id, station_link=station_link)
         saved = station_link.plugin.process_station(
             station_link,
-            initial_start_date=_local(station_link, window.start),
-            initial_end_date=_local(station_link, window.end),
+            initial_start_date=_local(station_link, stored.window_start),
+            initial_end_date=_local(station_link, stored.window_end),
             bypass_lock=False,
             trigger=TRIGGER_GAP_RECOVERY,
         )
         report = station_link.adl_run_report
         if report["skipped"]:
             return {"station_link": station_link_id, "busy": True, "fetched": 0, "saved": 0}
-        if saved:
-            # only checks the recovery fully covers, and asked about this row
-            # (or about any parameter): a partial overlap is not recovered
-            answered = AvailabilityCheck.objects.filter(
-                station_link=station_link, status=SourceCheckStatus.OK,
-                window_start__gte=window.start, window_end__lte=window.end,
-            )
-            if parameter_id is not None:
-                answered = answered.filter(parameter_id__in=[parameter_id, None])
-            answered.update(recovered=True)
+        stored.recovery_fetched = report["fetched"]
+        stored.recovery_saved = saved
+        stored.recovered = bool(saved)
+        stored.save(update_fields=["recovery_fetched", "recovery_saved", "recovered"])
         return {"station_link": station_link_id, "busy": False,
                 "fetched": report["fetched"], "saved": saved}
     finally:

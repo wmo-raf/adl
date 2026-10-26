@@ -231,7 +231,8 @@ class AvailabilityCheck(models.Model):
     (ISO-8601 times) and ``parameter_coverage`` maps an ADL parameter id to the
     UTC hour starts in which the source has a value for it — populated only by
     the fetch tier. ``recovered`` is set once a gap recovery of the window has
-    run, which is what separates "source has data, not recovered" from a gap
+    saved something (its counts are kept in ``recovery_fetched`` and
+    ``recovery_saved``), which is what separates "source has data, not recovered" from a gap
     that has been dealt with.
 
     Rows are dropped by the daily monitoring cleanup with the same cutoff as
@@ -257,6 +258,11 @@ class AvailabilityCheck(models.Model):
     parameter_coverage = models.JSONField(blank=True, null=True,
                                           verbose_name=_("Parameter Coverage"))
     recovered = models.BooleanField(default=False, verbose_name=_("Recovered"))
+    # What the recovery of this check's window reported; ``NULL`` until one ran
+    recovery_fetched = models.PositiveIntegerField(null=True, blank=True,
+                                                   verbose_name=_("Recovery Fetched"))
+    recovery_saved = models.PositiveIntegerField(null=True, blank=True,
+                                                 verbose_name=_("Recovery Saved"))
 
     class Meta:
         verbose_name = _("Availability Check")
