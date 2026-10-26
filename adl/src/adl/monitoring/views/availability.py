@@ -1,6 +1,6 @@
 import calendar
 import re
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, time, timedelta
 from urllib.parse import urlencode
 from zoneinfo import ZoneInfo
 
@@ -139,6 +139,14 @@ def _matrix_rows(day_detail, overlay):
     return [build(day_detail.any_row, True)] + [build(row, False) for row in day_detail.rows]
 
 
+def _span_label(start, end):
+    """``06:00–12:00`` for a window in local time; a window that ends at midnight
+    of a later day reads ``24:00``, so a whole day is ``00:00–24:00``."""
+    end_text = "24:00" if end.date() > start.date() and end.time() == time(0, 0) \
+        else end.strftime("%H:%M")
+    return f"{start.strftime('%H:%M')}\u2013{end_text}"
+
+
 def _check_items(overlay, tz, can_check=False):
     """The stored checks of the day, with their window in the station's local time."""
     items = [
@@ -147,6 +155,8 @@ def _check_items(overlay, tz, can_check=False):
             "check": summary.check,
             "local_start": summary.check.window_start.astimezone(tz),
             "local_end": summary.check.window_end.astimezone(tz),
+            "span": _span_label(summary.check.window_start.astimezone(tz),
+                                summary.check.window_end.astimezone(tz)),
             "by_listing": summary.check.tier == TIER_LISTING,
             "by_fetch": summary.check.tier == TIER_FETCH,
             "ok": summary.check.status == SourceCheckStatus.OK,
@@ -179,6 +189,7 @@ def _whole_day(station_link, day, overlay):
     return {
         "local_start": start.astimezone(tz),
         "local_end": end.astimezone(tz),
+        "span": _span_label(start.astimezone(tz), end.astimezone(tz)),
         "hours": int((end - start) / timedelta(hours=1)),
         "checked": any(
             summary.check.status == SourceCheckStatus.OK

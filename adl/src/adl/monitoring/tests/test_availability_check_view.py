@@ -274,7 +274,7 @@ class DayViewRenderingTests(CheckViewTestCase):
 
         self.assertContains(response, 'data-day="2026-03-05"')
         self.assertContains(response, "Check source")
-        self.assertContains(response, "00:00&ndash;00:00, 24 h")  # a fully empty day
+        self.assertContains(response, "00:00–24:00, 24 h")  # a fully empty day, ending at the next midnight
         self.assertNotContains(response, 'data-check="')
 
     def test_a_day_without_a_mapped_gap_explains_instead_of_offering(self):
@@ -296,6 +296,23 @@ class DayViewRenderingTests(CheckViewTestCase):
         self.assertContains(response, 'data-check="')
         self.assertContains(response, f'data-check="{stored.id}"')
         self.assertContains(response, "Recover missing data")
+
+    def test_the_check_hint_is_not_shown_beside_the_recover_button(self):
+        self.with_mapping()
+        self.store(window_start=utc(2026, 3, 5, 6), window_end=utc(2026, 3, 5, 9),
+                   ranges=[{"start": utc(2026, 3, 5, 6).isoformat(),
+                            "end": utc(2026, 3, 5, 8).isoformat(), "count": 4, "label": ""}])
+
+        response = self.day()
+
+        self.assertContains(response, "Recover missing data")
+        self.assertContains(response, "06:00–09:00")
+        self.assertNotContains(response, "nothing is saved")
+
+    def test_the_check_hint_is_shown_beside_the_check_button(self):
+        self.with_mapping()
+
+        self.assertContains(self.day(), "nothing is saved")
 
     def test_a_check_that_found_nothing_offers_only_a_new_check(self):
         self.with_mapping()
@@ -334,11 +351,12 @@ class DayViewRenderingTests(CheckViewTestCase):
     def test_a_run_in_flight_shows_the_panel_running_and_disables_the_action(self):
         self.with_mapping()
         cache.set(gap_service.inflight_key(self.link.id),
-                  "recover|2026-03-10T10:42:00+00:00", timeout=60)
+                  "recover|2026-03-10T10:42:00+00:00|2026-03-07", timeout=60)
 
         response = self.day()
 
         self.assertContains(response, "Recovering")
+        self.assertContains(response, "Recovering 7 Mar")  # the claimed day, not necessarily this one
         self.assertContains(response, "since 10:42")
         self.assertContains(response, 'data-running="1"')
         self.assertNotContains(response, 'data-check="')

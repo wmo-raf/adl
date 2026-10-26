@@ -549,14 +549,14 @@
                 {% else %}
                     {% if panel.state == 'running' %}
                         <span><strong>
-                            {% if panel.running.kind == 'recover' %}{% trans "Recovering" %}{% else %}{% trans "Checking" %}{% endif %}&hellip;
+                            {% if panel.running.kind == 'recover' %}{% trans "Recovering" %}{% else %}{% trans "Checking" %}{% endif %}{% if panel.running.day %} {{ panel.running.day|date:"j M" }}{% endif %}&hellip;
                         </strong>
                             {% if panel.running.since %}<span class="availability-meta">{% blocktrans with since=panel.running.since|date:"H:i" %}since {{ since }}{% endblocktrans %}</span>{% endif %}
                         </span>
                         <button type="button" class="button button-small" disabled>{% trans "Check source" %}</button>
                     {% elif panel.state == 'recover' %}
                         <span><strong>{% trans "The source has data for this gap." %}</strong>
-                            {{ panel.latest.local_start|date:"H:i" }}&ndash;{{ panel.latest.local_end|date:"H:i" }}</span>
+                            {{ panel.latest.span }}</span>
                         <button type="button" class="button button-small" data-action="recover"
                                 data-check="{{ panel.latest.check.id }}">{% trans "Recover missing data" %}</button>
                     {% else %}
@@ -569,16 +569,16 @@
                         {% endif %}
                         <button type="button" class="button button-small" data-action="check">
                             {% if panel.state == 'check' %}{% trans "Check source" %}{% else %}{% trans "Check source again" %}{% endif %}
-                            ({{ panel.whole_day.local_start|date:"H:i" }}&ndash;{{ panel.whole_day.local_end|date:"H:i" }}, {{ panel.whole_day.hours }} h)
+                            ({{ panel.whole_day.span }}, {{ panel.whole_day.hours }} h)
                         </button>
                         {% if panel.latest.can_fetch_instead %}
                             <button type="button" class="button button-small button-secondary" data-action="check" data-fetch="1">{% trans "Try by fetching data" %}</button>
                         {% endif %}
+                        <span class="availability-meta">
+                            {% if check_instant %}{% trans "The check is instant (the source is asked for a listing)." %}
+                            {% else %}{% trans "The check runs in the background: the source's data is fetched and parsed, and nothing is saved." %}{% endif %}
+                        </span>
                     {% endif %}
-                    <span class="availability-meta">
-                        {% if check_instant %}{% trans "The check is instant (the source is asked for a listing)." %}
-                        {% else %}{% trans "The check runs in the background: the source's data is fetched and parsed, and nothing is saved." %}{% endif %}
-                    </span>
                 {% endif %}
                 <span id="availability-panel-status" role="status"></span>
             </div>
@@ -627,7 +627,7 @@
                                     {% trans "Source has nothing" %}
                                 {% endif %}
                             </strong>
-                            &mdash; {{ item.local_start|date:"H:i" }}&ndash;{{ item.local_end|date:"H:i" }},
+                            &mdash; {{ item.span }},
                             {% if item.by_listing %}{% trans "checked by file listing" %}{% else %}{% trans "checked by fetching and parsing data" %}{% endif %},
                             {{ item.check.created_at|date:"j M H:i" }}
                         </p>
