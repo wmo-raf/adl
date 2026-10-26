@@ -14,8 +14,7 @@ from django.utils import timezone as dj_timezone
 from django.utils.translation import gettext as _
 
 from adl.core.availability_checks import TIER_FETCH, TIER_LISTING
-from adl.core.models import NetworkConnection, StationLink
-from adl.core.models import DispatchChannel
+from adl.core.models import DispatchChannel, NetworkConnection, StationLink
 from adl.core.permissions import can_manage_channel, can_manage_connection
 from adl.core.source_checks import SourceCheckStatus
 from .. import gap_service

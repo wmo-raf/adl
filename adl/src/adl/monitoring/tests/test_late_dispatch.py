@@ -157,7 +157,33 @@ class LateDispatchTests(TestCase):
 
         self.assertTrue(report["busy"])
         self.assertEqual(self.sent, [])
-        self.assertFalse(StationLinkActivityLog.objects.exists())
+        row = StationLinkActivityLog.objects.get()
+        self.assertEqual(row.status, StationLinkActivityLog.ActivityStatus.SKIPPED)
+        self.assertEqual(row.trigger, TRIGGER_LATE_DISPATCH)
+
+    def test_a_channel_without_parameter_mappings_fails_instead_of_sending_nothing(self):
+        self.observe(6)
+        DispatchChannelParameterMapping.objects.filter(dispatch_channel=self.channel).delete()
+
+        result = run_late_dispatch.apply(args=(self.link.id, self.check.id, self.channel.id))
+
+        self.assertIsInstance(result.result, ValueError)
+        row = StationLinkActivityLog.objects.get()
+        self.assertFalse(row.success)
+
+    def test_a_timeout_is_recorded_as_a_failure_naming_the_timeout(self):
+        from celery.exceptions import SoftTimeLimitExceeded
+        self.observe(6)
+
+        with patch.object(DispatchChannel, "send_station_data", side_effect=SoftTimeLimitExceeded()):
+            report = run_late_dispatch.apply(
+                args=(self.link.id, self.check.id, self.channel.id)).result
+
+        self.assertTrue(report["timed_out"])
+        row = StationLinkActivityLog.objects.get()
+        self.assertFalse(row.success)
+        self.assertIn("timed out", row.message)
+        self.assertIsNone(cache.get(dispatch_station_lock_key(self.channel.id, self.link.id)))
 
     def test_only_a_recovered_check_of_the_link_can_be_sent(self):
         self.check.recovered = False

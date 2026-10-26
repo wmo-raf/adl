@@ -561,6 +561,8 @@ def run_late_dispatch_task(station_link_id, check_id, channel_id) -> dict:
     """
     import time
 
+    from celery.exceptions import SoftTimeLimitExceeded
+
     from adl.core.dispatchers import get_station_dispatch_records
     from adl.core.models import DispatchChannel, StationLink
     from adl.core.tasks import dispatch_station_lock_key, dispatch_timeout_budget_seconds
@@ -568,29 +570,41 @@ def run_late_dispatch_task(station_link_id, check_id, channel_id) -> dict:
     station_link = StationLink.objects.get(id=station_link_id)
     stored = AvailabilityCheck.objects.get(id=check_id, station_link=station_link)
     channel = DispatchChannel.objects.get(id=channel_id)
+    window = f"{stored.window_start:%Y-%m-%d %H:%M} to {stored.window_end:%Y-%m-%d %H:%M} UTC"
+    Status = StationLinkActivityLog.ActivityStatus
+
+    def new_row(**extra):
+        return StationLinkActivityLog.objects.create(
+            time=dj_timezone.now(), station_link=station_link, direction="push",
+            dispatch_channel=channel, trigger=TRIGGER_LATE_DISPATCH,
+            obs_start_time=stored.window_start, obs_end_time=stored.window_end, **extra)
 
     lock_key = dispatch_station_lock_key(channel.id, station_link.id)
     if not cache.add(lock_key, "locked", timeout=dispatch_timeout_budget_seconds(channel)):
+        new_row(success=True, status=Status.SKIPPED,
+                message=f"Late dispatch of {window} skipped: a dispatch of this station is running")
         return {"station_link": station_link_id, "busy": True, "sent": 0}
 
-    window = f"{stored.window_start:%Y-%m-%d %H:%M} to {stored.window_end:%Y-%m-%d %H:%M} UTC"
     started = time.monotonic()
-    log = StationLinkActivityLog.objects.create(
-        time=dj_timezone.now(), station_link=station_link, direction="push",
-        dispatch_channel=channel, trigger=TRIGGER_LATE_DISPATCH,
-        obs_start_time=stored.window_start, obs_end_time=stored.window_end,
-        message=f"Late dispatch of {window}")
+    log = new_row(message=f"Late dispatch of {window}")
     try:
+        if not channel.get_parameter_mappings():
+            raise ValueError("The channel has no parameter mappings, so nothing can be sent")
         records = get_station_dispatch_records(
             channel, station_link, window=(stored.window_start, stored.window_end))
         sent = 0
         if records:
             sent, _last = channel.send_station_data(station_link, records)
         log.success = True
-        log.status = StationLinkActivityLog.ActivityStatus.COMPLETED
+        log.status = Status.COMPLETED
         log.records_count = sent
         log.message = f"Late dispatch of {window}: sent {sent} records."
         return {"station_link": station_link_id, "busy": False, "sent": sent}
+    except SoftTimeLimitExceeded as exc:
+        mark_failed(log, exc)
+        log.message = (f"Late dispatch of {window} timed out after "
+                       f"{channel.dispatch_timeout_seconds} seconds")
+        return {"station_link": station_link_id, "busy": False, "sent": 0, "timed_out": True}
     except Exception as exc:
         log.message = f"Late dispatch of {window} failed: {mark_failed(log, exc)}"
         raise

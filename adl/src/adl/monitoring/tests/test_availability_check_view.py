@@ -490,6 +490,49 @@ class DayViewRenderingTests(CheckViewTestCase):
         self.assertNotContains(response, "Check source")
         self.assertNotContains(response, 'id="availability-panel"')
 
+    def recovered_check(self):
+        self.with_mapping()
+        return self.store(
+            recovered=True, recovery_fetched=5, recovery_saved=4,
+            ranges=[{"start": utc(2026, 3, 5, 6).isoformat(),
+                     "end": utc(2026, 3, 5, 8).isoformat(), "count": 4, "label": ""}])
+
+    def test_a_recovered_window_offers_each_eligible_channel(self):
+        from adl.core.models import DispatchChannel, DispatchChannelStationLink
+        stored = self.recovered_check()
+        offered = DispatchChannel.objects.create(name="Offered channel")
+        disabled = DispatchChannel.objects.create(name="Disabled channel")
+        for channel in (offered, disabled):
+            channel.network_connections.add(self.connection)
+        DispatchChannelStationLink.objects.create(
+            dispatch_channel=disabled, station_link=self.link, disabled=True)
+
+        response = self.day()
+
+        self.assertContains(response, "Send this window to:")
+        self.assertContains(
+            response, f'data-check="{stored.id}" data-channel="{offered.id}">Offered channel</button>')
+        self.assertNotContains(response, "Disabled channel")
+
+    def test_a_channel_the_user_cannot_manage_is_not_offered(self):
+        from adl.core.models import DispatchChannel
+        self.recovered_check()
+        channel = DispatchChannel.objects.create(name="Offered channel")
+        channel.network_connections.add(self.connection)
+        self.plain_user("change_networkconnection")
+
+        self.assertNotContains(self.day(), "Offered channel")
+
+    def test_an_unrecovered_window_offers_no_channel(self):
+        from adl.core.models import DispatchChannel
+        self.with_mapping()
+        self.store(ranges=[{"start": utc(2026, 3, 5, 6).isoformat(),
+                            "end": utc(2026, 3, 5, 8).isoformat(), "count": 4, "label": ""}])
+        channel = DispatchChannel.objects.create(name="Offered channel")
+        channel.network_connections.add(self.connection)
+
+        self.assertNotContains(self.day(), "Send this window")
+
     def test_per_parameter_breakdown_is_a_table_without_repeated_units(self):
         parameter = DataParameterFactory(name="Air temperature")
         with patch.object(StationLink, "get_variable_mappings",
