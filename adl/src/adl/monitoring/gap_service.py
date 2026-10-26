@@ -1,5 +1,6 @@
 """
-The gap service: ask the source whether it has data for a gap window.
+The gap service: ask the source whether it has data for a gap window, and
+recover it.
 
 ``check`` validates the window an operator selected in the day view, then
 answers it in one of two tiers (see :mod:`adl.core.availability_checks`):
@@ -15,6 +16,11 @@ Only one check can be in flight per station link; the claim is taken in the
 cache before anything is dialled or enqueued, because the point is to never
 flood a partner host with sessions.
 
+``recover`` ingests a gap window through the normal pipeline
+(``process_station`` with an explicit window and no lock bypass) as a Celery
+task. It shares the in-flight claim with checks and, when a scheduled pull holds
+the station's ingestion lock, answers "busy" without fetching.
+
 Core, not the plugin, intersects the covered ranges with the window's missing
 hours (:func:`covered_missing_hours`).
 """
@@ -22,7 +28,7 @@ hours (:func:`covered_missing_hours`).
 import logging
 from collections import Counter
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone as py_tz
+from datetime import date, datetime, timedelta, timezone as py_tz
 from typing import List, Optional, Tuple
 from zoneinfo import ZoneInfo
 
@@ -47,7 +53,7 @@ from adl.core.probes import (
 from adl.core.redaction import redact_secrets
 from adl.core.source_checks import SourceCheckStatus
 from .availability import HOUR, MISSING, _mapped_parameters, missing_hours, whole_day_window
-from .models import AvailabilityCheck
+from .models import TRIGGER_GAP_RECOVERY, AvailabilityCheck
 
 logger = logging.getLogger(__name__)
 
@@ -85,6 +91,63 @@ def inflight_key(station_link_id):
     """The cache key of the per-station-link in-flight claim, shared by every
     long-running gap action so that only one runs at a time."""
     return f"availability-inflight-{station_link_id}"
+
+
+CLAIM_CHECK = "check"
+CLAIM_RECOVER = "recover"
+
+
+@dataclass(frozen=True)
+class InFlight:
+    """What holds a station link's in-flight claim: a ``kind`` and, when the
+    cached value is readable, the time it was taken and the local ``day`` of the
+    window being asked about."""
+
+    kind: str
+    since: Optional[datetime]
+    day: Optional[date] = None
+
+
+def claim(station_link, kind, window_start) -> bool:
+    """Take the station link's in-flight claim for ``kind``, for the local day of
+    ``window_start``; ``False`` when something else holds it. The value carries
+    the start time and the day for display."""
+    day = _local(station_link, window_start).date().isoformat()
+    return cache.add(
+        inflight_key(station_link.id), f"{kind}|{dj_timezone.now().isoformat()}|{day}",
+        timeout=INFLIGHT_SECONDS)
+
+
+def _parse_claim(value) -> Optional[InFlight]:
+    """A claim is a cache value with a TTL, so a caller must never depend on its
+    content: anything unreadable degrades to a check with no time or day."""
+    if value is None:
+        return None
+    kind, _, rest = str(value).partition("|")
+    since, _, day = rest.partition("|")
+    try:
+        started = datetime.fromisoformat(since)
+    except ValueError:
+        started = None
+    try:
+        local_day = date.fromisoformat(day)
+    except ValueError:
+        local_day = None
+    return InFlight(kind if kind in (CLAIM_CHECK, CLAIM_RECOVER) else CLAIM_CHECK,
+                    started, local_day)
+
+
+def in_flight(station_link_id) -> Optional[InFlight]:
+    """The check or recovery running for the station link, or ``None``."""
+    return _parse_claim(cache.get(inflight_key(station_link_id)))
+
+
+def in_flight_many(station_link_ids) -> dict:
+    """``{station link id: InFlight}`` for those with a run, in one cache call."""
+    keys = {inflight_key(link_id): link_id for link_id in station_link_ids}
+    return {
+        keys[key]: _parse_claim(value) for key, value in cache.get_many(list(keys)).items()
+    }
 
 
 @dataclass(frozen=True)
@@ -322,7 +385,7 @@ def check(station_link, start, end, parameter_id=None, force_fetch=False, now=No
     if not station_link.network_connection.has_external_source:
         raise CheckUnavailable(_("This connection has no external source to check."))
 
-    if not cache.add(inflight_key(station_link.id), "check", timeout=INFLIGHT_SECONDS):
+    if not claim(station_link, CLAIM_CHECK, window.start):
         raise CheckInFlight(
             _("A check or recovery is already running for this station link."))
 
@@ -366,12 +429,93 @@ def run_fetch_task(station_link_id, start_iso, end_iso, parameter_id) -> int:
     from adl.core.models import StationLink
 
     try:
-        station_link = StationLink.objects.select_related("network_connection").get(
-            id=station_link_id)
+        # no select_related on the polymorphic connection: it would load the base
+        # class, hiding the plugin subclass' ``variable_mappings``
+        station_link = StationLink.objects.get(id=station_link_id)
         window = GapWindow(datetime.fromisoformat(start_iso), datetime.fromisoformat(end_iso),
                            parameter_id)
         result = run_fetch_check(station_link, window)
         return store_result(station_link, window, result).id
+    finally:
+        release(station_link_id)
+
+
+def check_has_data(check: AvailabilityCheck) -> bool:
+    """Whether the stored check answered and the source has data for at least
+    one hour of its window."""
+    if check.status != SourceCheckStatus.OK:
+        return False
+    hours = [check.window_start + HOUR * offset
+             for offset in range(int((check.window_end - check.window_start) / HOUR))]
+    return bool(covered_missing_hours(check_ranges(check), hours))
+
+
+def recover(station_link, check_id, now=None) -> str:
+    """Enqueue the recovery of a stored check's whole window; returns the task id.
+
+    The check must belong to the station link, have answered with data, and not
+    be recovered already; its window must still hold a missing hour. Raises
+    :class:`InvalidWindow` otherwise, :class:`CheckUnavailable` or
+    :class:`CheckInFlight` as :func:`check` does; the claim is the same one, so a
+    check and a recovery of a station link never run together.
+    """
+    from .tasks import run_gap_recovery
+
+    stored = AvailabilityCheck.objects.filter(id=check_id, station_link=station_link).first()
+    if stored is None:
+        raise InvalidWindow(_("Unknown check."))
+    if not check_has_data(stored):
+        raise InvalidWindow(_("Only a check that found data can be recovered."))
+    if stored.recovered:
+        raise InvalidWindow(_("This check has already been recovered."))
+    if not missing_hours(station_link, stored.window_start, stored.window_end, None, now=now):
+        raise InvalidWindow(_("Nothing is missing in this window any more."))
+    if not station_link.network_connection.has_external_source:
+        raise CheckUnavailable(_("This connection has no external source to recover from."))
+
+    if not claim(station_link, CLAIM_RECOVER, stored.window_start):
+        raise CheckInFlight(
+            _("A check or recovery is already running for this station link."))
+    try:
+        task = run_gap_recovery.delay(station_link.id, stored.id)
+    except BaseException:
+        release(station_link.id)
+        raise
+    return task.id
+
+
+def run_recovery_task(station_link_id, check_id) -> dict:
+    """The body of the recovery Celery task. Returns a JSON-able report:
+    ``busy`` when a scheduled pull held the ingestion lock (nothing was fetched),
+    otherwise the ``fetched`` and ``saved`` counts. Releases the in-flight claim
+    however it ends.
+
+    The counts are stored on the check; it is marked ``recovered`` when
+    something was saved.
+    """
+    from adl.core.models import StationLink
+
+    try:
+        # no select_related on the polymorphic connection: it would load the base
+        # class, hiding the plugin subclass' ``variable_mappings``
+        station_link = StationLink.objects.get(id=station_link_id)
+        stored = AvailabilityCheck.objects.get(id=check_id, station_link=station_link)
+        saved = station_link.plugin.process_station(
+            station_link,
+            initial_start_date=_local(station_link, stored.window_start),
+            initial_end_date=_local(station_link, stored.window_end),
+            bypass_lock=False,
+            trigger=TRIGGER_GAP_RECOVERY,
+        )
+        report = station_link.adl_run_report
+        if report["skipped"]:
+            return {"station_link": station_link_id, "busy": True, "fetched": 0, "saved": 0}
+        stored.recovery_fetched = report["fetched"]
+        stored.recovery_saved = saved
+        stored.recovered = bool(saved)
+        stored.save(update_fields=["recovery_fetched", "recovery_saved", "recovered"])
+        return {"station_link": station_link_id, "busy": False,
+                "fetched": report["fetched"], "saved": saved}
     finally:
         release(station_link_id)
 
@@ -458,6 +602,7 @@ def day_check_overlay(station_link, day_detail) -> DayCheckOverlay:
                 if parameter_id in parameters:
                     count = len({h for h in hours if check.window_start <= h < check.window_end})
                     parameter_counts.append((parameters[parameter_id], count))
+            parameter_counts.sort(key=lambda item: (-item[1], item[0].name))
         summaries.append(CheckSummary(
             check=check,
             missing_total=len(window_missing),

@@ -20,6 +20,8 @@ from adl.core.models import ObservationRecord, StationLink
 from adl.core.registries import plugin_registry
 from adl.core.source_checks import SourceCheckStatus
 from adl.core.tests.factories import (
+    CelsiusUnitFactory,
+    KelvinUnitFactory,
     DataParameterFactory,
     NetworkConnectionFactory,
     ObservationRecordFactory,
@@ -37,10 +39,12 @@ from adl.monitoring.gap_service import (
     check_whole_day,
     covered_missing_hours,
     day_check_overlay,
+    recover,
     validate_window,
 )
-from adl.monitoring.models import AvailabilityCheck
-from adl.monitoring.tasks import run_availability_check
+from adl.monitoring.models import TRIGGER_GAP_RECOVERY, AvailabilityCheck, StationLinkActivityLog
+from adl.monitoring.tasks import run_availability_check, run_gap_recovery
+from adl.core.tasks import ingest_station_lock_key
 
 UTC = py_tz.utc
 NOW = datetime(2026, 3, 10, 0, 0, tzinfo=UTC)
@@ -623,3 +627,192 @@ class OverlayTests(GapServiceTestCase):
 
         self.assertEqual(overlay.summaries, [])
         self.assertEqual(overlay.cells, {})
+
+
+class RecoveryTests(GapServiceTestCase):
+    def setUp(self):
+        super().setUp()
+        # records only validate with units on both sides
+        self.parameter.unit = CelsiusUnitFactory()
+        self.parameter.save()
+        self.mapping.source_parameter_unit = KelvinUnitFactory()
+
+        # the aggregate refresh cannot run inside a TestCase transaction; it has
+        # its own tests, and the old-window test runs it for real
+        patcher = patch("adl.core.registries.aggregates.refresh_hourly_aggregate")
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+        self.reports = {}
+
+        def delay(*args):
+            eager = run_gap_recovery.apply(args=args)
+            self.reports[eager.id] = eager.result
+            return eager
+
+        patcher = patch.object(run_gap_recovery, "delay", side_effect=delay)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def records(self, *times):
+        self.plugin.records = [{"observation_time": time, "te": 293.15} for time in times]
+
+    def found_data(self, **kwargs):
+        """A stored, answered check whose ranges cover the first hour of its window."""
+        start, end = self.window()
+        defaults = dict(
+            station_link=self.link, window_start=start, window_end=end, created_at=NOW,
+            tier=TIER_FETCH, status=SourceCheckStatus.OK,
+            ranges=[{"start": start.isoformat(), "end": (start + timedelta(hours=1)).isoformat(),
+                     "count": 1, "label": ""}])
+        return AvailabilityCheck.objects.create(**{**defaults, **kwargs})
+
+    def run_task(self, stored):
+        return run_gap_recovery.apply(args=(self.link.id, stored.id)).result
+
+    def test_saves_the_checks_window_and_reports_fetched_and_saved(self):
+        self.records(utc(2026, 3, 5, 6, 10), utc(2026, 3, 5, 7, 10), utc(2026, 3, 5, 8, 10))
+        stored = self.found_data()
+
+        report = self.run_task(stored)
+
+        self.assertEqual((report["busy"], report["fetched"], report["saved"]), (False, 3, 3))
+        self.assertEqual(ObservationRecord.objects.filter(station=self.link.station).count(), 3)
+
+    def test_stores_the_counts_on_the_check_and_marks_it_recovered(self):
+        self.records(utc(2026, 3, 5, 6, 10), utc(2026, 3, 5, 7, 10))
+        stored = self.found_data()
+
+        recover(self.link, stored.id, now=NOW)
+
+        stored.refresh_from_db()
+        self.assertEqual((stored.recovered, stored.recovery_fetched, stored.recovery_saved),
+                         (True, 2, 2))
+        self.assertIsNone(cache.get(gap_service.inflight_key(self.link.id)))
+
+    def test_nothing_saved_stores_the_counts_but_leaves_the_check_unrecovered(self):
+        self.records()
+        stored = self.found_data()
+
+        recover(self.link, stored.id, now=NOW)
+
+        stored.refresh_from_db()
+        self.assertEqual((stored.recovered, stored.recovery_fetched, stored.recovery_saved),
+                         (False, 0, 0))
+
+    def test_a_held_ingestion_lock_means_busy_and_nothing_is_fetched_or_stored(self):
+        self.records(utc(2026, 3, 5, 6, 10))
+        stored = self.found_data()
+        cache.set(ingest_station_lock_key(self.link.id), "locked", timeout=60)
+
+        with patch.object(type(self.plugin), "get_station_data") as fetch:
+            report = self.run_task(stored)
+
+        fetch.assert_not_called()
+        self.assertTrue(report["busy"])
+        self.assertEqual(ObservationRecord.objects.count(), 0)
+        stored.refresh_from_db()
+        self.assertIsNone(stored.recovery_saved)
+        # the scheduled pull's lock is not ours to release
+        self.assertIsNotNone(cache.get(ingest_station_lock_key(self.link.id)))
+
+    def test_writes_an_activity_row_identifiable_as_a_gap_recovery(self):
+        self.records(utc(2026, 3, 5, 6, 10))
+
+        recover(self.link, self.found_data().id, now=NOW)
+
+        row = StationLinkActivityLog.objects.get(station_link=self.link)
+        self.assertEqual(row.trigger, TRIGGER_GAP_RECOVERY)
+        self.assertEqual(row.records_count, 1)
+
+    def test_shares_the_one_in_flight_claim_with_checks(self):
+        stored = self.found_data()
+        cache.set(gap_service.inflight_key(self.link.id), "check", timeout=60)
+
+        with self.assertRaises(CheckInFlight):
+            recover(self.link, stored.id, now=NOW)
+
+    def test_the_claim_is_released_when_enqueueing_fails(self):
+        stored = self.found_data()
+
+        with patch.object(run_gap_recovery, "delay", side_effect=RuntimeError("broker down")):
+            with self.assertRaises(RuntimeError):
+                recover(self.link, stored.id, now=NOW)
+
+        self.assertIsNone(cache.get(gap_service.inflight_key(self.link.id)))
+
+    def test_only_a_check_that_found_data_can_be_recovered(self):
+        for label, stored in (
+            ("nothing", self.found_data(ranges=[])),
+            ("failed", self.found_data(status=SourceCheckStatus.FAILED)),
+            ("recovered", self.found_data(recovered=True)),
+        ):
+            with self.subTest(label), self.assertRaises(InvalidWindow):
+                recover(self.link, stored.id, now=NOW)
+
+    def test_another_station_links_check_is_unknown(self):
+        other = StationLinkFactory(network_connection=self.link.network_connection)
+        stored = self.found_data(station_link=other)
+
+        with self.assertRaises(InvalidWindow):
+            recover(self.link, stored.id, now=NOW)
+
+    def test_a_window_whose_hours_have_filled_is_refused(self):
+        stored = self.found_data()
+        for hour in (6, 7, 8):
+            ObservationRecordFactory(
+                station=self.link.station, connection=self.link.network_connection,
+                parameter=self.parameter, time=utc(2026, 3, 5, hour, 30))
+
+        with self.assertRaises(InvalidWindow):
+            recover(self.link, stored.id, now=NOW)
+
+
+class InFlightClaimTests(GapServiceTestCase):
+    def test_a_check_and_a_recovery_claim_with_their_kind_start_and_local_day(self):
+        self.assertIsNone(gap_service.in_flight(self.link.id))
+
+        self.assertTrue(gap_service.claim(self.link, gap_service.CLAIM_RECOVER, utc(2026, 3, 5, 6)))
+
+        held = gap_service.in_flight(self.link.id)
+        self.assertEqual(held.kind, gap_service.CLAIM_RECOVER)
+        self.assertIsNotNone(held.since)
+        self.assertEqual(held.day, datetime(2026, 3, 5).date())
+        self.assertFalse(gap_service.claim(self.link, gap_service.CLAIM_CHECK, utc(2026, 3, 5, 6)))
+
+    def test_the_day_is_the_station_links_local_day(self):
+        link = StationLinkFactory(
+            network_connection=NetworkConnectionFactory(stations_timezone="Africa/Nairobi"))
+
+        gap_service.claim(link, gap_service.CLAIM_CHECK, utc(2026, 3, 5, 22))  # 01:00 on the 6th
+
+        self.assertEqual(gap_service.in_flight(link.id).day, datetime(2026, 3, 6).date())
+
+    def test_a_check_claims_the_day_of_its_window(self):
+        self.run_tasks_eagerly()
+        with patch.object(gap_service, "release"):  # keep the claim the check took
+            check(self.link, *self.window(day=5), now=NOW)
+
+        self.assertEqual(gap_service.in_flight(self.link.id).day, datetime(2026, 3, 5).date())
+
+    def test_release_clears_it(self):
+        gap_service.claim(self.link, gap_service.CLAIM_CHECK, utc(2026, 3, 5, 6))
+
+        gap_service.release(self.link.id)
+
+        self.assertIsNone(gap_service.in_flight(self.link.id))
+
+    def test_old_and_unreadable_claims_degrade_to_a_check_with_no_day(self):
+        for value in ("check", "recover|nonsense", "weird|2026-03-05T10:00:00+00:00|x"):
+            cache.set(gap_service.inflight_key(self.link.id), value, timeout=60)
+            held = gap_service.in_flight(self.link.id)
+            self.assertIsNone(held.day)
+            self.assertIn(held.kind, (gap_service.CLAIM_CHECK, gap_service.CLAIM_RECOVER))
+
+    def test_many_links_are_read_in_one_call(self):
+        other = self.make_link()
+        gap_service.claim(other, gap_service.CLAIM_CHECK, utc(2026, 3, 5, 6))
+
+        held = gap_service.in_flight_many([self.link.id, other.id])
+
+        self.assertEqual(set(held), {other.id})

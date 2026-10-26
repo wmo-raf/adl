@@ -8,7 +8,14 @@ from .views import (
     station_link_monitoring
 )
 
-from .views.availability import availability_check, availability_check_status, data_availability
+from .views.availability import (
+    availability_check,
+    availability_check_status,
+    availability_recover,
+    availability_recover_status,
+    availability_running,
+    data_availability,
+)
 from .views.activity import NetworkConnectionActivityView, DispatchChannelMonitoringView
 from .views.health import (
     connection_health,
@@ -22,6 +29,10 @@ urlpatterns = [
     path('availability/check/', availability_check, name='availability_check'),
     path('availability/check/<str:task_id>/', availability_check_status,
          name='availability_check_status'),
+    path('availability/running/', availability_running, name='availability_running'),
+    path('availability/recover/', availability_recover, name='availability_recover'),
+    path('availability/recover/<str:task_id>/', availability_recover_status,
+         name='availability_recover_status'),
     path('connection/<int:connection_id>/health/', connection_health,
          name='connection_health'),
     path('connection/<int:connection_id>/health/probe-source/', connection_probe_source,

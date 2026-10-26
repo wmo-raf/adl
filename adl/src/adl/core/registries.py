@@ -928,7 +928,7 @@ class Plugin(Instance):
     
     # ---------- Orchestration ----------
     def process_station(self, station_link, initial_start_date=None, initial_end_date=None,
-                        bypass_lock=False) -> int:
+                        bypass_lock=False, trigger="") -> int:
         """
         Run the full ingestion pipeline for a single station link.
 
@@ -965,6 +965,10 @@ class Plugin(Instance):
         :param bypass_lock: Skip lock acquisition entirely. Only for deliberate
             backfills, where running alongside a scheduled pull is intended.
         :type bypass_lock: bool, optional
+        :param trigger: Recorded on the activity log row, so a run started for a
+            particular purpose (e.g. gap recovery) is identifiable. Empty for a
+            routine pull.
+        :type trigger: str, optional
         :return: The number of ``ObservationRecord`` rows upserted, or ``0`` if
             no data was available, the station was locked, or an error occurred.
         :rtype: int
@@ -977,15 +981,22 @@ class Plugin(Instance):
         )
         log = self.get_logger()
 
+        # Duck-typed handover, like ``adl_sources_count``: a caller that needs
+        # more than the saved count (gap recovery) reads it off the station
+        # link. Re-initialised every run.
+        report = station_link.adl_run_report = {"skipped": False, "fetched": 0}
+
         lock_key = ingest_station_lock_key(station_link.id)
         if not bypass_lock:
             lock_ttl = ingest_batch_budget_seconds(station_link.network_connection)
             if not cache.add(lock_key, "locked", timeout=lock_ttl):
                 log.warning("Station link %s is still processing. Skipping...", station_link)
+                report["skipped"] = True
                 StationLinkActivityLog.objects.create(
                     time=dj_timezone.now(),
                     station_link=station_link,
                     direction='pull',
+                    trigger=trigger,
                     success=True,
                     status=StationLinkActivityLog.ActivityStatus.SKIPPED,
                     message="Skipped — previous ingestion still running",
@@ -997,6 +1008,7 @@ class Plugin(Instance):
             time=dj_timezone.now(),
             station_link=station_link,
             direction='pull',
+            trigger=trigger,
         )
 
         # Accumulated chunk by chunk, so the numbers survive an exception out
@@ -1031,6 +1043,14 @@ class Plugin(Instance):
                 # the normal terminal path below, so the activity log always
                 # reaches COMPLETED instead of resting at STARTED.
                 station_records = []
+
+            def counted(records):
+                for record in records:
+                    if record is not FLUSH:
+                        report["fetched"] += 1
+                    yield record
+
+            station_records = counted(station_records)
 
             # Chunked save - handles generators efficiently. Consumed chunk
             # by chunk (rather than through save_records) so that if the

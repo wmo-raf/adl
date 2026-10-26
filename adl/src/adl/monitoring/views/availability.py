@@ -1,6 +1,6 @@
 import calendar
 import re
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, time, timedelta
 from urllib.parse import urlencode
 from zoneinfo import ZoneInfo
 
@@ -87,11 +87,14 @@ def _grid_url(connection_id, year, month, sort):
     return f"{reverse('data_availability')}?{urlencode(params)}"
 
 
-def _grid_rows(summaries):
-    """Template rows of a connection grid: label link plus a day link per cell."""
+def _grid_rows(summaries, running):
+    """Template rows of a connection grid: label link plus a day link per cell,
+    and the check or recovery running for the link, if any (``running`` maps
+    station link id to it)."""
     return [
         {
             "summary": summary,
+            "running": running.get(summary.station_link.id),
             "month_url": _availability_url(
                 summary.station_link.id, summary.days[0].date.year, summary.days[0].date.month
             ),
@@ -136,6 +139,14 @@ def _matrix_rows(day_detail, overlay):
     return [build(day_detail.any_row, True)] + [build(row, False) for row in day_detail.rows]
 
 
+def _span_label(start, end):
+    """``06:00–12:00`` for a window in local time; a window that ends at midnight
+    of a later day reads ``24:00``, so a whole day is ``00:00–24:00``."""
+    end_text = "24:00" if end.date() > start.date() and end.time() == time(0, 0) \
+        else end.strftime("%H:%M")
+    return f"{start.strftime('%H:%M')}\u2013{end_text}"
+
+
 def _check_items(overlay, tz, can_check=False):
     """The stored checks of the day, with their window in the station's local time."""
     items = [
@@ -144,6 +155,8 @@ def _check_items(overlay, tz, can_check=False):
             "check": summary.check,
             "local_start": summary.check.window_start.astimezone(tz),
             "local_end": summary.check.window_end.astimezone(tz),
+            "span": _span_label(summary.check.window_start.astimezone(tz),
+                                summary.check.window_end.astimezone(tz)),
             "by_listing": summary.check.tier == TIER_LISTING,
             "by_fetch": summary.check.tier == TIER_FETCH,
             "ok": summary.check.status == SourceCheckStatus.OK,
@@ -176,6 +189,7 @@ def _whole_day(station_link, day, overlay):
     return {
         "local_start": start.astimezone(tz),
         "local_end": end.astimezone(tz),
+        "span": _span_label(start.astimezone(tz), end.astimezone(tz)),
         "hours": int((end - start) / timedelta(hours=1)),
         "checked": any(
             summary.check.status == SourceCheckStatus.OK
@@ -184,6 +198,42 @@ def _whole_day(station_link, day, overlay):
             for summary in overlay.summaries
         ),
     }
+
+
+# The states of the day view's status panel
+PANEL_CHECK = "check"
+PANEL_RECOVER = "recover"
+PANEL_RECOVERED = "recovered"
+PANEL_NOTHING = "nothing"
+PANEL_FAILED = "failed"
+PANEL_RUNNING = "running"
+
+
+def _day_panel(whole_day, check_items, running=None):
+    """What the day view's status panel offers, from the day's newest stored check:
+    check the source, recover what a check found, or the outcome of the last step.
+    While a check or recovery is in flight for the station link (``running``) it
+    shows that instead, whoever started it. ``None`` when no mapped parameter is
+    missing."""
+    if whole_day is None:
+        return None
+    if running is not None:
+        return {"state": PANEL_RUNNING, "running": running, "latest": None,
+                "whole_day": whole_day}
+    latest = check_items[0] if check_items else None
+    if latest is None:
+        state = PANEL_CHECK
+    elif not latest["ok"]:
+        state = PANEL_FAILED
+    elif latest["summary"].verdict != gap_service.HAS_DATA:
+        state = PANEL_NOTHING
+    elif latest["check"].recovery_saved is not None:
+        # a recovery ran (even one that saved nothing): report it and ask the
+        # source afresh rather than offering the same recovery again
+        state = PANEL_RECOVERED
+    else:
+        state = PANEL_RECOVER
+    return {"state": state, "latest": latest, "whole_day": whole_day}
 
 
 def data_availability(request):
@@ -252,7 +302,12 @@ def data_availability(request):
             "next_url": _availability_url(station_link.id, next_year, next_month),
             "month_url": _availability_url(station_link.id, year, month),
             "monitoring_url": reverse("station_link_monitoring", args=[station_link.id]),
+            "running_url": reverse("availability_running"),
         })
+        running = gap_service.in_flight(station_link.id)
+        if running is not None and running.day and (running.day.year, running.day.month) == (year, month):
+            context["running"] = running
+            context["watch_running"] = not day
 
         if day:
             day_detail = day_availability(station_link, day)
@@ -270,6 +325,11 @@ def data_availability(request):
                 context["whole_day"] = _whole_day(station_link, day, overlay)
             context["check_items"] = _check_items(
                 overlay, ZoneInfo(str(station_link.timezone)), can_check)
+            if can_check:
+                context["panel"] = _day_panel(
+                    context["whole_day"], context["check_items"],
+                    running=gap_service.in_flight(station_link.id))
+
 
     elif connection_id:
         connection = connections.get(id=connection_id)
@@ -277,12 +337,13 @@ def data_availability(request):
         year, month = _parse_month(request.GET.get("month")) or (today.year, today.month)
         sort = SORT_NAME if request.GET.get("sort") == SORT_NAME else SORT_MISSING
         grid = connection_availability(connection, station_links, year, month, sort=sort)
+        running = gap_service.in_flight_many([link.id for link in station_links])
         prev_year, prev_month = _shift_month(year, month, -1)
         next_year, next_month = _shift_month(year, month, 1)
         context.update({
             "grid": grid,
-            "grid_rows": _grid_rows(grid.rows),
-            "grid_disabled_rows": _grid_rows(grid.disabled_rows),
+            "grid_rows": _grid_rows(grid.rows, running),
+            "grid_disabled_rows": _grid_rows(grid.disabled_rows, running),
             "grid_days": list(range(1, grid.days_in_month + 1)),
             "grid_sort": sort,
             "month_start": date(year, month, 1),
@@ -322,44 +383,25 @@ def _managed_station_link(request, link_id):
 
 @require_POST
 def availability_check(request):
-    """Ask the source whether it has data for a window of a station link.
+    """Ask the source whether it has data for a whole local day of a station link.
 
-    ``station_link`` and either ``day`` (``YYYY-MM-DD``, the station link's local
-    day, checked whole and trimmed to its missing mapped hours) or ``start`` and
-    ``end`` (ISO-8601, any offset), the latter optionally
-    ``parameter`` (the selected row) and ``fetch=1`` (skip the cheap check and
-    fetch the data). Answers ``{"state": "SUCCESS", "check_id": ...}`` when the
-    listing tier answered at once, or ``{"state": "PENDING", "task_id": ...}``
-    when a background task will; poll :func:`availability_check_status`.
+    ``station_link`` and ``day`` (``YYYY-MM-DD``, the station link's local day,
+    trimmed to its missing mapped hours), optionally ``fetch=1`` (skip the cheap
+    check and fetch the data). Answers ``{"state": "SUCCESS", "check_id": ...}``
+    when the listing tier answered at once, or ``{"state": "PENDING", "task_id":
+    ...}`` when a background task will; poll :func:`availability_check_status`.
     """
     station_link = _managed_station_link(request, _positive_int(request.POST.get("station_link")))
     if station_link is None:
         return _json_error(_("Unknown station link."), 404)
 
-    force_fetch = request.POST.get("fetch") == "1"
-    whole_day = request.POST.get("day")
-    if whole_day:
-        day = _parse_day(whole_day)
-        if day is None:
-            return _json_error(_("Unknown day."), 400)
-    else:
-        start = _parse_instant(request.POST.get("start"))
-        end = _parse_instant(request.POST.get("end"))
-        if start is None or end is None:
-            return _json_error(_("The window needs aware start and end times."), 400)
-
-        raw_parameter = request.POST.get("parameter")
-        parameter_id = _positive_int(raw_parameter)
-        if raw_parameter and parameter_id is None:
-            return _json_error(_("Unknown parameter."), 400)
+    day = _parse_day(request.POST.get("day"))
+    if day is None:
+        return _json_error(_("Unknown day."), 400)
 
     try:
-        if whole_day:
-            outcome = gap_service.check_whole_day(station_link, day, force_fetch=force_fetch)
-        else:
-            outcome = gap_service.check(
-                station_link, start, end, parameter_id=parameter_id, force_fetch=force_fetch,
-            )
+        outcome = gap_service.check_whole_day(
+            station_link, day, force_fetch=request.POST.get("fetch") == "1")
     except gap_service.CheckInFlight as exc:
         return _json_error(exc, 409)
     except gap_service.CheckCoolingDown as exc:
@@ -396,3 +438,74 @@ def availability_check_status(request, task_id):
         return JsonResponse({"state": "FAILURE", "message": str(
             _("The availability check could not run to completion. See the application logs."))})
     return JsonResponse({"state": "PENDING"})
+
+
+@require_POST
+def availability_recover(request):
+    """Ingest the window of a stored check that found data.
+
+    ``station_link`` and ``check`` (the stored check's id). Answers
+    ``{"state": "PENDING", "task_id": ...}``; poll
+    :func:`availability_recover_status`. Needs ``can_manage_connection``.
+    """
+    station_link = _managed_station_link(request, _positive_int(request.POST.get("station_link")))
+    if station_link is None:
+        return _json_error(_("Unknown station link."), 404)
+
+    check_id = _positive_int(request.POST.get("check"))
+    if check_id is None:
+        return _json_error(_("Unknown check."), 400)
+
+    try:
+        task_id = gap_service.recover(station_link, check_id)
+    except gap_service.CheckInFlight as exc:
+        return _json_error(exc, 409)
+    except gap_service.GapServiceError as exc:
+        return _json_error(exc, 400)
+    return JsonResponse({"state": "PENDING", "task_id": task_id})
+
+
+@require_GET
+def availability_recover_status(request, task_id):
+    """The state of a background recovery, for the page to poll: ``SUCCESS`` with
+    the ``fetched`` and ``saved`` counts, ``BUSY`` when a scheduled pull held the
+    station's lock, ``FAILURE`` or ``PENDING``. Scoped to a manageable station
+    link like :func:`availability_check_status`."""
+    station_link = _managed_station_link(request, _positive_int(request.GET.get("station_link")))
+    if station_link is None:
+        return _json_error(_("Unknown station link."), 404)
+
+    result = AsyncResult(task_id)
+    if result.state == "SUCCESS":
+        report = result.result
+        if not isinstance(report, dict) or report.get("station_link") != station_link.id:
+            return _json_error(_("Unknown task."), 404)
+        if report["busy"]:
+            return JsonResponse({"state": "BUSY", "message": str(
+                _("The station is busy with a scheduled pull. Try again in a moment."))})
+        return JsonResponse({"state": "SUCCESS", "fetched": report["fetched"],
+                             "saved": report["saved"]})
+    if result.state in ("FAILURE", "REVOKED"):
+        return JsonResponse({"state": "FAILURE", "message": str(
+            _("The recovery could not run to completion. See the application logs."))})
+    return JsonResponse({"state": "PENDING"})
+
+
+@require_GET
+def availability_running(request):
+    """Whether a check or recovery is running for a station link, for a page that
+    shows it to poll: ``{"running": bool, "kind": ..., "since": ..., "day": ...}``.
+    Read-only status, so open to anyone who can see the availability pages; the
+    actions it reports on stay gated on ``can_manage_connection``."""
+    link_id = _positive_int(request.GET.get("station_link"))
+    if not link_id or not StationLink.objects.filter(id=link_id).exists():
+        return _json_error(_("Unknown station link."), 404)
+
+    running = gap_service.in_flight(link_id)
+    if running is None:
+        return JsonResponse({"running": False})
+    return JsonResponse({
+        "running": True, "kind": running.kind,
+        "since": running.since.isoformat() if running.since else None,
+        "day": running.day.isoformat() if running.day else None,
+    })

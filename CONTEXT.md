@@ -85,3 +85,29 @@ meanings.
   and the cheap check is held to one dial per station link per minute. The answer is stored, shown on the hours it
   covers, and says which tier answered. One check or recovery runs per station
   link at a time.
+
+**gap recovery**
+: Ingesting the window of a stored **availability check** that found data
+  through the normal pipeline (validation, unit conversion, QC, upsert), by
+  running the plugin's `process_station` with the check's whole window as
+  explicit start and end, as a background task. It is offered only after such a
+  check (never directly) and needs the right to manage the connection. It never
+  bypasses the ingestion lock: if a scheduled pull holds it, recovery answers
+  "busy" and fetches nothing. It shares the one-run-per-station-link claim with
+  checks, writes a pull activity row marked as a gap recovery, and stores on the
+  check how many source records were fetched and how many observations (a
+  record's value for one parameter) were saved. The check is marked
+  recovered when something was saved; if gaps remain, the day view offers a new
+  check rather than the same recovery again.
+
+**source checks panel**
+: The one panel at the top of the day view where a day is checked and
+  recovered. Its action bar offers the whole-day check (or shows the run in
+  flight), and below it a table lists the day's stored checks, newest first:
+  window, method, result, hours covered, and a Recovery column stating whether
+  the check was recovered (with the fetched and saved counts) or not. Only the
+  newest check's row carries an action: Recover when it found data, or Try by
+  fetching data after a failed listing. While a check or recovery is running
+  for the station link, whoever started it, the panel shows that, read from the
+  in-flight claim, so it survives a refresh; the month calendar and connection
+  grid mark the day being asked about with a spinner, for every viewer.
