@@ -284,30 +284,35 @@ class DayViewRenderingTests(CheckViewTestCase):
         self.assertNotContains(response, "Check source")
         self.assertContains(response, "nothing to check")
 
-    def test_a_check_that_found_data_offers_recovery_of_its_window(self):
+    def test_a_check_that_found_data_offers_recovery_in_its_row(self):
         self.with_mapping()
         stored = self.store(window_start=utc(2026, 3, 5, 0), window_end=utc(2026, 3, 6, 0),
-                            ranges=[{"start": utc(2026, 3, 5, 6).isoformat(),
-                                     "end": utc(2026, 3, 5, 8).isoformat(), "count": 4,
-                                     "label": ""}])
+                            ranges=[{"start": utc(2026, 3, 5, 6).isoformat(), "end": utc(2026, 3, 5, 8).isoformat(), "count": 4, "label": ""}])
 
         response = self.day()
 
-        self.assertContains(response, 'data-check="')
         self.assertContains(response, f'data-check="{stored.id}"')
-        self.assertContains(response, "Recover missing data")
+        self.assertContains(response, ">Recover</button>")
+        self.assertContains(response, "Not recovered")
 
-    def test_the_check_hint_is_not_shown_beside_the_recover_button(self):
+    def test_only_the_newest_check_offers_an_action(self):
         self.with_mapping()
-        self.store(window_start=utc(2026, 3, 5, 6), window_end=utc(2026, 3, 5, 9),
-                   ranges=[{"start": utc(2026, 3, 5, 6).isoformat(),
-                            "end": utc(2026, 3, 5, 8).isoformat(), "count": 4, "label": ""}])
+        older = self.store(created_at=utc(2026, 3, 9, 10), ranges=[{"start": utc(2026, 3, 5, 6).isoformat(), "end": utc(2026, 3, 5, 8).isoformat(), "count": 4, "label": ""}])
+        newer = self.store(created_at=utc(2026, 3, 9, 11), ranges=[{"start": utc(2026, 3, 5, 6).isoformat(), "end": utc(2026, 3, 5, 8).isoformat(), "count": 4, "label": ""}])
 
         response = self.day()
 
-        self.assertContains(response, "Recover missing data")
+        self.assertContains(response, f'data-check="{newer.id}"')
+        self.assertNotContains(response, f'data-check="{older.id}"')
         self.assertContains(response, "06:00–09:00")
-        self.assertNotContains(response, "nothing is saved")
+
+    def test_a_day_with_no_checks_says_so(self):
+        self.with_mapping()
+
+        response = self.day()
+
+        self.assertContains(response, "No checks for this day yet.")
+        self.assertNotContains(response, 'class="listing availability-checks-table"')
 
     def test_the_check_hint_is_shown_beside_the_check_button(self):
         self.with_mapping()
@@ -320,20 +325,19 @@ class DayViewRenderingTests(CheckViewTestCase):
 
         response = self.day()
 
-        self.assertContains(response, "The source has nothing for this gap.")
+        self.assertContains(response, "Source has nothing")
         self.assertContains(response, "Check source again")
         self.assertNotContains(response, 'data-check="')
 
-    def test_a_recovery_reports_its_counts_and_offers_a_new_check(self):
+    def test_a_recovery_reports_its_counts_in_the_row_and_offers_a_new_check(self):
         self.with_mapping()
         self.store(window_start=utc(2026, 3, 5, 0), window_end=utc(2026, 3, 6, 0),
-                   ranges=[{"start": utc(2026, 3, 5, 6).isoformat(),
-                            "end": utc(2026, 3, 5, 8).isoformat(), "count": 4, "label": ""}],
-                   recovered=True, recovery_fetched=12, recovery_saved=6)
+                   ranges=[{"start": utc(2026, 3, 5, 6).isoformat(), "end": utc(2026, 3, 5, 8).isoformat(), "count": 4, "label": ""}], recovered=True, recovery_fetched=12, recovery_saved=6)
 
         response = self.day()
 
-        self.assertContains(response, "Recovery fetched 12 source record(s) and saved 6 observation(s).")
+        self.assertContains(
+            response, "Recovered: fetched 12 source record(s), saved 6 observation(s)")
         self.assertContains(response, "Check source again")
         self.assertNotContains(response, 'data-check="')
 
@@ -445,14 +449,14 @@ class DayViewRenderingTests(CheckViewTestCase):
         self.assertContains(response, "no route to host")
         self.assertContains(response, "TCP_TIMEOUT")
 
-    def test_a_failed_listing_offers_the_explicit_fetch_action(self):
+    def test_a_failed_listing_offers_the_explicit_fetch_action_in_its_row(self):
         self.with_mapping()
         self.store(window_start=utc(2026, 3, 5, 0), window_end=utc(2026, 3, 6, 0),
                    tier=TIER_LISTING, status=SourceCheckStatus.FAILED, message="no route")
 
         response = self.day()
 
-        self.assertContains(response, "The check did not answer.")
+        self.assertContains(response, "Did not answer")
         self.assertContains(response, "Try by fetching data")
         self.assertContains(response, 'data-fetch="1"')
 
@@ -472,17 +476,19 @@ class DayViewRenderingTests(CheckViewTestCase):
 
         self.assertNotContains(self.day(), "Try by fetching data")
 
-    def test_the_history_carries_no_actions_and_shows_recovery_counts(self):
+    def test_the_row_shows_recovery_counts_and_a_read_only_row_has_no_actions(self):
         self.with_mapping()
-        self.store(recovered=True, recovery_fetched=5, recovery_saved=4,
-                   ranges=[{"start": utc(2026, 3, 5, 6).isoformat(),
-                            "end": utc(2026, 3, 5, 8).isoformat(), "count": 4, "label": ""}])
+        self.store(recovered=True, recovery_fetched=5, recovery_saved=4, ranges=[{"start": utc(2026, 3, 5, 6).isoformat(), "end": utc(2026, 3, 5, 8).isoformat(), "count": 4, "label": ""}])
 
+        self.assertContains(
+            self.day(), "Recovered: fetched 5 source record(s), saved 4 observation(s)")
+
+        self.plain_user()
         response = self.day()
-
-        self.assertContains(response, "Fetched 5 source record(s), saved 4 observation(s)")
-        self.assertNotContains(response, "availability-recover")
-        self.assertNotContains(response, "availability-fetch-instead")
+        self.assertContains(response, "Recovered: fetched 5 source record(s), saved 4 observation(s)")
+        self.assertNotContains(response, 'class="button button-small"')
+        self.assertNotContains(response, "Check source")
+        self.assertNotContains(response, 'id="availability-panel"')
 
     def test_per_parameter_breakdown_is_a_table_without_repeated_units(self):
         parameter = DataParameterFactory(name="Air temperature")
@@ -518,22 +524,23 @@ class DayViewRenderingTests(CheckViewTestCase):
         self.assertLess(html.index("<td>Alpha</td>"), html.index("<td>Beta</td>"))
         self.assertEqual(html.count('class="availability-zero"'), 2)
 
-    def test_each_section_of_the_day_view_is_its_own_panel_above_the_grid(self):
+    def test_the_day_view_is_two_panels_with_the_checks_above_the_grid(self):
         self.with_mapping()
-        self.store(ranges=[{"start": utc(2026, 3, 5, 6).isoformat(),
-                            "end": utc(2026, 3, 5, 8).isoformat(), "count": 4, "label": ""}])
+        self.store(ranges=[{"start": utc(2026, 3, 5, 6).isoformat(), "end": utc(2026, 3, 5, 8).isoformat(), "count": 4, "label": ""}])
 
         html = self.day().content.decode()
 
-        self.assertEqual(html.count('class="availability-panel"'), 3)
-        for title in ("Source check", "Source checks", "Hourly data"):
+        self.assertEqual(html.count('class="availability-panel"'), 2)
+        for title in ("Source checks", "Hourly data"):
             self.assertIn(f'<h2 class="availability-panel__title">{title}</h2>', html)
-        self.assertLess(html.index(">Source check<"), html.index(">Source checks<"))
+        self.assertNotIn(">Source check<", html)
         self.assertLess(html.index(">Source checks<"), html.index(">Hourly data<"))
         grid = html.index('class="availability-matrix"')
-        self.assertLess(html.index(">Source checks<"), grid)
         self.assertLess(html.index('class="availability-legend"'), grid)
         self.assertEqual(html.count('class="availability-legend"'), 1)
+        # the check action leads the checks panel, above its table
+        self.assertLess(html.index('<button type="button" class="button button-small" data-action="check"'),
+                        html.index('class="listing availability-checks-table"'))
 
     def test_the_month_calendar_and_connection_grid_are_one_panel_each(self):
         month = self.client.get(reverse("data_availability"),

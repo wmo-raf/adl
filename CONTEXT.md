@@ -100,12 +100,14 @@ meanings.
   recovered when something was saved; if gaps remain, the day view offers a new
   check rather than the same recovery again.
 
-**day panel**
-: The status panel at the top of the day view, the one place a day is checked
-  and recovered. It shows a single state from the day's newest stored check:
-  check the source, recover what a check found, or the outcome of the last
-  step (nothing found, did not answer, recovered with counts). While a check or
-  recovery is running for the station link, whoever started it, the panel shows
-  that, read from the in-flight claim, so it survives a refresh; the month calendar and connection grid mark the
-  day being asked about with a spinner, for every viewer. The stored
-  checks listed below the matrix are history only.
+**source checks panel**
+: The one panel at the top of the day view where a day is checked and
+  recovered. Its action bar offers the whole-day check (or shows the run in
+  flight), and below it a table lists the day's stored checks, newest first:
+  window, method, result, hours covered, and a Recovery column stating whether
+  the check was recovered (with the fetched and saved counts) or not. Only the
+  newest check's row carries an action: Recover when it found data, or Try by
+  fetching data after a failed listing. While a check or recovery is running
+  for the station link, whoever started it, the panel shows that, read from the
+  in-flight claim, so it survives a refresh; the month calendar and connection
+  grid mark the day being asked about with a spinner, for every viewer.

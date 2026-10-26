@@ -125,7 +125,7 @@
         }
 
         .availability-panel__body > .availability-wholeday {
-            margin-bottom: 0;
+            margin-bottom: 1rem;
         }
 
         .availability-checks-table .status-badge {
@@ -581,125 +581,118 @@
             </p>
         </nav>
 
-        {% if can_check %}
-<section class="availability-panel">
-<header class="availability-panel__header"><h2 class="availability-panel__title">{% trans 'Source check' %}</h2></header>
-<div class="availability-panel__body">
-            <div class="availability-wholeday" id="availability-panel" data-station-link="{{ station_link.id }}"
-                 data-csrf="{{ csrf_token }}" data-day="{{ day_detail.date.isoformat }}"
-                 data-running-url="{{ running_url }}" data-running="{% if panel.state == 'running' %}1{% endif %}"
-                 data-check-url="{{ check_url }}" data-status-url="{% url 'availability_check_status' task_id='TASK' %}"
-                 data-recover-url="{% url 'availability_recover' %}" data-recover-status-url="{% url 'availability_recover_status' task_id='TASK' %}">
-                {% if not panel %}
-                    <span class="availability-meta">{% trans "No mapped parameter is missing, so there is nothing to check." %}</span>
-                {% else %}
-                    {% if panel.state == 'running' %}
-                        <span><strong>
-                            {% if panel.running.kind == 'recover' %}{% trans "Recovering" %}{% else %}{% trans "Checking" %}{% endif %}{% if panel.running.day %} {{ panel.running.day|date:"j M" }}{% endif %}&hellip;
-                        </strong>
-                            {% if panel.running.since %}<span class="availability-meta">{% blocktrans with since=panel.running.since|date:"H:i" %}since {{ since }}{% endblocktrans %}</span>{% endif %}
-                        </span>
-                        <button type="button" class="button button-small" disabled>{% trans "Check source" %}</button>
-                    {% elif panel.state == 'recover' %}
-                        <span><strong>{% trans "The source has data for this gap." %}</strong>
-                            {{ panel.latest.span }}</span>
-                        <button type="button" class="button button-small" data-action="recover"
-                                data-check="{{ panel.latest.check.id }}">{% trans "Recover missing data" %}</button>
-                    {% else %}
-                        {% if panel.state == 'recovered' %}
-                            <span><strong>{% blocktrans with fetched=panel.latest.check.recovery_fetched saved=panel.latest.check.recovery_saved %}Recovery fetched {{ fetched }} source record(s) and saved {{ saved }} observation(s).{% endblocktrans %}</strong></span>
-                        {% elif panel.state == 'nothing' %}
-                            <span><strong>{% trans "The source has nothing for this gap." %}</strong></span>
-                        {% elif panel.state == 'failed' %}
-                            <span><strong>{% trans "The check did not answer." %}</strong></span>
-                        {% endif %}
-                        <button type="button" class="button button-small" data-action="check">
-                            {% if panel.state == 'check' %}{% trans "Check source" %}{% else %}{% trans "Check source again" %}{% endif %}
-                            ({{ panel.whole_day.span }}, {{ panel.whole_day.hours }} h)
-                        </button>
-                        {% if panel.latest.can_fetch_instead %}
-                            <button type="button" class="button button-small button-secondary" data-action="check" data-fetch="1">{% trans "Try by fetching data" %}</button>
-                        {% endif %}
-                        <span class="availability-meta">
-                            {% if check_instant %}{% trans "The check is instant (the source is asked for a listing)." %}
-                            {% else %}{% trans "The check runs in the background: the source's data is fetched and parsed, and nothing is saved." %}{% endif %}
-                        </span>
-                    {% endif %}
-                {% endif %}
-                <span id="availability-panel-status" role="status"></span>
-            </div>
-</div>
-</section>
-        {% endif %}
-
-        {% if check_items %}
+        {% if can_check or check_items %}
 <section class="availability-panel">
 <header class="availability-panel__header"><h2 class="availability-panel__title">{% trans 'Source checks' %}</h2></header>
-<div class="availability-panel__body">
-<table class="listing availability-checks-table">
-                    <thead>
-                    <tr>
-                        <th scope="col">{% trans "Checked" %}</th>
-                        <th scope="col">{% trans "Window" %}</th>
-                        <th scope="col">{% trans "Method" %}</th>
-                        <th scope="col">{% trans "Result" %}</th>
-                        <th scope="col">{% trans "Covers" %}</th>
-                        <th scope="col">{% trans "Recovery" %}</th>
-                    </tr>
-                    </thead>
-                    <tbody>
-                    {% for item in check_items %}
+<div class="availability-panel__body"{% if can_check %} id="availability-panel" data-station-link="{{ station_link.id }}"
+     data-csrf="{{ csrf_token }}" data-day="{{ day_detail.date.isoformat }}"
+     data-running-url="{{ running_url }}" data-running="{% if panel.state == 'running' %}1{% endif %}"
+     data-check-url="{{ check_url }}" data-status-url="{% url 'availability_check_status' task_id='TASK' %}"
+     data-recover-url="{% url 'availability_recover' %}" data-recover-status-url="{% url 'availability_recover_status' task_id='TASK' %}"{% endif %}>
+    {% if can_check %}
+        <div class="availability-wholeday">
+            {% if not panel %}
+                <span class="availability-meta">{% trans "No mapped parameter is missing, so there is nothing to check." %}</span>
+            {% elif panel.state == 'running' %}
+                <span><strong>
+                    {% if panel.running.kind == 'recover' %}{% trans "Recovering" %}{% else %}{% trans "Checking" %}{% endif %}{% if panel.running.day %} {{ panel.running.day|date:"j M" }}{% endif %}&hellip;
+                </strong>
+                    {% if panel.running.since %}<span class="availability-meta">{% blocktrans with since=panel.running.since|date:"H:i" %}since {{ since }}{% endblocktrans %}</span>{% endif %}
+                </span>
+                <button type="button" class="button button-small" disabled>{% trans "Check source" %}</button>
+            {% else %}
+                <button type="button" class="button button-small" data-action="check">
+                    {% if check_items %}{% trans "Check source again" %}{% else %}{% trans "Check source" %}{% endif %}
+                    ({{ panel.whole_day.span }}, {{ panel.whole_day.hours }} h)
+                </button>
+                <span class="availability-meta">
+                    {% if check_instant %}{% trans "The check is instant (the source is asked for a listing)." %}
+                    {% else %}{% trans "The check runs in the background: the source's data is fetched and parsed, and nothing is saved." %}{% endif %}
+                </span>
+            {% endif %}
+            <span id="availability-panel-status" role="status"></span>
+        </div>
+    {% endif %}
+    {% if check_items %}
+        <table class="listing availability-checks-table">
+                        <thead>
                         <tr>
-                            <td>{{ item.check.created_at|date:"j M H:i" }}</td>
-                            <td>{{ item.span }}</td>
-                            <td>{% if item.by_listing %}{% trans "File listing" %}{% else %}{% trans "Fetched and parsed" %}{% endif %}</td>
-                            <td>
-                                {% if not item.ok %}<span class="status-badge status-badge--failed">{% trans "Did not answer" %}</span>
-                                {% elif item.summary.verdict == 'has_data' %}<span class="status-badge status-badge--warning">{% trans "Source has data" %}</span>
-                                {% else %}<span class="status-badge status-badge--muted">{% trans "Source has nothing" %}</span>{% endif %}
-                            </td>
-                            <td>{% if item.ok %}{% blocktrans with covered=item.summary.covered total=item.summary.missing_total %}{{ covered }} of {{ total }} missing hours{% endblocktrans %}{% else %}&mdash;{% endif %}</td>
-                            <td>
-                                {% if item.check.recovery_saved is not None %}
-                                    {% blocktrans with fetched=item.check.recovery_fetched saved=item.check.recovery_saved %}Fetched {{ fetched }} source record(s), saved {{ saved }} observation(s){% endblocktrans %}
-                                {% elif item.ok and item.summary.verdict == 'has_data' %}
-                                    {% trans "Not recovered" %}
-                                {% else %}&mdash;{% endif %}
-                            </td>
+                            <th scope="col">{% trans "Checked" %}</th>
+                            <th scope="col">{% trans "Window" %}</th>
+                            <th scope="col">{% trans "Method" %}</th>
+                            <th scope="col">{% trans "Result" %}</th>
+                            <th scope="col">{% trans "Covers" %}</th>
+                            <th scope="col">{% trans "Recovery" %}</th>
                         </tr>
-                        {% if item.check.message %}
-                            <tr class="availability-checks-detail">
-                                <td colspan="6" class="availability-meta">{{ item.check.message }}{% if item.check.category %} ({{ item.check.category }}){% endif %}</td>
-                            </tr>
-                        {% endif %}
-                        {% if item.ok and item.summary.parameter_counts %}
-                            <tr class="availability-checks-detail">
-                                <td colspan="6">
-                                    <details>
-                                        <summary class="availability-meta">{% trans "Per parameter" %}</summary>
-                                        <table class="listing availability-params-table">
-                                            <thead>
-                                            <tr>
-                                                <th scope="col">{% trans "Parameter" %}</th>
-                                                <th scope="col">{% trans "Hours with data" %}</th>
-                                            </tr>
-                                            </thead>
-                                            <tbody>
-                                            {% for parameter, count in item.summary.parameter_counts %}
-                                                <tr{% if not count %} class="availability-zero"{% endif %}>
-                                                    <td>{{ parameter.name }}</td>
-                                                    <td>{{ count }}</td>
-                                                </tr>
-                                            {% endfor %}
-                                            </tbody>
-                                        </table>
-                                    </details>
+                        </thead>
+                        <tbody>
+                        {% for item in check_items %}
+                            <tr>
+                                <td>{{ item.check.created_at|date:"j M H:i" }}</td>
+                                <td>{{ item.span }}</td>
+                                <td>{% if item.by_listing %}{% trans "File listing" %}{% else %}{% trans "Fetched and parsed" %}{% endif %}</td>
+                                <td>
+                                    {% if not item.ok %}<span class="status-badge status-badge--failed">{% trans "Did not answer" %}</span>
+                                    {% elif item.summary.verdict == 'has_data' %}<span class="status-badge status-badge--warning">{% trans "Source has data" %}</span>
+                                    {% else %}<span class="status-badge status-badge--muted">{% trans "Source has nothing" %}</span>{% endif %}
+                                </td>
+                                <td>{% if item.ok %}{% blocktrans with covered=item.summary.covered total=item.summary.missing_total %}{{ covered }} of {{ total }} missing hours{% endblocktrans %}{% else %}&mdash;{% endif %}</td>
+                                <td>
+                                    {% if item.check.recovery_saved is not None %}
+                                        {% if item.check.recovered %}
+                                            {% blocktrans with fetched=item.check.recovery_fetched saved=item.check.recovery_saved %}Recovered: fetched {{ fetched }} source record(s), saved {{ saved }} observation(s){% endblocktrans %}
+                                        {% else %}
+                                            {% blocktrans with fetched=item.check.recovery_fetched %}Recovery saved nothing (fetched {{ fetched }}){% endblocktrans %}
+                                        {% endif %}
+                                    {% elif item.ok and item.summary.verdict == 'has_data' %}
+                                        {% trans "Not recovered" %}
+                                    {% else %}&mdash;{% endif %}
+                                    {% if forloop.first and panel %}
+                                        {% if panel.state == 'recover' %}
+                                            <button type="button" class="button button-small" data-action="recover"
+                                                    data-check="{{ item.check.id }}">{% trans "Recover" %}</button>
+                                        {% elif panel.latest.can_fetch_instead %}
+                                            <button type="button" class="button button-small button-secondary" data-action="check" data-fetch="1">{% trans "Try by fetching data" %}</button>
+                                        {% endif %}
+                                    {% endif %}
                                 </td>
                             </tr>
-                        {% endif %}
-                    {% endfor %}
-                    </tbody>
-                </table>
+                            {% if item.check.message %}
+                                <tr class="availability-checks-detail">
+                                    <td colspan="6" class="availability-meta">{{ item.check.message }}{% if item.check.category %} ({{ item.check.category }}){% endif %}</td>
+                                </tr>
+                            {% endif %}
+                            {% if item.ok and item.summary.parameter_counts %}
+                                <tr class="availability-checks-detail">
+                                    <td colspan="6">
+                                        <details>
+                                            <summary class="availability-meta">{% trans "Per parameter" %}</summary>
+                                            <table class="listing availability-params-table">
+                                                <thead>
+                                                <tr>
+                                                    <th scope="col">{% trans "Parameter" %}</th>
+                                                    <th scope="col">{% trans "Hours with data" %}</th>
+                                                </tr>
+                                                </thead>
+                                                <tbody>
+                                                {% for parameter, count in item.summary.parameter_counts %}
+                                                    <tr{% if not count %} class="availability-zero"{% endif %}>
+                                                        <td>{{ parameter.name }}</td>
+                                                        <td>{{ count }}</td>
+                                                    </tr>
+                                                {% endfor %}
+                                                </tbody>
+                                            </table>
+                                        </details>
+                                    </td>
+                                </tr>
+                            {% endif %}
+                        {% endfor %}
+                        </tbody>
+                    </table>
+    {% elif panel %}
+        <p class="availability-meta">{% trans "No checks for this day yet." %}</p>
+    {% endif %}
 </div>
 </section>
         {% endif %}
