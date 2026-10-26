@@ -10,6 +10,7 @@ from .constants import CheckState
 
 
 TRIGGER_GAP_RECOVERY = "gap_recovery"
+TRIGGER_LATE_DISPATCH = "late_dispatch"
 
 
 @register_snippet

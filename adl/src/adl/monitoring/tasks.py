@@ -65,3 +65,12 @@ def run_gap_recovery(self, station_link_id, check_id):
     link's in-flight claim however it ends."""
     from . import gap_service
     return gap_service.run_recovery_task(station_link_id, check_id)
+
+
+@shared_task(bind=True, name="adl.monitoring.tasks.run_late_dispatch")
+def run_late_dispatch(self, station_link_id, check_id, channel_id):
+    """Late dispatch (see ``gap_service``): sends a recovered check's window to a
+    dispatch channel without touching its dispatch cursor, and returns the
+    ``sent`` count, or ``busy`` when a normal dispatch holds the station's lock."""
+    from . import gap_service
+    return gap_service.run_late_dispatch_task(station_link_id, check_id, channel_id)
