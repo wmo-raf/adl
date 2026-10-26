@@ -12,6 +12,45 @@ This file starts at 0.8.9. Earlier history is in the git log.
 
 ## [Unreleased]
 
+## [0.8.20] — 2026-10-26
+
+Data availability: an operator can now see, hour by hour and day by day,
+whether data is arriving, ask the source about a gap, recover it, and send the
+recovered window downstream. Parent issue #342.
+
+### Added
+
+- **Data availability page** (Data menu): a connection grid of station links
+  by day (worst first), a month calendar per station link, and a day view of
+  parameter by local hour, all addressable by URL. A corner marker shows a
+  dropped parameter on an otherwise complete day.
+- **Availability check** from the day view for a gap window or a whole day.
+  Plugins may answer cheaply by overriding `StationLink.check_availability()`
+  (with `availability_check_supported`); every other plugin is answered by a
+  background fetch-and-parse that saves nothing. Results are stored, shown on
+  the hours they cover, and pruned with the activity log.
+- **Gap recovery** ingests a window through the normal pipeline, under the
+  station's ingestion lock, logged as a gap recovery.
+- **Late dispatch** sends a recovered window to a chosen channel without
+  moving its dispatch cursor.
+- Check and recovery require `can_manage_connection`; late dispatch also
+  requires `can_manage_channel`. Viewing needs monitoring access only.
+
+### Fixed
+
+- **The dispatch cursor never moves backwards** on the normal dispatch path.
+- **Explicit-window ingestion refreshes the hourly aggregate** for exactly
+  that window, so backfilled data older than 90 days is no longer missing
+  from it.
+
+### Upgrade notes
+
+- Four migrations in `monitoring` (0012–0015) add the availability check
+  table and a `trigger` column on the activity log. They add only; nothing to
+  do beforehand.
+- The FTP plugin's file-listing check needs `adl-ftp-plugin` 0.14.0; older
+  plugin versions work and are answered by the fetch tier.
+
 ## [0.8.19] — 2026-10-22
 
 > The v0.8.19 tag was cut without a version bump, so `adl/src/adl/version.py`
