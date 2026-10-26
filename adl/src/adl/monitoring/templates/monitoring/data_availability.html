@@ -132,9 +132,14 @@
         }
 
         .availability-hour {
-            min-width: 1.6rem;
+            min-width: 2.2rem;
             height: 1.6rem;
             border-radius: 2px;
+            padding: 0 0.15rem;
+            text-align: center;
+            font-size: 0.75rem;
+            line-height: 1.6rem;
+            font-variant-numeric: tabular-nums;
         }
 
         .availability-hour--present {
@@ -568,7 +573,7 @@
                         {% for item in row.cells %}
                             <td class="availability-hour availability-hour--{{ item.cell.state }}{% if item.mark %} availability-hour--source-{{ item.mark }}{% endif %}"
                                 data-start="{{ item.cell.iso }}"
-                                title="{{ item.cell.local_time|date:'H:i' }} — {% blocktrans count n=item.cell.records_count %}{{ n }} record{% plural %}{{ n }} records{% endblocktrans %}{% if item.mark == 'has_data' %} — {% trans 'Source has data, not recovered' %}{% elif item.mark == 'nothing' %} — {% trans 'Source has nothing' %}{% endif %}"></td>
+                                title="{{ item.cell.local_time|date:'H:i' }} — {% blocktrans count n=item.cell.records_count %}{{ n }} record{% plural %}{{ n }} records{% endblocktrans %}{% if item.mark == 'has_data' %} — {% trans 'Source has data, not recovered' %}{% elif item.mark == 'nothing' %} — {% trans 'Source has nothing' %}{% endif %}">{% if item.cell.records_count %}{{ item.cell.records_count }}{% endif %}</td>
                         {% endfor %}
                     </tr>
                 {% endfor %}

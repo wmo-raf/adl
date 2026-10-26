@@ -276,6 +276,9 @@ class DayViewTests(TestCase):
         self.assertContains(response, "not currently mapped")
         self.assertContains(response, "availability-hour--present")
         self.assertContains(response, "2 records")  # tooltip of the any row
+        # the count is printed in the cell itself, not only in the tooltip
+        self.assertContains(response, '">2</td>')  # the any row's hour
+        self.assertContains(response, '">1</td>')  # each parameter row's hour
 
     def test_breadcrumb_links_back_to_the_month(self):
         response = self.get(day="2026-03-05")
