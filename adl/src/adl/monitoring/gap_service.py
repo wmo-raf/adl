@@ -429,8 +429,9 @@ def run_fetch_task(station_link_id, start_iso, end_iso, parameter_id) -> int:
     from adl.core.models import StationLink
 
     try:
-        station_link = StationLink.objects.select_related("network_connection").get(
-            id=station_link_id)
+        # no select_related on the polymorphic connection: it would load the base
+        # class, hiding the plugin subclass' ``variable_mappings``
+        station_link = StationLink.objects.get(id=station_link_id)
         window = GapWindow(datetime.fromisoformat(start_iso), datetime.fromisoformat(end_iso),
                            parameter_id)
         result = run_fetch_check(station_link, window)
@@ -495,8 +496,9 @@ def run_recovery_task(station_link_id, check_id) -> dict:
     from adl.core.models import StationLink
 
     try:
-        station_link = StationLink.objects.select_related("network_connection").get(
-            id=station_link_id)
+        # no select_related on the polymorphic connection: it would load the base
+        # class, hiding the plugin subclass' ``variable_mappings``
+        station_link = StationLink.objects.get(id=station_link_id)
         stored = AvailabilityCheck.objects.get(id=check_id, station_link=station_link)
         saved = station_link.plugin.process_station(
             station_link,

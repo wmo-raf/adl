@@ -333,7 +333,7 @@ class DayViewRenderingTests(CheckViewTestCase):
 
         response = self.day()
 
-        self.assertContains(response, "Recovery fetched 12 and saved 6 record(s).")
+        self.assertContains(response, "Recovery fetched 12 source record(s) and saved 6 observation(s).")
         self.assertContains(response, "Check source again")
         self.assertNotContains(response, 'data-check="')
 
@@ -471,7 +471,7 @@ class DayViewRenderingTests(CheckViewTestCase):
 
         response = self.day()
 
-        self.assertContains(response, "Recovery fetched 5, saved 4.")
+        self.assertContains(response, "Recovery fetched 5 source record(s), saved 4 observation(s).")
         self.assertNotContains(response, "availability-recover")
         self.assertNotContains(response, "availability-fetch-instead")
 

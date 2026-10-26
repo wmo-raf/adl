@@ -561,7 +561,7 @@
                                 data-check="{{ panel.latest.check.id }}">{% trans "Recover missing data" %}</button>
                     {% else %}
                         {% if panel.state == 'recovered' %}
-                            <span><strong>{% blocktrans with fetched=panel.latest.check.recovery_fetched saved=panel.latest.check.recovery_saved %}Recovery fetched {{ fetched }} and saved {{ saved }} record(s).{% endblocktrans %}</strong></span>
+                            <span><strong>{% blocktrans with fetched=panel.latest.check.recovery_fetched saved=panel.latest.check.recovery_saved %}Recovery fetched {{ fetched }} source record(s) and saved {{ saved }} observation(s).{% endblocktrans %}</strong></span>
                         {% elif panel.state == 'nothing' %}
                             <span><strong>{% trans "The source has nothing for this gap." %}</strong></span>
                         {% elif panel.state == 'failed' %}
@@ -643,7 +643,7 @@
                                 </ul>
                             {% endif %}
                         {% endif %}
-                        {% if item.check.recovery_saved is not None %}<p class="availability-meta">{% blocktrans with fetched=item.check.recovery_fetched saved=item.check.recovery_saved %}Recovery fetched {{ fetched }}, saved {{ saved }}.{% endblocktrans %}</p>{% endif %}
+                        {% if item.check.recovery_saved is not None %}<p class="availability-meta">{% blocktrans with fetched=item.check.recovery_fetched saved=item.check.recovery_saved %}Recovery fetched {{ fetched }} source record(s), saved {{ saved }} observation(s).{% endblocktrans %}</p>{% endif %}
                         {% if item.check.message %}<p class="availability-meta">{{ item.check.message }}{% if item.check.category %} ({{ item.check.category }}){% endif %}</p>{% endif %}
                     </div>
                 {% endfor %}
@@ -743,16 +743,25 @@
                 function run(url, statusUrl, params, working, done) {
                     setBusy(true);
                     status.textContent = working;
+                    // a run can take minutes; one failed poll (a restart, a dropped
+                    // connection) must not strand the panel, so only give up after
+                    // several in a row
+                    let failures = 0;
                     const poll = (taskId) => {
                         const target = statusUrl.replace('TASK', encodeURIComponent(taskId))
                             + '?station_link=' + encodeURIComponent(panel.dataset.stationLink);
                         fetch(target, {headers: {'X-Requested-With': 'XMLHttpRequest'}})
                             .then((response) => response.json())
                             .then((data) => {
+                                failures = 0;
                                 if (data.state === 'PENDING') return window.setTimeout(() => poll(taskId), 2000);
                                 done(data);
                             })
-                            .catch(lost);
+                            .catch(() => {
+                                failures += 1;
+                                if (failures >= 5) return lost();
+                                window.setTimeout(() => poll(taskId), 3000);
+                            });
                     };
                     params.set('station_link', panel.dataset.stationLink);
                     fetch(url, {

@@ -94,8 +94,9 @@ meanings.
   check (never directly) and needs the right to manage the connection. It never
   bypasses the ingestion lock: if a scheduled pull holds it, recovery answers
   "busy" and fetches nothing. It shares the one-run-per-station-link claim with
-  checks, writes a pull activity row marked as a gap recovery, and stores how
-  many records were fetched and saved on the check. The check is marked
+  checks, writes a pull activity row marked as a gap recovery, and stores on the
+  check how many source records were fetched and how many observations (a
+  record's value for one parameter) were saved. The check is marked
   recovered when something was saved; if gaps remain, the day view offers a new
   check rather than the same recovery again.
 
