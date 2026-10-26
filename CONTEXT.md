@@ -105,5 +105,6 @@ meanings.
   check the source, recover what a check found, or the outcome of the last
   step (nothing found, did not answer, recovered with counts). While a check or
   recovery is running for the station link, whoever started it, the panel shows
-  that, read from the in-flight claim, so it survives a refresh. The stored
+  that, read from the in-flight claim, so it survives a refresh; the month calendar and connection grid mark the
+  day being asked about with a spinner, for every viewer. The stored
   checks listed below the matrix are history only.

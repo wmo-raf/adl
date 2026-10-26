@@ -625,7 +625,7 @@ class RunningStatusTests(CheckViewTestCase):
         self.assertEqual(self.get().json(), {"running": False})
 
     def test_reports_the_kind_and_start_of_the_claim(self):
-        gap_service.claim(self.link.id, gap_service.CLAIM_CHECK)
+        gap_service.claim(self.link, gap_service.CLAIM_CHECK, utc(2026, 3, 5, 6))
 
         body = self.get().json()
 
@@ -639,10 +639,65 @@ class RunningStatusTests(CheckViewTestCase):
 
         self.assertEqual((body["running"], body["kind"], body["since"]), (True, "check", None))
 
-    def test_a_read_only_user_gets_403(self):
-        self.plain_user()
+    def test_it_names_the_local_day_being_asked_about(self):
+        gap_service.claim(self.link, gap_service.CLAIM_CHECK, utc(2026, 3, 5, 6))
 
-        self.assertEqual(self.get().status_code, 403)
+        self.assertEqual(self.get().json()["day"], "2026-03-05")
+
+    def test_a_read_only_user_may_read_it(self):
+        self.plain_user()
+        gap_service.claim(self.link, gap_service.CLAIM_CHECK, utc(2026, 3, 5, 6))
+
+        response = self.get()
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.json()["running"])
 
     def test_an_unknown_station_link_is_a_404(self):
         self.assertEqual(self.get(station_link="999999").status_code, 404)
+
+
+class RunningIndicatorTests(CheckViewTestCase):
+    """The spinner on the day being checked, on the month calendar and the grid."""
+
+    def setUp(self):
+        super().setUp()
+        cache.clear()
+        self.addCleanup(cache.clear)
+        gap_service.claim(self.link, gap_service.CLAIM_CHECK, utc(2026, 3, 5, 6))
+        self.month = {"station_link": self.link.id, "month": "2026-03"}
+        self.grid = {"connection": self.connection.id, "month": "2026-03"}
+
+    def get(self, params, user=None):
+        if user:
+            self.plain_user()
+        return self.client.get(reverse("data_availability"), params)
+
+    def test_the_month_calendar_marks_only_the_day_being_checked_and_watches_it(self):
+        response = self.get(self.month)
+
+        self.assertContains(response, 'class="availability-running"', count=1)
+        self.assertContains(response, 'id="availability-running-watch"')
+
+    def test_another_month_shows_no_indicator_and_no_watch(self):
+        response = self.get({**self.month, "month": "2026-04"})
+
+        self.assertNotContains(response, 'class="availability-running"')
+        self.assertNotContains(response, 'id="availability-running-watch"')
+
+    def test_a_read_only_viewer_sees_it_too(self):
+        response = self.get(self.month, user=True)
+
+        self.assertContains(response, 'class="availability-running"', count=1)
+
+    def test_the_connection_grid_marks_the_day_in_the_links_row_without_a_watch(self):
+        response = self.get(self.grid)
+
+        self.assertContains(response, 'class="availability-running"', count=1)
+        self.assertNotContains(response, 'id="availability-running-watch"')
+
+    def test_an_idle_link_shows_nothing(self):
+        cache.clear()
+
+        self.assertNotContains(self.get(self.month), 'class="availability-running"')
+        self.assertNotContains(self.get(self.grid), 'class="availability-running"')

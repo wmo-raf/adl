@@ -259,6 +259,27 @@
             background-position: center;
         }
 
+        .availability-running {
+            position: absolute;
+            top: 0.2rem;
+            right: 0.3rem;
+            width: 0.7rem;
+            height: 0.7rem;
+            border: 2px solid var(--w-color-primary);
+            border-right-color: transparent;
+            border-radius: 50%;
+            animation: availability-spin 0.9s linear infinite;
+            pointer-events: none;
+        }
+
+        @keyframes availability-spin {
+            to { transform: rotate(360deg); }
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+            .availability-running { animation: none; }
+        }
+
         .availability-checked {
             position: absolute;
             bottom: 0.15rem;
@@ -432,6 +453,7 @@
                         <td class="availability-cell availability-cell--{{ day.state }}{% if day.state == 'partial' %} availability-cell--partial-{{ day.level }}{% endif %}{% if day.has_parameter_gap %} availability-cell--gap{% endif %}"{% if day.has_parameter_gap %} title="{% trans 'A mapped parameter is missing for some expected hours' %}"{% endif %}>
                             <a href="{{ cell.1 }}" class="availability-cell-link" aria-label="{{ row.summary.name }}, {{ day.date|date:'j F Y' }}"></a>
                             {% if day.label %}<span class="availability-count">{{ day.label }}</span>{% endif %}
+                            {% if row.running and row.running.day == day.date %}<span class="availability-running" title="{% if row.running.kind == 'recover' %}{% trans 'Recovering' %}{% else %}{% trans 'Checking' %}{% endif %}{% if row.running.since %} {% blocktrans with since=row.running.since|date:'H:i' %}since {{ since }}{% endblocktrans %}{% endif %}"><span class="w-sr-only">{% trans "Source check running" %}</span></span>{% endif %}
                             {% if day.checked %}<span class="availability-checked" title="{% trans 'The source was asked about every gap on this day' %}"><span aria-hidden="true">&#10003;</span><span class="w-sr-only">{% trans "Checked" %}</span></span>{% endif %}
                         </td>
                         {% endwith %}
@@ -465,6 +487,7 @@
                         <td class="availability-cell availability-cell--{{ day.state }}{% if day.state == 'partial' %} availability-cell--partial-{{ day.level }}{% endif %}{% if day.has_parameter_gap %} availability-cell--gap{% endif %}"{% if day.has_parameter_gap %} title="{% trans 'A mapped parameter is missing for some expected hours' %}"{% endif %}>
                             <a href="{{ cell.1 }}" class="availability-cell-link" aria-label="{{ row.summary.name }}, {{ day.date|date:'j F Y' }}"></a>
                             {% if day.label %}<span class="availability-count">{{ day.label }}</span>{% endif %}
+                            {% if row.running and row.running.day == day.date %}<span class="availability-running" title="{% if row.running.kind == 'recover' %}{% trans 'Recovering' %}{% else %}{% trans 'Checking' %}{% endif %}{% if row.running.since %} {% blocktrans with since=row.running.since|date:'H:i' %}since {{ since }}{% endblocktrans %}{% endif %}"><span class="w-sr-only">{% trans "Source check running" %}</span></span>{% endif %}
                             {% if day.checked %}<span class="availability-checked" title="{% trans 'The source was asked about every gap on this day' %}"><span aria-hidden="true">&#10003;</span><span class="w-sr-only">{% trans "Checked" %}</span></span>{% endif %}
                         </td>
                         {% endwith %}
@@ -636,6 +659,7 @@
             <span class="legend-note">{% trans "Hours are local; hover a cell for its record count" %}</span>
         </div>
     {% else %}
+        {% if watch_running %}<span id="availability-running-watch" hidden data-url="{{ running_url }}" data-station-link="{{ station_link.id }}"></span>{% endif %}
         <table class="availability-calendar">
             <thead>
             <tr>
@@ -654,6 +678,7 @@
                                 <a href="{{ cell.1 }}" class="availability-cell-link" aria-label="{{ day.date|date:'j F Y' }}"></a>
                                 <span class="availability-day">{{ day.date.day }}</span>
                                 {% if day.label %}<span class="availability-count">{{ day.label }}</span>{% endif %}
+                                {% if running and running.day == day.date %}<span class="availability-running" title="{% if running.kind == 'recover' %}{% trans 'Recovering' %}{% else %}{% trans 'Checking' %}{% endif %}{% if running.since %} {% blocktrans with since=running.since|date:'H:i' %}since {{ since }}{% endblocktrans %}{% endif %}"><span class="w-sr-only">{% trans "Source check running" %}</span></span>{% endif %}
                                 {% if day.checked %}<span class="availability-checked" title="{% trans 'The source was asked about every gap on this day' %}"><span aria-hidden="true">&#10003;</span><span class="w-sr-only">{% trans "Checked" %}</span></span>{% endif %}
                             </td>
                             {% endwith %}
@@ -691,6 +716,19 @@
                 stationLink.disabled = true;
                 form.submit();
             });
+
+            // --- month calendar: a run is in flight, wait for it to end, then show the result
+            const watch = document.getElementById('availability-running-watch');
+            if (watch) {
+                const again = () => {
+                    fetch(watch.dataset.url + '?station_link=' + encodeURIComponent(watch.dataset.stationLink),
+                          {headers: {'X-Requested-With': 'XMLHttpRequest'}})
+                        .then((response) => response.json())
+                        .then((data) => data.running ? window.setTimeout(again, 2000) : window.location.reload())
+                        .catch(() => window.setTimeout(again, 5000));
+                };
+                window.setTimeout(again, 2000);
+            }
 
             // --- source check and recovery: one status panel at the top of the day view
             const panel = document.getElementById('availability-panel');

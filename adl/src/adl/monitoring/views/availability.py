@@ -87,11 +87,14 @@ def _grid_url(connection_id, year, month, sort):
     return f"{reverse('data_availability')}?{urlencode(params)}"
 
 
-def _grid_rows(summaries):
-    """Template rows of a connection grid: label link plus a day link per cell."""
+def _grid_rows(summaries, running):
+    """Template rows of a connection grid: label link plus a day link per cell,
+    and the check or recovery running for the link, if any (``running`` maps
+    station link id to it)."""
     return [
         {
             "summary": summary,
+            "running": running.get(summary.station_link.id),
             "month_url": _availability_url(
                 summary.station_link.id, summary.days[0].date.year, summary.days[0].date.month
             ),
@@ -288,7 +291,12 @@ def data_availability(request):
             "next_url": _availability_url(station_link.id, next_year, next_month),
             "month_url": _availability_url(station_link.id, year, month),
             "monitoring_url": reverse("station_link_monitoring", args=[station_link.id]),
+            "running_url": reverse("availability_running"),
         })
+        running = gap_service.in_flight(station_link.id)
+        if running is not None and running.day and (running.day.year, running.day.month) == (year, month):
+            context["running"] = running
+            context["watch_running"] = not day
 
         if day:
             day_detail = day_availability(station_link, day)
@@ -310,7 +318,7 @@ def data_availability(request):
                 context["panel"] = _day_panel(
                     context["whole_day"], context["check_items"],
                     running=gap_service.in_flight(station_link.id))
-                context["running_url"] = reverse("availability_running")
+
 
     elif connection_id:
         connection = connections.get(id=connection_id)
@@ -318,12 +326,13 @@ def data_availability(request):
         year, month = _parse_month(request.GET.get("month")) or (today.year, today.month)
         sort = SORT_NAME if request.GET.get("sort") == SORT_NAME else SORT_MISSING
         grid = connection_availability(connection, station_links, year, month, sort=sort)
+        running = gap_service.in_flight_many([link.id for link in station_links])
         prev_year, prev_month = _shift_month(year, month, -1)
         next_year, next_month = _shift_month(year, month, 1)
         context.update({
             "grid": grid,
-            "grid_rows": _grid_rows(grid.rows),
-            "grid_disabled_rows": _grid_rows(grid.disabled_rows),
+            "grid_rows": _grid_rows(grid.rows, running),
+            "grid_disabled_rows": _grid_rows(grid.disabled_rows, running),
             "grid_days": list(range(1, grid.days_in_month + 1)),
             "grid_sort": sort,
             "month_start": date(year, month, 1),
@@ -474,16 +483,18 @@ def availability_recover_status(request, task_id):
 @require_GET
 def availability_running(request):
     """Whether a check or recovery is running for a station link, for a page that
-    loaded in the running state to poll: ``{"running": bool, "kind": ...,
-    "since": ...}``. Gated like the actions it reports on."""
-    station_link = _managed_station_link(request, _positive_int(request.GET.get("station_link")))
-    if station_link is None:
+    shows it to poll: ``{"running": bool, "kind": ..., "since": ..., "day": ...}``.
+    Read-only status, so open to anyone who can see the availability pages; the
+    actions it reports on stay gated on ``can_manage_connection``."""
+    link_id = _positive_int(request.GET.get("station_link"))
+    if not link_id or not StationLink.objects.filter(id=link_id).exists():
         return _json_error(_("Unknown station link."), 404)
 
-    running = gap_service.in_flight(station_link.id)
+    running = gap_service.in_flight(link_id)
     if running is None:
         return JsonResponse({"running": False})
     return JsonResponse({
         "running": True, "kind": running.kind,
         "since": running.since.isoformat() if running.since else None,
+        "day": running.day.isoformat() if running.day else None,
     })

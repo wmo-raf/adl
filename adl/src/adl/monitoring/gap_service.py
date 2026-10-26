@@ -28,7 +28,7 @@ hours (:func:`covered_missing_hours`).
 import logging
 from collections import Counter
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone as py_tz
+from datetime import date, datetime, timedelta, timezone as py_tz
 from typing import List, Optional, Tuple
 from zoneinfo import ZoneInfo
 
@@ -100,32 +100,54 @@ CLAIM_RECOVER = "recover"
 @dataclass(frozen=True)
 class InFlight:
     """What holds a station link's in-flight claim: a ``kind`` and, when the
-    cached value is readable, the time it was taken."""
+    cached value is readable, the time it was taken and the local ``day`` of the
+    window being asked about."""
 
     kind: str
     since: Optional[datetime]
+    day: Optional[date] = None
 
 
-def claim(station_link_id, kind) -> bool:
-    """Take the station link's in-flight claim for ``kind``; ``False`` when
-    something else holds it. The value carries the start time for display."""
+def claim(station_link, kind, window_start) -> bool:
+    """Take the station link's in-flight claim for ``kind``, for the local day of
+    ``window_start``; ``False`` when something else holds it. The value carries
+    the start time and the day for display."""
+    day = _local(station_link, window_start).date().isoformat()
     return cache.add(
-        inflight_key(station_link_id), f"{kind}|{dj_timezone.now().isoformat()}",
+        inflight_key(station_link.id), f"{kind}|{dj_timezone.now().isoformat()}|{day}",
         timeout=INFLIGHT_SECONDS)
 
 
-def in_flight(station_link_id) -> Optional[InFlight]:
-    """The check or recovery running for the station link, or ``None``. A claim
-    is a cache value with a TTL, so a caller must never depend on its content."""
-    value = cache.get(inflight_key(station_link_id))
+def _parse_claim(value) -> Optional[InFlight]:
+    """A claim is a cache value with a TTL, so a caller must never depend on its
+    content: anything unreadable degrades to a check with no time or day."""
     if value is None:
         return None
-    kind, _, since = str(value).partition("|")
+    kind, _, rest = str(value).partition("|")
+    since, _, day = rest.partition("|")
     try:
         started = datetime.fromisoformat(since)
     except ValueError:
         started = None
-    return InFlight(kind if kind in (CLAIM_CHECK, CLAIM_RECOVER) else CLAIM_CHECK, started)
+    try:
+        local_day = date.fromisoformat(day)
+    except ValueError:
+        local_day = None
+    return InFlight(kind if kind in (CLAIM_CHECK, CLAIM_RECOVER) else CLAIM_CHECK,
+                    started, local_day)
+
+
+def in_flight(station_link_id) -> Optional[InFlight]:
+    """The check or recovery running for the station link, or ``None``."""
+    return _parse_claim(cache.get(inflight_key(station_link_id)))
+
+
+def in_flight_many(station_link_ids) -> dict:
+    """``{station link id: InFlight}`` for those with a run, in one cache call."""
+    keys = {inflight_key(link_id): link_id for link_id in station_link_ids}
+    return {
+        keys[key]: _parse_claim(value) for key, value in cache.get_many(list(keys)).items()
+    }
 
 
 @dataclass(frozen=True)
@@ -363,7 +385,7 @@ def check(station_link, start, end, parameter_id=None, force_fetch=False, now=No
     if not station_link.network_connection.has_external_source:
         raise CheckUnavailable(_("This connection has no external source to check."))
 
-    if not claim(station_link.id, CLAIM_CHECK):
+    if not claim(station_link, CLAIM_CHECK, window.start):
         raise CheckInFlight(
             _("A check or recovery is already running for this station link."))
 
@@ -450,7 +472,7 @@ def recover(station_link, check_id, now=None) -> str:
     if not station_link.network_connection.has_external_source:
         raise CheckUnavailable(_("This connection has no external source to recover from."))
 
-    if not claim(station_link.id, CLAIM_RECOVER):
+    if not claim(station_link, CLAIM_RECOVER, stored.window_start):
         raise CheckInFlight(
             _("A check or recovery is already running for this station link."))
     try:

@@ -769,19 +769,50 @@ class RecoveryTests(GapServiceTestCase):
 
 
 class InFlightClaimTests(GapServiceTestCase):
-    def test_a_check_and_a_recovery_claim_with_their_kind_and_start(self):
+    def test_a_check_and_a_recovery_claim_with_their_kind_start_and_local_day(self):
         self.assertIsNone(gap_service.in_flight(self.link.id))
 
-        self.assertTrue(gap_service.claim(self.link.id, gap_service.CLAIM_RECOVER))
+        self.assertTrue(gap_service.claim(self.link, gap_service.CLAIM_RECOVER, utc(2026, 3, 5, 6)))
 
         held = gap_service.in_flight(self.link.id)
         self.assertEqual(held.kind, gap_service.CLAIM_RECOVER)
         self.assertIsNotNone(held.since)
-        self.assertFalse(gap_service.claim(self.link.id, gap_service.CLAIM_CHECK))
+        self.assertEqual(held.day, datetime(2026, 3, 5).date())
+        self.assertFalse(gap_service.claim(self.link, gap_service.CLAIM_CHECK, utc(2026, 3, 5, 6)))
+
+    def test_the_day_is_the_station_links_local_day(self):
+        link = StationLinkFactory(
+            network_connection=NetworkConnectionFactory(stations_timezone="Africa/Nairobi"))
+
+        gap_service.claim(link, gap_service.CLAIM_CHECK, utc(2026, 3, 5, 22))  # 01:00 on the 6th
+
+        self.assertEqual(gap_service.in_flight(link.id).day, datetime(2026, 3, 6).date())
+
+    def test_a_check_claims_the_day_of_its_window(self):
+        self.run_tasks_eagerly()
+        with patch.object(gap_service, "release"):  # keep the claim the check took
+            check(self.link, *self.window(day=5), now=NOW)
+
+        self.assertEqual(gap_service.in_flight(self.link.id).day, datetime(2026, 3, 5).date())
 
     def test_release_clears_it(self):
-        gap_service.claim(self.link.id, gap_service.CLAIM_CHECK)
+        gap_service.claim(self.link, gap_service.CLAIM_CHECK, utc(2026, 3, 5, 6))
 
         gap_service.release(self.link.id)
 
         self.assertIsNone(gap_service.in_flight(self.link.id))
+
+    def test_old_and_unreadable_claims_degrade_to_a_check_with_no_day(self):
+        for value in ("check", "recover|nonsense", "weird|2026-03-05T10:00:00+00:00|x"):
+            cache.set(gap_service.inflight_key(self.link.id), value, timeout=60)
+            held = gap_service.in_flight(self.link.id)
+            self.assertIsNone(held.day)
+            self.assertIn(held.kind, (gap_service.CLAIM_CHECK, gap_service.CLAIM_RECOVER))
+
+    def test_many_links_are_read_in_one_call(self):
+        other = self.make_link()
+        gap_service.claim(other, gap_service.CLAIM_CHECK, utc(2026, 3, 5, 6))
+
+        held = gap_service.in_flight_many([self.link.id, other.id])
+
+        self.assertEqual(set(held), {other.id})
