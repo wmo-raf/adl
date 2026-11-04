@@ -86,3 +86,7 @@ You can access the user and developer guide at [https://adl-tool.readthedocs.io]
 ## Legal
 
 See [LEGAL.md](LEGAL.md)
+
+## Data protection and privacy
+
+See [PRIVACY.md](PRIVACY.md) for the data ADL processes and how its design aligns with GDPR, the UN Personal Data Protection and Privacy Principles and national data-protection laws.
