@@ -29,7 +29,7 @@ different receiving systems.
 | 18  | 🇰🇲 [Comoros](https://meteocomores.km)           | ADL FTP Plugin (LSI)                                                      | [Comoros  Wis2bo](https://wis2.meteocomores.km)             | ✅ Operational |
 | 19  | 🇸🇱 [Sierra Leone](https://slmet.gov.sl)         | ADL PulsoWeb Plugin, ADL ADCON DB Plugin                                  | [Sierra Leone Wis2box](https://wis2.slmet.gov.sl)           | ✅ Operational |
 | 20  | 🇪🇹 [Ethiopia](https://www.ethiomet.gov.et)      | ADL ADCON DB Plugin                                                       | [Ethiomet Wis2box](https://wis2.ethiomet.gov.et)            | ✅ Operational |
-| 21  | 🇲🇷 [Mauritania](https://meteomauritanie.mr)     | ADL PulsoWeb Plugin                                                       | [Mauritania Wis2box](https://wis2.meteomauritanie.mr)       | ⏳ In Progress |
+| 21  | 🇲🇷 [Mauritania](https://meteomauritanie.mr)     | ADL PulsoWeb Plugin                                                       | [Mauritania Wis2box](https://wis2.meteomauritanie.mr)       | ✅ Operational |
 | 22  | 🇳🇪 [Niger](https://www.niger-meteo.ne)          | ADL PulsoWeb Plugin                                                       | Niger Wis2box                                               | ⏳ In Progress |
 | 23  | 🇸🇳 [Senegal](https://anacim.sn)                 | ADCON, ADL PulsoWeb Plugin                                                | Senegal Wis2box                                             | ⏳ In Progress |
 | 24  | 🇸🇩 [Sudan](https://meteosudan.sd)               | ADL CIMAWebDrops Plugin                                                   | —                                                           | ⏳ In Progress |
@@ -89,4 +89,5 @@ See [LEGAL.md](LEGAL.md)
 
 ## Data protection and privacy
 
-See [PRIVACY.md](PRIVACY.md) for the data ADL processes and how its design aligns with GDPR, the UN Personal Data Protection and Privacy Principles and national data-protection laws.
+See [PRIVACY.md](PRIVACY.md) for the data ADL processes and how its design aligns with GDPR, the UN Personal Data
+Protection and Privacy Principles and national data-protection laws.
