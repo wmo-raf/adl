@@ -9,6 +9,7 @@ from django.utils import timezone
 from adl.config.celery import app
 from .models import (
     AvailabilityCheck,
+    IngestionBatchLog,
     NetworkConnectionHealthTransition,
     SourceProbeResult,
     StationLinkActivityLog,
@@ -23,6 +24,10 @@ def run_station_link_activity_log_cleanup(self):
     cutoff = timezone.now() - timedelta(days=7)
     deleted_count, _ = StationLinkActivityLog.objects.filter(time__lt=cutoff).delete()
     logger.info(f"[StationLinkActivityLog Cleanup] Deleted {deleted_count} old logs")
+
+    # Batch logs are read from activity rows, so they share their retention
+    deleted_batch_logs, _ = IngestionBatchLog.objects.filter(time__lt=cutoff).delete()
+    logger.info(f"[IngestionBatchLog Cleanup] Deleted {deleted_batch_logs} old batch logs")
 
     # One retention policy: availability checks go with the activity log
     deleted_checks, _ = AvailabilityCheck.objects.filter(created_at__lt=cutoff).delete()

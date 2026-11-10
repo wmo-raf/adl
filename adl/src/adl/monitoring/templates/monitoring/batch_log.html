@@ -1,0 +1,88 @@
+{% extends "wagtailadmin/generic/base.html" %}
+{% load i18n wagtailadmin_tags static %}
+
+{% block titletag %}{{ header_title }}{% endblock %}
+
+{% block extra_css %}
+    {{ block.super }}
+    <style>
+        .batch-log-section {
+            margin-bottom: 2rem;
+        }
+
+        .batch-log-section h2 {
+            margin-bottom: 0.5rem;
+        }
+    </style>
+{% endblock %}
+
+{% block main_content %}
+    <section class="batch-log-section">
+        <p class="run-log__meta">
+            {% if batch.network_connection %}
+                <span>{{ batch.network_connection.name }}</span>
+            {% endif %}
+            <span>{% trans "Started" %} {{ batch.time }}</span>
+            <span>{% trans "Task" %} {{ batch.task_id }}</span>
+        </p>
+        {% comment %}
+            The batch's own lines: what it logged between stations — spawning,
+            the batch time limit, its summary. Each station's lines are on that
+            station's run, listed below.
+        {% endcomment %}
+        {% if lines %}
+            <div class="run-log" id="batch-log-lines"></div>
+            {{ lines|json_script:"batch-log-data" }}
+        {% else %}
+            <p class="run-log__empty">{% trans "This batch logged nothing outside its station runs." %}</p>
+        {% endif %}
+    </section>
+
+    <section class="batch-log-section">
+        <h2>{% trans "Station runs in this batch" %}</h2>
+        <table class="listing">
+            <thead>
+            <tr>
+                <th>{% trans "Time" %}</th>
+                <th>{% trans "Station link" %}</th>
+                <th>{% trans "Status" %}</th>
+                <th>{% trans "Duration" %}</th>
+                <th>{% trans "Message" %}</th>
+            </tr>
+            </thead>
+            <tbody>
+            {% for run in runs %}
+                <tr>
+                    <td>{{ run.time }}</td>
+                    <td>
+                        <a href="{% url 'station_link_monitoring' run.station_link_id %}?direction={{ run.direction }}">
+                            {{ run.station_link }}
+                        </a>
+                    </td>
+                    <td>{{ run.status }}</td>
+                    <td>{% if run.duration_ms is not None %}{{ run.duration_seconds }} s{% endif %}</td>
+                    <td>{{ run.message|default:"" }}</td>
+                </tr>
+            {% empty %}
+                <tr>
+                    <td colspan="5">{% trans "No station runs were recorded under this task id." %}</td>
+                </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </section>
+{% endblock %}
+
+{% block extra_js %}
+    {{ block.super }}
+    <script src="{% static 'adl/js/run_log.js' %}"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            const container = document.getElementById('batch-log-lines');
+            const data = document.getElementById('batch-log-data');
+            if (container && data) {
+                window.adlRunLog.render(container, JSON.parse(data.textContent));
+            }
+        });
+    </script>
+{% endblock %}

@@ -3,7 +3,7 @@ from datetime import timedelta, datetime
 
 from django.http import JsonResponse
 from django.shortcuts import render, get_object_or_404
-from django.urls import reverse_lazy
+from django.urls import reverse, reverse_lazy
 from django.utils import timezone as dj_timezone
 from django.utils.dateparse import parse_datetime
 from django.utils.translation import gettext as _
@@ -261,7 +261,13 @@ def station_link_monitoring(request, link_id):
     if dispatch_channel_id:
         base_filters["dispatch_channel_id"] = dispatch_channel_id
     
-    qs = StationLinkActivityLog.objects.filter(**base_filters).select_related("dispatch_channel").order_by("-time")
+    # A run's log is fetched when its row is expanded, not with the listing
+    qs = (
+        StationLinkActivityLog.objects.filter(**base_filters)
+        .defer("log_lines")
+        .select_related("dispatch_channel")
+        .order_by("-time")
+    )
     
     today_start = dj_timezone.localtime().replace(hour=0, minute=0, second=0, microsecond=0)
     today_qs = qs.filter(time__gte=today_start)
@@ -293,6 +299,7 @@ def station_link_monitoring(request, link_id):
         "configuration_drift": drift if drift.drifted else None,
         "view_data_url": get_station_link_view_data_url(link),
         "availability_url": get_station_link_availability_url(link),
+        "events_url": f"{reverse('wagtailadmin_home')}events/",
     }
     return render(request, "monitoring/station_link_monitoring.html", context)
 

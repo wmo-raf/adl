@@ -11,6 +11,7 @@ https://docs.djangoproject.com/en/5.0/ref/settings/
 """
 
 import importlib
+import logging
 # Build paths inside the project like this: os.path.join(BASE_DIR, ...)
 import os
 from pathlib import Path
@@ -335,6 +336,13 @@ EVENTSTREAM_CHANNELMANAGER_CLASS = 'django_eventstream.channelmanager.DefaultCha
 ADL_LOG_LEVEL = env.str("ADL_LOG_LEVEL", "INFO")
 ADL_DATABASE_LOG_LEVEL = env.str("ADL_DATABASE_LOG_LEVEL", "ERROR")
 
+# ADL_LOG_LEVEL governs what the console prints, and is applied on the console
+# handler. The root logger itself stays at INFO or below: a logger drops
+# records under its level before any handler sees them, and per-run logs
+# (adl.core.run_log) keep INFO lines whatever the console is set to.
+_ADL_CAPTURE_LEVEL = min(logging.getLevelName(ADL_LOG_LEVEL.upper()), logging.INFO) \
+    if isinstance(logging.getLevelName(ADL_LOG_LEVEL.upper()), int) else logging.INFO
+
 LOGGING = {
     "version": 1,
     "disable_existing_loggers": False,
@@ -348,6 +356,7 @@ LOGGING = {
         "console": {
             "class": "logging.StreamHandler",
             "formatter": "console",
+            "level": ADL_LOG_LEVEL,
         },
     },
     "loggers": {
@@ -364,7 +373,7 @@ LOGGING = {
     },
     "root": {
         "handlers": ["console"],
-        "level": ADL_LOG_LEVEL,
+        "level": _ADL_CAPTURE_LEVEL,
     },
 }
 

@@ -19,6 +19,7 @@ from .views.availability import (
     data_availability,
 )
 from .views.activity import NetworkConnectionActivityView, DispatchChannelMonitoringView
+from .views.run_log import activity_log_lines, batch_log
 from .views.health import (
     connection_health,
     connection_probe_source,
@@ -64,5 +65,7 @@ urlpatterns = [
     path('station-link/<int:link_id>/', station_link_monitoring,
          name='station_link_monitoring'),
     path('station-link/<int:link_id>/check-source/', station_link_check_source,
-         name='station_link_check_source')
+         name='station_link_check_source'),
+    path('activity-log/<int:log_id>/lines/', activity_log_lines, name='activity_log_lines'),
+    path('batch-log/<str:task_id>/', batch_log, name='batch_log'),
 ]

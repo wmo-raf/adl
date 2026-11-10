@@ -60,6 +60,11 @@ class StationLinkActivityLog(TimescaleModel):
     )
     error_layer = models.PositiveSmallIntegerField(blank=True, null=True)
     exception_class = models.CharField(max_length=255, blank=True, null=True)
+    # The run's own log (see adl.core.run_log): the first and last lines it
+    # emitted, flushed while it runs, so a run that dies keeps the lines that
+    # say where. NULL for rows written before capture existed and for rows
+    # that are not runs (skips).
+    log_lines = models.JSONField(blank=True, null=True)
     
     class Meta:
         indexes = [
@@ -100,6 +105,28 @@ class StationLinkActivityLog(TimescaleModel):
     @property
     def complete(self):
         return self.success and self.status == self.ActivityStatus.COMPLETED
+
+
+class IngestionBatchLog(models.Model):
+    """
+    The lines an ingestion batch task logged outside any station run —
+    spawning, the batch's time limit, its summary — keyed by the task id that
+    every :class:`StationLinkActivityLog` in the batch also records. Read
+    from a station run to see what else shared its batch's time budget.
+    """
+
+    wagtail_reference_index_ignore = True
+
+    time = models.DateTimeField(db_index=True)
+    task_id = models.CharField(max_length=255, unique=True)
+    network_connection = models.ForeignKey(
+        "core.NetworkConnection", on_delete=models.CASCADE, null=True, blank=True,
+        related_name="batch_logs",
+    )
+    log_lines = models.JSONField(blank=True, null=True)
+
+    def __str__(self):
+        return f"Batch {self.task_id} - {self.time}"
 
 
 class NetworkConnectionHealth(models.Model):
