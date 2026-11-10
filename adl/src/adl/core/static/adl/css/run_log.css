@@ -1,0 +1,70 @@
+/*
+ * Per-run logs (adl.core.run_log): a station run's log on the station-link
+ * monitoring page and a batch's log on its own page.
+ *
+ * Built on Wagtail's CSS variables so it tracks the admin theme, dark mode
+ * included. Only WARNING and above are coloured: an INFO line is the normal
+ * case and colouring it would drown the lines that matter.
+ */
+
+.run-log {
+    margin: 0;
+    padding: 0.75rem 1rem;
+    max-height: 32rem;
+    overflow: auto;
+    border: 1px solid var(--w-color-border-furniture, #e0e0e0);
+    border-radius: 4px;
+    background: var(--w-color-surface-page, #fff);
+    color: var(--w-color-text-context, #333);
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 0.75rem;
+    line-height: 1.5;
+}
+
+.run-log__line {
+    display: grid;
+    grid-template-columns: max-content max-content minmax(0, 1fr);
+    gap: 0.75rem;
+}
+
+.run-log__time,
+.run-log__level {
+    color: var(--w-color-text-meta, #757575);
+    white-space: nowrap;
+}
+
+.run-log__msg {
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+}
+
+.run-log__line--warning .run-log__level,
+.run-log__line--warning .run-log__msg {
+    color: var(--w-color-warning-100, #b85c00);
+}
+
+.run-log__line--error .run-log__level,
+.run-log__line--error .run-log__msg,
+.run-log__line--critical .run-log__level,
+.run-log__line--critical .run-log__msg {
+    color: var(--w-color-critical-200, #cd4444);
+}
+
+.run-log__omitted {
+    margin: 0.25rem 0;
+    color: var(--w-color-text-meta, #757575);
+    font-style: italic;
+}
+
+.run-log__empty,
+.run-log__meta {
+    color: var(--w-color-text-meta, #757575);
+    font-size: 0.875rem;
+}
+
+.run-log__meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1rem;
+    margin-bottom: 0.5rem;
+}

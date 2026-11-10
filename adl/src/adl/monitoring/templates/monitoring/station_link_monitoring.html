@@ -70,6 +70,21 @@
             </div>
         {% endif %}
 
+        {% comment %}
+            Labels for the run-log toggle, kept in the template so they are
+            translated; the script reads them from here.
+        {% endcomment %}
+        <div id="run-log-config" hidden
+             data-events-url="{{ events_url }}"
+             data-show-label="{% trans 'Show log' %}"
+             data-hide-label="{% trans 'Hide log' %}"
+             data-loading-label="{% trans 'Loading log…' %}"
+             data-error-label="{% trans 'Could not load this run’s log.' %}"
+             data-empty-label="{% trans 'This run logged nothing at INFO level or above.' %}"
+             data-uncaptured-label="{% trans 'No log was recorded for this run: it ran before per-run logs were kept.' %}"
+             data-live-label="{% trans 'Live — following this run' %}"
+             data-batch-label="{% trans 'Batch log' %}"></div>
+
         <table class="listing">
             <thead>
             <tr>
@@ -80,6 +95,7 @@
                 {% if direction == 'push' %}
                     <th>Dispatch Channel</th>
                 {% endif %}
+                <th>{% trans "Log" %}</th>
             </tr>
             </thead>
             <tbody>
@@ -115,6 +131,15 @@
                             {{ activity.dispatch_channel }}
                         </td>
                     {% endif %}
+                    <td>
+                        {% if activity.status != "SKIPPED" %}
+                            <button type="button" class="button button-small button-secondary run-log-toggle"
+                                    aria-expanded="false"
+                                    data-lines-url="{% url 'activity_log_lines' activity.id %}">
+                                {% trans "Show log" %}
+                            </button>
+                        {% endif %}
+                    </td>
                 </tr>
             {% endfor %}
 
@@ -129,4 +154,111 @@
     </div>
 
 
+{% endblock %}
+
+
+{% block extra_js %}
+    {{ block.super }}
+    <script src="{% static 'adl/js/run_log.js' %}"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            const config = document.getElementById('run-log-config').dataset;
+
+            function metaLine(data) {
+                const meta = document.createElement('div');
+                meta.className = 'run-log__meta';
+                if (data.running) {
+                    const live = document.createElement('span');
+                    live.className = 'run-log__live';
+                    live.textContent = config.liveLabel;
+                    meta.append(live);
+                }
+                if (data.batch_url) {
+                    const link = document.createElement('a');
+                    link.href = data.batch_url;
+                    link.textContent = config.batchLabel;
+                    meta.append(link);
+                }
+                return meta;
+            }
+
+            document.querySelectorAll('.run-log-toggle').forEach(function (button) {
+                let detail = null;
+                let source = null;
+
+                function collapse() {
+                    if (source) {
+                        source.close();
+                        source = null;
+                    }
+                    detail.remove();
+                    detail = null;
+                    button.setAttribute('aria-expanded', 'false');
+                    button.textContent = config.showLabel;
+                }
+
+                button.addEventListener('click', async function () {
+                    if (detail) {
+                        collapse();
+                        return;
+                    }
+
+                    const row = button.closest('tr');
+                    detail = document.createElement('tr');
+                    const cell = document.createElement('td');
+                    cell.colSpan = row.cells.length;
+                    detail.append(cell);
+                    row.after(detail);
+                    button.setAttribute('aria-expanded', 'true');
+                    button.textContent = config.hideLabel;
+
+                    const status = document.createElement('p');
+                    status.className = 'run-log__empty';
+                    status.textContent = config.loadingLabel;
+                    cell.append(status);
+
+                    let data;
+                    try {
+                        const response = await fetch(button.dataset.linesUrl, {credentials: 'same-origin'});
+                        if (!response.ok) {
+                            throw new Error(String(response.status));
+                        }
+                        data = await response.json();
+                    } catch (e) {
+                        status.textContent = config.errorLabel;
+                        return;
+                    }
+                    if (!detail) {
+                        return;  // collapsed while loading
+                    }
+
+                    const log = document.createElement('div');
+                    log.className = 'run-log';
+                    window.adlRunLog.render(log, data.lines);
+
+                    if (!data.captured && !data.running) {
+                        status.textContent = config.uncapturedLabel;
+                    } else if (!data.lines.length && !data.running) {
+                        status.textContent = config.emptyLabel;
+                    } else {
+                        status.remove();
+                    }
+                    cell.append(metaLine(data));
+                    if (data.lines.length || data.running) {
+                        cell.append(log);
+                        log.scrollTop = log.scrollHeight;
+                    }
+
+                    if (data.running) {
+                        source = window.adlRunLog.follow(log, config.eventsUrl, data.channel, function () {
+                            const live = cell.querySelector('.run-log__live');
+                            if (live) {
+                                live.remove();
+                            }
+                        });
+                    }
+                });
+            });
+        });
+    </script>
 {% endblock %}

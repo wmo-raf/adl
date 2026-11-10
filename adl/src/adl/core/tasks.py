@@ -21,6 +21,7 @@ from .classification import mark_failed, stamp_failure
 from .dispatchers import advance_dispatch_cursor, get_station_dispatch_records
 from .logging import TaskLogger
 from .redaction import redact_secrets
+from .run_log import capture_activity_log
 from .utils import get_object_or_none
 
 logger = logging.getLogger(__name__)
@@ -370,12 +371,26 @@ def run_network_plugin(self, network_id, manual=False):
 
 @shared_task(bind=True, name=INGESTION_BATCH_TASK_NAME)
 def process_station_link_batch(self, network_id, station_link_ids):
+    from .run_log import capture_batch_log
+
+    # What the batch logs between stations — spawning, the time limit, the
+    # summary — is kept under its task id, which each station's activity row
+    # also records; each station's own lines go to that station's row
+    with capture_batch_log(self.request.id, network_connection=_connection_or_none(network_id)):
+        return _process_station_link_batch(self.request.id, network_id, station_link_ids)
+
+
+def _connection_or_none(network_id):
+    from .models import NetworkConnection
+    return NetworkConnection.objects.filter(id=network_id).first()
+
+
+def _process_station_link_batch(task_id, network_id, station_link_ids):
     from adl.core.registries import plugin_registry
     from .models import NetworkConnection
     from .models import StationLink
     
     # Create task logger for this batch task
-    task_id = self.request.id
     log = TaskLogger(
         task_id=task_id,
         plugin_label="BatchProcessor",
@@ -732,56 +747,59 @@ def dispatch_station(self, channel_id, station_link_id):
         station_link=station_link,
         direction="push",
         dispatch_channel=channel,
+        task_id=self.request.id,
     )
 
-    try:
-        data_records = get_station_dispatch_records(channel, station_link)
+    # Wraps the run so its final flush lands after the save in its finally
+    with capture_activity_log(log):
+        try:
+            data_records = get_station_dispatch_records(channel, station_link)
 
-        if not data_records:
+            if not data_records:
+                log.success = True
+                log.records_count = 0
+                log.message = "No data records to send"
+                log.status = StationLinkActivityLog.ActivityStatus.COMPLETED
+                return {"records_sent": 0}
+
+            num_sent, last_sent_obs_time = channel.send_station_data(station_link, data_records)
+
+            previous_sent_obs_time = None
+            if num_sent > 0 and last_sent_obs_time:
+                previous_sent_obs_time = advance_dispatch_cursor(
+                    channel_id, station_link.station_id, last_sent_obs_time
+                )
+
             log.success = True
-            log.records_count = 0
-            log.message = "No data records to send"
+            log.records_count = num_sent
+            if previous_sent_obs_time:
+                log.obs_start_time = previous_sent_obs_time
+            if last_sent_obs_time:
+                log.obs_end_time = last_sent_obs_time
             log.status = StationLinkActivityLog.ActivityStatus.COMPLETED
-            return {"records_sent": 0}
+            log.message = f"Sent {num_sent} records successfully."
+            return {"records_sent": num_sent}
 
-        num_sent, last_sent_obs_time = channel.send_station_data(station_link, data_records)
+        except SoftTimeLimitExceeded as e:
+            timeout = channel.dispatch_timeout_seconds
+            log.success = False
+            log.message = f"Dispatch timed out after {timeout} seconds"
+            log.status = StationLinkActivityLog.ActivityStatus.FAILED
+            stamp_failure(log, e)
+            logger.error("[DISPATCH] Dispatch for station %s on channel %s timed out after %s seconds",
+                         station_link, channel.name, timeout)
+            return {"records_sent": 0, "timed_out": True}
 
-        previous_sent_obs_time = None
-        if num_sent > 0 and last_sent_obs_time:
-            previous_sent_obs_time = advance_dispatch_cursor(
-                channel_id, station_link.station_id, last_sent_obs_time
-            )
+        except Exception as e:
+            message = mark_failed(log, e)
+            logger.error("[DISPATCH] Error dispatching station %s on channel %s: %s",
+                         station_link, channel.name, message)
+            raise
 
-        log.success = True
-        log.records_count = num_sent
-        if previous_sent_obs_time:
-            log.obs_start_time = previous_sent_obs_time
-        if last_sent_obs_time:
-            log.obs_end_time = last_sent_obs_time
-        log.status = StationLinkActivityLog.ActivityStatus.COMPLETED
-        log.message = f"Sent {num_sent} records successfully."
-        return {"records_sent": num_sent}
-
-    except SoftTimeLimitExceeded as e:
-        timeout = channel.dispatch_timeout_seconds
-        log.success = False
-        log.message = f"Dispatch timed out after {timeout} seconds"
-        log.status = StationLinkActivityLog.ActivityStatus.FAILED
-        stamp_failure(log, e)
-        logger.error("[DISPATCH] Dispatch for station %s on channel %s timed out after %s seconds",
-                     station_link, channel.name, timeout)
-        return {"records_sent": 0, "timed_out": True}
-
-    except Exception as e:
-        message = mark_failed(log, e)
-        logger.error("[DISPATCH] Error dispatching station %s on channel %s: %s",
-                     station_link, channel.name, message)
-        raise
-
-    finally:
-        cache.delete(lock_key)
-        log.duration_ms = (time.monotonic() - start) * 1000
-        log.save()
+        finally:
+            cache.delete(lock_key)
+            log.duration_ms = (time.monotonic() - start) * 1000
+            log.save()
 
 
 @shared_task(name="adl.core.tasks.sweep_stale_activity_logs",

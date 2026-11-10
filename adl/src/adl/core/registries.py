@@ -34,6 +34,7 @@ from . import aggregates
 from .classification import mark_failed, stamp_failure
 from .date_utils import make_record_timezone_aware
 from .logging import TaskLogger
+from .run_log import capture_activity_log, current_task_id
 from .registry import Registry, Instance
 from .validators import StationRecordModel
 
@@ -1009,117 +1010,121 @@ class Plugin(Instance):
             station_link=station_link,
             direction='pull',
             trigger=trigger,
+            task_id=current_task_id(),
         )
 
-        # Accumulated chunk by chunk, so the numbers survive an exception out
-        # of the save loop and the terminal activity log can carry them
-        tally = _SaveTally()
+        # Wraps the run so its final flush lands after the run's own save of
+        # the row; see adl.core.run_log
+        with capture_activity_log(activity_log):
+            # Accumulated chunk by chunk, so the numbers survive an exception out
+            # of the save loop and the terminal activity log can carry them
+            tally = _SaveTally()
 
-        # Duck-typed handover: the plugin may set this while listing its
-        # source, and the terminal log records it. Re-initialised every run
-        # so a value left by a previous run on a reused instance cannot be
-        # recorded as if this run had reported it.
-        station_link.adl_sources_count = None
+            # Duck-typed handover: the plugin may set this while listing its
+            # source, and the terminal log records it. Re-initialised every run
+            # so a value left by a previous run on a reused instance cannot be
+            # recorded as if this run had reported it.
+            station_link.adl_sources_count = None
 
-        try:
-            start_date, end_date = self.get_dates_for_station(station_link)
+            try:
+                start_date, end_date = self.get_dates_for_station(station_link)
             
-            if initial_start_date:
-                start_date = initial_start_date
-            if initial_end_date:
-                end_date = initial_end_date
+                if initial_start_date:
+                    start_date = initial_start_date
+                if initial_end_date:
+                    end_date = initial_end_date
             
-            log.info("Fetching %s from %s to %s.", station_link, start_date, end_date)
+                log.info("Fetching %s from %s to %s.", station_link, start_date, end_date)
             
-            # Get station data - should be a generator for memory efficiency
-            station_records = self.get_station_data(
-                station_link,
-                start_date=start_date,
-                end_date=end_date
-            )
-            
-            if station_records is None:
-                # Converged with the empty-iterable case: both fall through to
-                # the normal terminal path below, so the activity log always
-                # reaches COMPLETED instead of resting at STARTED.
-                station_records = []
-
-            def counted(records):
-                for record in records:
-                    if record is not FLUSH:
-                        report["fetched"] += 1
-                    yield record
-
-            station_records = counted(station_records)
-
-            # Chunked save - handles generators efficiently. Consumed chunk
-            # by chunk (rather than through save_records) so that if the
-            # source raises part-way, the tally still holds what was
-            # persisted before the exception reaches the handlers below.
-            for chunk_result in self._iter_save_records(
-                    station_link, station_records
-            ):
-                tally.add(*chunk_result)
-            
-            if tally.saved == 0:
-                log.info("No records saved for %s.", station_link)
-                activity_log.status = StationLinkActivityLog.ActivityStatus.COMPLETED
-                activity_log.success = True
-                activity_log.message = "No new records to save."
-            else:
-                log.info(
-                    "Saved %d records for %s from %s to %s.",
-                    tally.saved, station_link, tally.earliest, tally.latest
+                # Get station data - should be a generator for memory efficiency
+                station_records = self.get_station_data(
+                    station_link,
+                    start_date=start_date,
+                    end_date=end_date
                 )
-                activity_log.status = StationLinkActivityLog.ActivityStatus.COMPLETED
-                activity_log.success = True
-                activity_log.message = f"Processed {tally.saved} records."
-        
-        except SoftTimeLimitExceeded as e:
-            # Re-raised so the batch task's soft limit actually stops the
-            # batch — swallowed with the generic errors below, the limit
-            # would be inert and the worker would run on to the hard kill
-            activity_log.success = False
-            activity_log.message = "Ingestion timed out (batch soft time limit exceeded)"
-            if tally.saved:
-                activity_log.message += f"; {tally.saved} records saved before the cut-off"
-            activity_log.status = StationLinkActivityLog.ActivityStatus.FAILED
-            stamp_failure(activity_log, e)
-            log.error("Ingestion for station %s timed out (%d records saved before the cut-off)",
-                      station_link, tally.saved)
-            raise
-        except Exception as e:
-            error_msg = mark_failed(activity_log, e)
-            log.error("Error processing station %s: %s (%d records saved before the failure)",
-                      station_link, error_msg, tally.saved)
-        finally:
-            activity_log.duration_ms = (time.monotonic() - start) * 1000
-            activity_log.records_count = tally.saved
-            if tally.saved:
-                # Set on every terminal path, not only the clean one: a run
-                # cut short still saved a real range, and the log should say so
-                activity_log.obs_start_time = tally.earliest
-                activity_log.obs_end_time = tally.latest
-            activity_log.sources_count = _sanitize_sources_count(
-                getattr(station_link, "adl_sources_count", None)
-            )
-            activity_log.save()
-            if not bypass_lock:
-                cache.delete(lock_key)
+            
+                if station_records is None:
+                    # Converged with the empty-iterable case: both fall through to
+                    # the normal terminal path below, so the activity log always
+                    # reaches COMPLETED instead of resting at STARTED.
+                    station_records = []
 
-            # The aggregate's refresh policy only reaches back 90 days, so a save
-            # into an explicit (possibly older) window must refresh that window.
-            # Scheduled incremental runs are covered by the policy.
-            explicit_window = initial_start_date or initial_end_date
-            if explicit_window and tally.saved and tally.earliest and tally.latest:
-                try:
-                    aggregates.refresh_hourly_aggregate(tally.earliest, tally.latest)
-                except Exception as e:
-                    log.error(
-                        "Hourly aggregate refresh failed for %s (%s to %s): %s; "
-                        "the saved records are intact.",
-                        station_link, tally.earliest, tally.latest, e
+                def counted(records):
+                    for record in records:
+                        if record is not FLUSH:
+                            report["fetched"] += 1
+                        yield record
+
+                station_records = counted(station_records)
+
+                # Chunked save - handles generators efficiently. Consumed chunk
+                # by chunk (rather than through save_records) so that if the
+                # source raises part-way, the tally still holds what was
+                # persisted before the exception reaches the handlers below.
+                for chunk_result in self._iter_save_records(
+                        station_link, station_records
+                ):
+                    tally.add(*chunk_result)
+            
+                if tally.saved == 0:
+                    log.info("No records saved for %s.", station_link)
+                    activity_log.status = StationLinkActivityLog.ActivityStatus.COMPLETED
+                    activity_log.success = True
+                    activity_log.message = "No new records to save."
+                else:
+                    log.info(
+                        "Saved %d records for %s from %s to %s.",
+                        tally.saved, station_link, tally.earliest, tally.latest
                     )
+                    activity_log.status = StationLinkActivityLog.ActivityStatus.COMPLETED
+                    activity_log.success = True
+                    activity_log.message = f"Processed {tally.saved} records."
+        
+            except SoftTimeLimitExceeded as e:
+                # Re-raised so the batch task's soft limit actually stops the
+                # batch — swallowed with the generic errors below, the limit
+                # would be inert and the worker would run on to the hard kill
+                activity_log.success = False
+                activity_log.message = "Ingestion timed out (batch soft time limit exceeded)"
+                if tally.saved:
+                    activity_log.message += f"; {tally.saved} records saved before the cut-off"
+                activity_log.status = StationLinkActivityLog.ActivityStatus.FAILED
+                stamp_failure(activity_log, e)
+                log.error("Ingestion for station %s timed out (%d records saved before the cut-off)",
+                          station_link, tally.saved)
+                raise
+            except Exception as e:
+                error_msg = mark_failed(activity_log, e)
+                log.error("Error processing station %s: %s (%d records saved before the failure)",
+                          station_link, error_msg, tally.saved)
+            finally:
+                activity_log.duration_ms = (time.monotonic() - start) * 1000
+                activity_log.records_count = tally.saved
+                if tally.saved:
+                    # Set on every terminal path, not only the clean one: a run
+                    # cut short still saved a real range, and the log should say so
+                    activity_log.obs_start_time = tally.earliest
+                    activity_log.obs_end_time = tally.latest
+                activity_log.sources_count = _sanitize_sources_count(
+                    getattr(station_link, "adl_sources_count", None)
+                )
+                activity_log.save()
+                if not bypass_lock:
+                    cache.delete(lock_key)
+
+                # The aggregate's refresh policy only reaches back 90 days, so a save
+                # into an explicit (possibly older) window must refresh that window.
+                # Scheduled incremental runs are covered by the policy.
+                explicit_window = initial_start_date or initial_end_date
+                if explicit_window and tally.saved and tally.earliest and tally.latest:
+                    try:
+                        aggregates.refresh_hourly_aggregate(tally.earliest, tally.latest)
+                    except Exception as e:
+                        log.error(
+                            "Hourly aggregate refresh failed for %s (%s to %s): %s; "
+                            "the saved records are intact.",
+                            station_link, tally.earliest, tally.latest, e
+                        )
 
         return tally.saved
     

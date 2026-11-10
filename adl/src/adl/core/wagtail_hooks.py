@@ -123,11 +123,14 @@ def insert_editor_js():
 def insert_global_admin_css():
     # The one status-badge convention, shared across admin pages (station-link
     # status panel, ingestion diagnostic) instead of copied per template, and
-    # the page layout every admin view shares (top spacing under the slim header)
+    # the page layout every admin view shares (top spacing under the slim header),
+    # and the per-run log view shared by station-link monitoring and batch logs
     return format_html(
-        '<link rel="stylesheet" href="{}"><link rel="stylesheet" href="{}">',
+        '<link rel="stylesheet" href="{}"><link rel="stylesheet" href="{}">'
+        '<link rel="stylesheet" href="{}">',
         static("adl/css/status_badges.css"),
         static("adl/css/admin_layout.css"),
+        static("adl/css/run_log.css"),
     )
 
 
