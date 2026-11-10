@@ -12,6 +12,42 @@ This file starts at 0.8.9. Earlier history is in the git log.
 
 ## [Unreleased]
 
+## [0.8.21] — 2026-11-10
+
+Per-run logs: what a worker was doing during an ingestion or dispatch run can
+now be read from the admin, without the server's logs. A run swept to "worker
+died mid-run" keeps the lines that say where it stopped. (#385)
+
+### Added
+
+- **Each run keeps its own log** on its activity row: every log record at
+  INFO or above emitted while the run is open — core, the plugin, its decoder
+  and client libraries — bounded to the first 200 and last 200 lines, redacted,
+  tracebacks included. Written at most every 2 s while the run goes, so a run
+  killed outright loses at most its last seconds. Plugins need no changes.
+- **Show log** on the station-link monitoring page, per run (pull and push).
+  A run still in progress is followed live.
+- **Batch log page**: what an ingestion batch logged between its stations
+  (spawning, its time limit, its summary), and the station runs that shared
+  its time budget. Activity rows now record their Celery task id, which links
+  a run to its batch. Batch logs are pruned with the activity log.
+
+### Changed
+
+- **`ADL_LOG_LEVEL` now applies to the console handler**, not the root logger.
+  What the console prints is unchanged; INFO records are now created even when
+  the console is at `WARNING`, so per-run logs keep them.
+
+### Upgrade notes
+
+- One migration in `monitoring` (0016) adds a nullable `log_lines` column to
+  the activity log and the `IngestionBatchLog` table. It adds only; nothing to
+  do beforehand.
+- A new stylesheet, `adl/css/run_log.css`, is linked on every admin page. Run
+  `collectstatic` as usual (the image build does).
+- For the Campbell / growing-file timeouts this release helps diagnose, the fix
+  itself is in `adl-ftp-plugin` 0.15.0, which requires no newer core.
+
 ## [0.8.20] — 2026-10-26
 
 Data availability: an operator can now see, hour by hour and day by day,
