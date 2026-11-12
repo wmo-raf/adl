@@ -12,6 +12,40 @@ This file starts at 0.8.9. Earlier history is in the git log.
 
 ## [Unreleased]
 
+## [0.8.22] — 2026-11-12
+
+Security release. Upgrade promptly: it fixes a critical cross-site scripting
+flaw in the map viewer and high-severity advisories in Wagtail and the
+browser-side libraries. There are no feature changes. (#373, #395, #399)
+
+### Security
+
+- **maplibre-gl 5.10 → 6.18** (critical). Its attribution sanitizer could be
+  bypassed for zero-click XSS. The viewer map shows attribution text supplied
+  by third-party style and tile services, so a compromised upstream service
+  could run script in an admin's browser.
+- **Wagtail 7.4.1 → 7.4.3**, fixing the Wagtail advisories (one high,
+  several moderate and low).
+- **Browser bundles rebuilt** with fixed axios (1.21), highcharts (12.6.2),
+  vue-i18n / @intlify (11.4.18), follow-redirects and form-data. Earlier
+  dependency bumps only changed lockfiles; the compiled bundles under
+  `static/vue/` (what actually ships) still contained the vulnerable code until
+  this release.
+- Build-time tooling (vite, postcss, nanoid, esbuild, browserslist) is also
+  updated. These never reached deployments.
+
+### Changed
+
+- The Vue apps pin Node 22 (`.nvmrc`, `engines: >=22.12`) for building the
+  committed bundles.
+
+### Upgrade notes
+
+- No migrations.
+- `requirements.txt` changed (Wagtail), so rebuild the image rather than only
+  pulling new code. Run `collectstatic` as usual (the image build does).
+- Plugins need no changes: Wagtail is a patch release within 7.4.
+
 ## [0.8.21] — 2026-11-10
 
 Per-run logs: what a worker was doing during an ingestion or dispatch run can
