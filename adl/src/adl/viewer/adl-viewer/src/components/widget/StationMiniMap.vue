@@ -1,7 +1,6 @@
 <script setup>
 import {onMounted, onUnmounted, ref, watch} from "vue"
-import maplibregl from 'maplibre-gl'
-import 'maplibre-gl/dist/maplibre-gl.css'
+import maplibregl from '@/utils/maplibre'
 import {addCountryBoundary} from '@/composables/useCountryBoundary.js'
 
 const props = defineProps({

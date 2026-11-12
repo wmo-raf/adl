@@ -2,8 +2,7 @@
 import {computed, onMounted, onUnmounted, ref, watch} from "vue";
 import {useNetworkStore} from "@/stores/network.js";
 import {useMapStore} from "@/stores/map.js";
-import maplibregl from 'maplibre-gl';
-import 'maplibre-gl/dist/maplibre-gl.css';
+import maplibregl from '@/utils/maplibre'
 import NetworkConnectionSelect from "@/components/table-view/NetworkConnectionSelect.vue";
 import DataParameterSelect from "@/components/map-view/DataParameterSelect.vue";
 import TimeControls from "@/components/map-view/TimeControls.vue";
