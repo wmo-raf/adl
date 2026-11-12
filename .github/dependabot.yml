@@ -9,6 +9,7 @@
 #
 # pip: grouped security updates, plus a monthly grouped PR for minor/patch
 # releases (Wagtail/Django patch releases ship server-side as soon as merged).
+# Major version updates are ignored (see below).
 version: 2
 updates:
   - package-ecosystem: npm
@@ -35,6 +36,13 @@ updates:
     directory: /adl
     schedule:
       interval: monthly
+    # Major upgrades (Wagtail, Django, ...) affect every plugin and are
+    # planned as their own projects, not merged as Dependabot PRs.
+    # This only affects version updates; security updates that need a
+    # major bump still come through.
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
     groups:
       python-security:
         applies-to: security-updates
