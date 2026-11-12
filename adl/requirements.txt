@@ -28,7 +28,7 @@ minio==7.2.20
 gunicorn==26.0.0
 uvicorn[standard]==0.30.3
 wagtail-font-awesome-svg==2.0
-wagtail-icon-chooser>=0.3.0
+wagtail-icon-chooser>=0.3.3
 pint==0.25.3
 pandas==3.0.3
 python-dateutil==2.9.0.post0
