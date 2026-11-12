@@ -1,0 +1,45 @@
+# Dependabot configuration.
+#
+# npm (the two Vue apps): security updates only, one grouped PR per app.
+# Routine version-update PRs are disabled (open-pull-requests-limit: 0)
+# because the compiled bundles under */static/vue/ are committed and are
+# what actually ships. A lockfile bump alone changes nothing that's deployed:
+# every npm PR has to be rebuilt by hand (Node from .nvmrc, `npm run build`)
+# and the new bundle committed before the fix reaches users.
+#
+# pip: grouped security updates, plus a monthly grouped PR for minor/patch
+# releases (Wagtail/Django patch releases ship server-side as soon as merged).
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /adl/src/adl/viewer/adl-viewer
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 0
+    groups:
+      viewer-security:
+        applies-to: security-updates
+        patterns: ["*"]
+
+  - package-ecosystem: npm
+    directory: /adl/src/adl/monitoring/monitoring-ui-vue
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 0
+    groups:
+      monitoring-security:
+        applies-to: security-updates
+        patterns: ["*"]
+
+  - package-ecosystem: pip
+    directory: /adl
+    schedule:
+      interval: monthly
+    groups:
+      python-security:
+        applies-to: security-updates
+        patterns: ["*"]
+      python-minor-patch:
+        applies-to: version-updates
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
