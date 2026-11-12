@@ -1,7 +1,6 @@
 <script setup>
 import {computed, onMounted, onUnmounted, ref, watch} from "vue"
-import maplibregl from 'maplibre-gl'
-import 'maplibre-gl/dist/maplibre-gl.css'
+import maplibregl from '@/utils/maplibre'
 import {useWidgetStore} from "@/stores/widget.js"
 import {addCountryBoundary} from '@/composables/useCountryBoundary.js'
 import {renderParamIcon} from '@/utils/paramIcons.js'
