@@ -9,7 +9,7 @@ django-countries-geoextent>=0.0.1
 django-cleanup==9.0.0
 pyoscar==0.9.0
 django-timezone-field==7.2.1
-django-redis==6.0.0
+django-redis==7.0.0
 # The broker stack is a direct dependency: first-party code calls
 # celery's inspect API, opens kombu connections and rides the redis
 # transport (adl/src/adl/core/broker.py). Exact pins at the measured set —
