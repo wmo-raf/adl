@@ -2,9 +2,13 @@
 
 ADL supports the following dispatch channel types:
 
-- **WIS2BOX Upload**: Publishes observation data to WMO WIS2 infrastructure
-- **Standard FTP/SFTP Upload**: Uploads data files to FTP or SFTP servers
-- **SmartMet FTP/SFTP Upload**: Specialized upload for SmartMet weather systems
+- **WIS2BOX Upload**: Publishes observation data to WMO WIS2 infrastructure.
+  See [WIS2Box Integration](../wis2box_integration.md).
+- **Standard FTP/SFTP Upload**: Uploads CSV files to an FTP or SFTP server, for any system that imports from
+  FTP, **including Climsoft**. See [Climsoft Integration](../climsoft_integration.md) and the
+  [FTP plugin guide](../plugins/adl-ftp-plugin/guide.md#standard-ftpsftp-upload).
+- **SmartMet FTP/SFTP Upload**: Specialized upload for FMI SmartMet weather systems. See the
+  [FTP plugin guide](../plugins/adl-ftp-plugin/guide.md#smartmet-ftpsftp-upload).
 
 ```{note}
 The configuration fields you see will vary depending on which dispatch channel type you select. 
@@ -80,13 +84,23 @@ For **WIS2BOX Upload** channels, you'll configure:
 - **Use Secure Connection**: Enable HTTPS connection
 - **Dataset ID**: The dataset identifier in WIS2Box
 
-```{important}
-If you select a different channel type (such as Standard FTP/SFTP Upload or SmartMet FTP/SFTP Upload), 
-you will see different configuration fields appropriate to that channel type. For example, 
-FTP channels will require fields like host, port, directory paths, and connection credentials 
-specific to FTP/SFTP protocols. Check the documentation for your chosen channel type for detailed configuration 
-instructions.
-```
+For the full setup, see [WIS2Box Integration](../wis2box_integration.md).
+
+#### Example: Standard FTP/SFTP Upload Configuration
+
+For **Standard FTP/SFTP Upload** channels, you'll configure the destination server and how files are written.
+The values below are the recommended configuration for sending data to Climsoft:
+
+- **Timezone for output dates**: UTC
+- **Connection Type**: FTP (or SFTP, if the server supports it)
+- **Host**, **Port**, **Username**, **Password**: The destination account
+- **Remote Directory**: The directory to write under, e.g. `/climsoft`. ADL creates one sub-folder per station
+- **Use FTP Passive Mode**: On
+- **Write Mode**: Append record to single daily file
+
+For the full Climsoft setup, including Part A and the parameter mappings, see
+[Climsoft Integration](../climsoft_integration.md). For every field of the FTP channels, see the
+[FTP plugin guide](../plugins/adl-ftp-plugin/guide.md#standard-ftpsftp-upload).
 
 (dispatch-parameter-mappings)=
 
@@ -140,6 +154,10 @@ Kelvin:
 - **Temperature:**  
   `25 °C` → `298.15 K`
 
+Not every destination needs a conversion: Climate Data Management Systems such as Climsoft usually store values
+in the same units ADL uses (°C, hPa, mm), so the Channel Unit is the same as the ADL unit
+(see [Climsoft Integration](../climsoft_integration.md)).
+
 Set the **Channel Unit** to the unit the destination requires, and make sure it exists under **Settings > Units**.
 Incorrect unit configuration may result in rejected messages, physically incorrect values and downstream validation
 errors, so always verify the required unit in the destination's documentation before saving the mapping.
@@ -148,6 +166,8 @@ errors, so always verify the required unit in the destination's documentation be
 WIS2BOX Upload channels do not have this step. The csv2bufr template fixes each column's unit, and ADL always
 converts to it.
 ```
+
+(dispatch-aggregation-measure)=
 
 #### Aggregation Measure
 
