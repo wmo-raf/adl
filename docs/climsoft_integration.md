@@ -31,8 +31,8 @@ below.
 
 ## Prerequisites
 
-- The **ADL FTP plugin** installed (it provides the *Standard FTP/SFTP
-  Upload* channel). See [Manage Plugins](user_guide/manage_plugins.md).
+- The **ADL FTP plugin**, version **0.15.1 or later**, installed (it provides
+  the *Standard FTP/SFTP Upload* channel). See [Manage Plugins](user_guide/manage_plugins.md).
 - An **FTP or SFTP account** that both ADL and Climsoft can reach: host,
   port, username and password, and a directory ADL may write to. This is
   often a server the Climsoft team already runs for AWS data.
@@ -228,24 +228,18 @@ Climsoft version and is outside ADL.
 
 ## Changing the configuration later
 
-```{warning}
-**Change parameter mappings just after 00:00 UTC.** In *Append* mode, when
-ADL cannot read the existing day's file against the current column list —
-which is the case right after a mapping is added or renamed — it starts the
-file again with only the new hours, and the earlier hours of that day are
-removed from the file. Removing or reordering a mapping does not cause this.
-A failed download of the existing file (for example, an FTP timeout) can
-cause the same loss. Making mapping changes at the start of a UTC day
-limits what can be lost. Fixing this is tracked in
-[wmo-raf/adl-ftp-plugin#51](https://github.com/wmo-raf/adl-ftp-plugin/issues/51).
-```
+A change to the parameter mappings changes the columns of every file ADL
+writes from the next run, including the current day's file, which is
+rewritten in the new layout. Rows already in it are kept: a column added
+during the day is empty for the earlier hours, and a removed mapping's
+column is dropped.
 
-When you change mappings anyway:
+Because the Climsoft import is set up for the agreed columns:
 
 1. Agree the new column list with the Climsoft administrator, including
-   the date it takes effect.
-2. Make the change in ADL just after 00:00 UTC on that date.
-3. Confirm with them that the next day's file imports correctly.
+   when it takes effect.
+2. Make the change in ADL at that time, while they update the import.
+3. Confirm with them that the next file imports correctly.
 
 ## Troubleshooting
 
@@ -272,9 +266,11 @@ When you change mappings anyway:
   import was set up. Restore the agreed order, or update the import with
   the Climsoft administrator.
 
-**A day's file lost its earlier hours**
-: A mapping was added or renamed during the day, or a download of the
-  existing file failed. See [Changing the configuration later](#changing-the-configuration-later).
+**Dispatch fails with "Existing file … could not be read"**
+: The day's file on the server is not in the layout this channel writes
+  (for example, it was edited by hand or written by something else). ADL
+  leaves it untouched and retries on every run. Move or delete the file;
+  the next run starts it again.
 
 **FTP connection errors**
 : See the feedback catalogue in the
