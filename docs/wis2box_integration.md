@@ -107,6 +107,9 @@ mappings in the same step.
 Station and timestamp columns (WIGOS identifier parts, coordinates, heights,
 station type, year to minute) are not in the table. They are filled from the
 ADL station and the observation time, and a mapping can never overwrite them.
+On an hourly aggregated channel the observation time is the **end** of the
+hour the row covers, as csv2bufr expects: the 1-hour precipitation total
+and gust in a row stamped 11:00 are those of 10:00 to 11:00.
 `thermometer_height` is sent from the station's thermometer height.
 
 #### Units are locked and converted

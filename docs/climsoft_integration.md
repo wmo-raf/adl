@@ -159,7 +159,7 @@ rows it contains, in the channel's timezone (UTC).
 | `station_id` | The station's numeric ADL id. |
 | `wigos_id` | The station's WIGOS identifier (empty if none). |
 | `date` | `YYYY-MM-DD`, UTC. |
-| `time` | `HH:MM:SS`, UTC — **the start of the hour the row summarises** (see below). |
+| `time` | `HH:MM:SS`, UTC — **the end of the hour the row summarises** (see below). |
 | `atmospheric_pressure` … | One column per parameter mapping, in mapping order, named by *Channel Parameter*. |
 
 Values are written as calculated, without rounding (an hourly average can
@@ -179,19 +179,11 @@ station_id,wigos_id,date,time,atmospheric_pressure,air_temperature,relative_humi
 
 ### What each hourly row means
 
-The `time` column is the **start** of the hour: the row at `10:00:00` holds
-the observations from 10:00:00 to 10:59:59 — the average temperature over
-that hour, the rain that fell in it, the highest gust in it.
-
-```{important}
-Climsoft, like WMO practice, often labels an hourly value by the **end** of
-its period ("rainfall at 10:00" = rain from 09:00 to 10:00). If Climsoft's
-import reads ADL's `time` that way, every row lands one hour early, which
-matters most for rainfall totals and around midnight. The Climsoft
-administrator must account for this. Whether ADL should change its labelling
-is tracked in
-[wmo-raf/adl#401](https://github.com/wmo-raf/adl/issues/401).
-```
+Each row is labelled with the **end** of the hour it covers, the WMO
+convention: the row at `10:00:00` holds the observations from 09:00 to
+10:00 — the average temperature over that hour, the rain that fell in it,
+the highest gust in it. The row at `00:00:00` covers the last hour of the
+previous day, and is in the file of the day its `time` falls on.
 
 ### How files change over the day
 
@@ -200,8 +192,9 @@ is tracked in
   file again. Climsoft should read each file as a snapshot and import it so
   that re-reading rows it already has does no harm; it should not assume a
   file only grows at the end.
-- **A day's file is complete** once the channel has run after the end of
-  that day (UTC), plus the time the stations take to deliver their data.
+- **A day's file is complete** once its `23:00:00` row has been sent: a
+  run after 23:00 UTC, plus the time the stations take to deliver their
+  data.
 - **Late data is not revisited.** Each run sends only hours after the last
   one sent for the station. If a station's data for an hour arrives after
   that hour was sent, the normal schedule does not send it again.
@@ -226,7 +219,7 @@ Climsoft version and is outside ADL.
    `wigos_id` first; then `date` and `time`; then the agreed parameter
    columns, each mapped to its Climsoft element.
 5. **Date and time**: `YYYY-MM-DD` and `HH:MM:SS`, in **UTC**, with `time`
-   being the **start** of the hour summarised.
+   being the **end** of the hour summarised.
 6. **Units**: as in the [parameter mappings](#climsoft-parameter-mappings)
    table (hPa, °C, %, m/s, °, mm, W/m²).
 7. **Re-reading**: the current day's file is rewritten every run; importing
@@ -267,7 +260,7 @@ When you change mappings anyway:
 : The rainfall mapping uses *Average Value*. Set it to *Sum Value*.
 
 **Rainfall in Climsoft is one hour off from the station's records**
-: Climsoft is reading `time` as the end of the hour; ADL writes the start.
+: Climsoft is reading `time` as the start of the hour; ADL writes the end.
   See [What each hourly row means](#what-each-hourly-row-means).
 
 **Wind direction averages look wrong near north**
