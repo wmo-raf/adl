@@ -23,7 +23,7 @@ flowchart LR
   subgraph ADL["ADL core"]
     direction TB
     PL[Plugins] --> NORM[Validate · map · convert units · QC]
-    NORM --> OBS[(Observation records\nTimescaleDB)]
+    NORM --> OBS[(Observation records<br>TimescaleDB)]
     OBS --> AGG[Hourly aggregates]
     OBS --> VIEW[Data viewer · API · monitoring]
   end
@@ -222,11 +222,11 @@ sequenceDiagram
 
 ```{mermaid}
 flowchart LR
-  T[Beat tick every\nData Check Interval] --> R[Read records not yet sent\nper station, oldest first,\nup to Max Records per Dispatch]
-  R --> M[Apply parameter mappings\nname + unit per destination]
+  T[Beat tick every<br>Data Check Interval] --> R[Read records not yet sent<br>per station, oldest first,<br>up to Max Records per Dispatch]
+  R --> M[Apply parameter mappings<br>name + unit per destination]
   M --> A{Send aggregated?}
   A -- no --> S[send_station_data]
-  A -- hourly --> H[Hourly aggregate\nmin / max / avg / sum] --> S
+  A -- hourly --> H[Hourly aggregate<br>min / max / avg / sum] --> S
   S --> L[Activity log · push]
 ```
 
