@@ -1,6 +1,6 @@
 (climsoft-integration)=
 
-# 🗄️ Climsoft Integration
+# 🗄️ Climsoft
 
 [Climsoft](https://climsoft.org) is the Climate Data Management System used
 by many NMHSs. It does not receive data from ADL directly: ADL writes CSV

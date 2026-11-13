@@ -1,6 +1,6 @@
 (wis2box-integration)=
 
-# 📡 WIS2Box Integration
+# 📡 WIS2Box
 
 [wis2box](https://docs.wis2box.wis.wmo.int) is WMO's reference
 implementation of a WIS2 node. ADL publishes observations to it by writing

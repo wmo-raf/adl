@@ -3,9 +3,9 @@
 ADL supports the following dispatch channel types:
 
 - **WIS2BOX Upload**: Publishes observation data to WMO WIS2 infrastructure.
-  See [WIS2Box Integration](../wis2box_integration.md).
+  See [WIS2Box](../wis2box_integration.md).
 - **Standard FTP/SFTP Upload**: Uploads CSV files to an FTP or SFTP server, for any system that imports from
-  FTP, **including Climsoft**. See [Climsoft Integration](../climsoft_integration.md) and the
+  FTP, **including Climsoft**. See [Climsoft](../climsoft_integration.md) and the
   [FTP plugin guide](../plugins/adl-ftp-plugin/guide.md#standard-ftpsftp-upload).
 - **SmartMet FTP/SFTP Upload**: Specialized upload for FMI SmartMet weather systems. See the
   [FTP plugin guide](../plugins/adl-ftp-plugin/guide.md#smartmet-ftpsftp-upload).
@@ -84,7 +84,7 @@ For **WIS2BOX Upload** channels, you'll configure:
 - **Use Secure Connection**: Enable HTTPS connection
 - **Dataset ID**: The dataset identifier in WIS2Box
 
-For the full setup, see [WIS2Box Integration](../wis2box_integration.md).
+For the full setup, see [WIS2Box](../wis2box_integration.md).
 
 #### Example: Standard FTP/SFTP Upload Configuration
 
@@ -99,7 +99,7 @@ The values below are the recommended configuration for sending data to Climsoft:
 - **Write Mode**: Append record to single daily file
 
 For the full Climsoft setup, including Part A and the parameter mappings, see
-[Climsoft Integration](../climsoft_integration.md). For every field of the FTP channels, see the
+[Climsoft](../climsoft_integration.md). For every field of the FTP channels, see the
 [FTP plugin guide](../plugins/adl-ftp-plugin/guide.md#standard-ftpsftp-upload).
 
 (dispatch-parameter-mappings)=
@@ -112,7 +112,7 @@ Map ADL data parameters to the format expected by the destination system.
 **WIS2BOX Upload** channels show a matching table instead of the list below:
 one fixed row per column of the selected csv2bufr template, with the unit
 locked and conversion automatic. See
-[parameter mappings in the WIS2Box integration guide](../wis2box_integration.md).
+[parameter mappings in the WIS2Box guide](../wis2box_integration.md).
 The rest of this section applies to the other channel types, and the
 *Aggregation Measure* explanation applies to all of them.
 ```
@@ -156,7 +156,7 @@ Kelvin:
 
 Not every destination needs a conversion: Climate Data Management Systems such as Climsoft usually store values
 in the same units ADL uses (°C, hPa, mm), so the Channel Unit is the same as the ADL unit
-(see [Climsoft Integration](../climsoft_integration.md)).
+(see [Climsoft](../climsoft_integration.md)).
 
 Set the **Channel Unit** to the unit the destination requires, and make sure it exists under **Settings > Units**.
 Incorrect unit configuration may result in rejected messages, physically incorrect values and downstream validation
