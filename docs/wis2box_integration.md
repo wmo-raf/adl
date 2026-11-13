@@ -129,7 +129,7 @@ The dropdown only offers parameters that convert, so you cannot map rainfall
 to wind speed. Columns without a unit, such as `ground_state`, take a
 dimensionless parameter. A saved mapping stores the template's unit as its
 *Channel Unit*, but it is the template's unit that is sent. See the
-[decision record](adr/0001-wis2box-csv2bufr-templates.md) for why.
+[decision record](https://github.com/wmo-raf/adl/blob/main/docs/adr/0001-wis2box-csv2bufr-templates.md) for why.
 
 (aggregation-defaults)=
 
