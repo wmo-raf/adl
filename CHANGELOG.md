@@ -12,6 +12,23 @@ This file starts at 0.8.9. Earlier history is in the git log.
 
 ## [Unreleased]
 
+## [0.8.23] — 2026-11-13
+
+### Fixed
+
+- Hourly aggregated dispatch now labels each row with the end of the hour it
+  covers (WMO convention). (#401)
+
+### Documentation
+
+- Climsoft integration guide: sending observations to Climsoft through the
+  FTP plugin's Standard FTP/SFTP Upload channel.
+
+### Upgrade notes
+
+- No migrations.
+- Plugins need no changes.
+
 ## [0.8.22] — 2026-11-12
 
 Security release. Upgrade promptly: it fixes a critical cross-site scripting
