@@ -1,5 +1,6 @@
 import logging
 import time
+from datetime import timedelta
 
 from adl.core.classification import mark_failed
 from adl.core.utils import get_object_or_none
@@ -7,6 +8,35 @@ from adl.monitoring.models import StationLinkActivityLog
 from django.utils import timezone as dj_timezone
 
 logger = logging.getLogger(__name__)
+
+
+def aggregation_period_length(dispatch_channel):
+    """The length of the period one dispatched row covers when the channel
+    sends aggregated data, or ``None`` when it sends raw observations."""
+    if dispatch_channel.send_aggregated_data and dispatch_channel.aggregation_period == "hourly":
+        return timedelta(hours=1)
+    return None
+
+
+def dispatch_time_for(dispatch_channel, data_time):
+    """The time a dispatched row is labelled with.
+
+    Raw observations keep their observation time. An aggregated row is
+    labelled with the **end** of the period it covers, the WMO convention
+    (the 10:00-10:59 hour is sent as 11:00; a 1-hour precipitation total
+    stamped T is the rain of the hour before T). ``data_time`` is the
+    period's start, as the hourly aggregate stores it.
+    """
+    period = aggregation_period_length(dispatch_channel)
+    return data_time + period if period else data_time
+
+
+def data_time_for(dispatch_channel, dispatch_time):
+    """Inverse of :func:`dispatch_time_for`. The dispatch cursor is kept in
+    data time (the start of the last period sent), so a channel's returned
+    "last sent" label is converted back before the cursor advances."""
+    period = aggregation_period_length(dispatch_channel)
+    return dispatch_time - period if period else dispatch_time
 
 
 def get_station_channel_records(dispatch_channel, station_id, connection_id, window=None):
@@ -164,7 +194,7 @@ def get_station_dispatch_records(dispatch_channel, station_link, window=None):
         records.append({
             "station_id": station_link.station_id,
             "wigos_id": station_record["wigos_id"],
-            "timestamp": t,
+            "timestamp": dispatch_time_for(dispatch_channel, t),
             "values": data_values,
         })
 
@@ -352,7 +382,7 @@ def run_dispatch_channel(dispatcher_id, station_link_ids=None):
                 total_num_of_records += num_of_sent_records
                 
                 previous_sent_obs_time = advance_dispatch_cursor(
-                    dispatch_channel.id, station_id, last_sent_obs_time
+                    dispatch_channel.id, station_id, data_time_for(dispatch_channel, last_sent_obs_time)
                 )
             
             log.success = True
