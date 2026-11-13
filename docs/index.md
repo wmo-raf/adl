@@ -7,7 +7,7 @@ hidetoc: 1
 Automate periodic observation data collection from different Automatic Weather Station (AWS) networks and normalize it
 into a common schema. Then push the data to downstream systems such
 as [wis2box](https://github.com/World-Meteorological-Organization/wis2box) for international data exchange, Climate Data
-Management Systems (CDMS) like [Climsoft](https://climsoft.org), or any other system that needs to consume weather
+Management Systems (CDMS) like [Climsoft](climsoft_integration.md), or any other system that needs to consume weather
 station data.
 
 ```{image} _static/images/adl-dashboard.png
@@ -42,6 +42,7 @@ installation
 operations/index
 api
 wis2box_integration
+climsoft_integration
 plugins/index
 environmental_variables
 ssl-setup-nginx-proxy-manager

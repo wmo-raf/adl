@@ -18,7 +18,7 @@ from adl.config.celery import app
 from adl.monitoring.models import StationLinkActivityLog
 from .broker_connection import bounded_broker_connection, bounded_inspect
 from .classification import mark_failed, stamp_failure
-from .dispatchers import advance_dispatch_cursor, get_station_dispatch_records
+from .dispatchers import advance_dispatch_cursor, data_time_for, get_station_dispatch_records
 from .logging import TaskLogger
 from .redaction import redact_secrets
 from .run_log import capture_activity_log
@@ -766,8 +766,9 @@ def dispatch_station(self, channel_id, station_link_id):
 
             previous_sent_obs_time = None
             if num_sent > 0 and last_sent_obs_time:
+                # The channel returns the last row's label; the cursor keeps data time
                 previous_sent_obs_time = advance_dispatch_cursor(
-                    channel_id, station_link.station_id, last_sent_obs_time
+                    channel_id, station_link.station_id, data_time_for(channel, last_sent_obs_time)
                 )
 
             log.success = True
