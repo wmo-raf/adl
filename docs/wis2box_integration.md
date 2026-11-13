@@ -10,16 +10,16 @@ usually on the same server; ADL talks to wis2box in two places, and this
 page covers both.
 
 ```{mermaid}
-flowchart LR
+flowchart TB
   subgraph ADL
-    OBS[(Observation records)] --> DC[WIS2Box Upload\ndispatch channel]
+    OBS[(Observation records)] --> DC[WIS2Box Upload<br>dispatch channel]
     ST[Stations] <-. import / compare .-> WS[WIS2Box Stations page]
   end
   subgraph wis2box
-    MINIO[(MinIO\nwis2box-incoming)] --> PIPE[csv2bufr → BUFR] --> PUB[WIS2 broker]
-    OAPI[Station metadata\n/oapi/collections/stations]
+    MINIO[(MinIO<br>wis2box-incoming)] --> PIPE[csv2bufr → BUFR] --> PUB[WIS2 broker]
+    OAPI[Station metadata<br>/oapi/collections/stations]
   end
-  DC -- "CSV per station\nper dispatch" --> MINIO
+  DC -- "CSV per station<br>per dispatch" --> MINIO
   WS -- "reads" --> OAPI
 ```
 
