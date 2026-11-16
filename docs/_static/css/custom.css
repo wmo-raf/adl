@@ -27,3 +27,27 @@ img.screenshot {
     margin-top: 1em;
     margin-bottom: 1em;
 }
+
+/* Mermaid diagrams render inside <pre class="mermaid">, which the theme
+   styles as a dark purple code block. In light mode Mermaid draws its arrows
+   and some labels in dark grey, which disappear on that purple, so give the
+   diagrams the white background they are designed for. In dark mode
+   sphinxcontrib-mermaid redraws them with Mermaid's dark palette (light lines
+   and labels), so there they get a dark background instead. Both are framed
+   as a card so diagrams stand apart from the surrounding text. */
+pre.mermaid {
+    border: 1px solid;
+    border-radius: 6px;
+    padding: 1rem;
+}
+
+body:not(.theme-dark) pre.mermaid {
+    background-color: #fff;
+    color: #333;
+    border-color: #e1e1e1;
+}
+
+body.theme-dark pre.mermaid {
+    background-color: #120c24;
+    border-color: rgba(255, 255, 255, 0.15);
+}
