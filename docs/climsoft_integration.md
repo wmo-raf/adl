@@ -1,6 +1,6 @@
 (climsoft-integration)=
 
-# 🗄️ Climsoft Integration
+# 🗄️ Climsoft
 
 [Climsoft](https://climsoft.org) is the Climate Data Management System used
 by many NMHSs. It does not receive data from ADL directly: ADL writes CSV
@@ -10,16 +10,16 @@ configure — and describes the files ADL writes precisely enough for the
 Climsoft administrator to set up the other half.
 
 ```{mermaid}
-flowchart LR
+flowchart TB
   subgraph ADL
-    OBS[(Observation records)] --> AGG[Hourly aggregates] --> DC[Standard FTP/SFTP Upload\ndispatch channel]
+    OBS[(Observation records)] --> AGG[Hourly aggregates] --> DC[Standard FTP/SFTP Upload<br>dispatch channel]
   end
-  FTP[(FTP server\none folder per station\none CSV per day)]
+  FTP[(FTP server<br>one folder per station<br>one CSV per day)]
   subgraph Climsoft
     IMP[Climsoft import] --> DB[(Climsoft database)]
   end
-  DC -- "CSV per station\nper day" --> FTP
-  FTP -- "configured by the\nClimsoft administrator" --> IMP
+  DC -- "CSV per station<br>per day" --> FTP
+  FTP -- "configured by the<br>Climsoft administrator" --> IMP
 ```
 
 There is no Climsoft-specific channel type. Climsoft uses the **Standard

@@ -41,8 +41,7 @@ core_concepts
 installation
 operations/index
 api
-wis2box_integration
-climsoft_integration
+sending_data
 plugins/index
 environmental_variables
 ssl-setup-nginx-proxy-manager
