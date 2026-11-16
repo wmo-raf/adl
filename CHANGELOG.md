@@ -12,6 +12,31 @@ This file starts at 0.8.9. Earlier history is in the git log.
 
 ## [Unreleased]
 
+## [0.8.24] — 2026-11-16
+
+Documentation-only release. It exists so the `stable` docs build again: the
+0.8.23 docs failed to build on a cross-reference to a page excluded from the
+site.
+
+### Documentation
+
+- New **Sending Data to Other Systems** section grouping the WIS2Box and
+  Climsoft guides, with pointers to the FTP/SFTP and S3/MinIO channels and the
+  REST API for systems not covered. (#406)
+- The WIS2Box and Climsoft diagrams are drawn top-down. (#406)
+- Diagram labels no longer show a literal `\n` where a line break was meant.
+  (#406, #407)
+- Diagram arrows and labels are readable again: diagrams now sit on a white
+  card in light mode and a dark card in dark mode, instead of the theme's
+  purple code-block background. (#408)
+- The WIS2Box guide links to its decision record on GitHub, which fixes the
+  failing docs build. (#405)
+
+### Upgrade notes
+
+- No migrations.
+- Plugins need no changes.
+
 ## [0.8.23] — 2026-11-13
 
 ### Fixed
